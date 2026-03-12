@@ -1,0 +1,29 @@
+name: kratos-agent
+metadata:
+  template: kratos-agent@0.1.0
+
+services:
+  agent-service:
+    project: ./src/backend
+    language: python
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+
+  web:
+    project: ./src/frontend
+    language: js
+    host: staticwebapp
+    dist: out
+
+hooks:
+  preprovision:
+    shell: sh
+    run: echo "Provisioning Azure resources..."
+
+  postprovision:
+    shell: sh
+    run: |
+      echo "Post-provisioning: configuring services..."
+      echo "Deployment complete."
