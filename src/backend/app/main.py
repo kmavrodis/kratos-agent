@@ -4,8 +4,6 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from azure.identity.aio import DefaultAzureCredential
-from azure.keyvault.secrets.aio import SecretClient
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -37,22 +35,9 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await skill_registry.load()
     application.state.skill_registry = skill_registry
 
-    # Fetch Foundry API key from Key Vault via Managed Identity
-    foundry_api_key = ""
-    if settings.key_vault_uri:
-        try:
-            async with SecretClient(settings.key_vault_uri, DefaultAzureCredential()) as kv:
-                secret = await kv.get_secret("foundry-api-key")
-                foundry_api_key = secret.value
-        except Exception as exc:
-            logger.warning("Could not fetch foundry-api-key from Key Vault: %s. BYOK can be configured via the settings API.", exc)
-    else:
-        # Local dev fallback — read from env (never in production)
-        foundry_api_key = settings.foundry_api_key
-
-    # Initialize Copilot SDK agent
+    # Initialize Copilot SDK agent (uses DefaultAzureCredential for Azure OpenAI)
     copilot_agent = CopilotAgent(settings)
-    await copilot_agent.start(foundry_api_key)
+    await copilot_agent.start()
     application.state.copilot_agent = copilot_agent
 
     logger.info("Kratos Agent Service started — environment=%s", settings.environment)

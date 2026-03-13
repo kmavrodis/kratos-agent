@@ -17,16 +17,13 @@ param containerAppsEnvName string = ''
 param containerRegistryName string = ''
 param cosmosDbAccountName string = ''
 param aiSearchName string = ''
+param aiServicesName string = ''
 param keyVaultName string = ''
 param appInsightsName string = ''
 param logAnalyticsName string = ''
 param staticWebAppName string = ''
 param agentServiceName string = ''
 param vnetName string = ''
-
-// Foundry configuration
-param foundryEndpoint string = ''
-param foundryModelDeployment string = 'gpt-4o'
 
 // ─── Resource Naming ───
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -115,6 +112,17 @@ module aiSearch './modules/ai-search.bicep' = {
   }
 }
 
+// ─── AI Services (OpenAI) ───
+module aiServices './modules/ai-services.bicep' = {
+  name: 'ai-services'
+  scope: rg
+  params: {
+    name: !empty(aiServicesName) ? aiServicesName : '${abbrs.cognitiveServicesAccounts}${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
 // ─── Container Registry ───
 module containerRegistry './modules/container-registry.bicep' = {
   name: 'container-registry'
@@ -153,8 +161,8 @@ module agentService './modules/agent-service.bicep' = {
     cosmosDbEndpoint: cosmosDb.outputs.endpoint
     aiSearchEndpoint: aiSearch.outputs.endpoint
     keyVaultUri: keyVault.outputs.uri
-    foundryEndpoint: foundryEndpoint
-    foundryModelDeployment: foundryModelDeployment
+    aiServicesEndpoint: aiServices.outputs.endpoint
+    aiServicesModelDeployment: aiServices.outputs.modelDeploymentName
   }
 }
 
@@ -177,6 +185,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     agentServicePrincipalId: agentService.outputs.principalId
     cosmosDbAccountName: cosmosDb.outputs.name
     aiSearchName: aiSearch.outputs.name
+    aiServicesName: aiServices.outputs.name
     keyVaultName: keyVault.outputs.name
     containerRegistryName: containerRegistry.outputs.name
     principalId: principalId
@@ -194,5 +203,5 @@ output AZURE_KEY_VAULT_URI string = keyVault.outputs.uri
 output AZURE_APP_INSIGHTS_CONNECTION_STRING string = appInsights.outputs.connectionString
 output AZURE_STATIC_WEB_APP_URL string = staticWebApp.outputs.url
 output AGENT_SERVICE_URL string = agentService.outputs.url
-output FOUNDRY_ENDPOINT string = foundryEndpoint
-output FOUNDRY_MODEL_DEPLOYMENT string = foundryModelDeployment
+output AI_SERVICES_ENDPOINT string = aiServices.outputs.endpoint
+output AI_SERVICES_MODEL_DEPLOYMENT string = aiServices.outputs.modelDeploymentName

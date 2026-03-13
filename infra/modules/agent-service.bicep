@@ -25,11 +25,11 @@ param aiSearchEndpoint string
 @description('Key Vault URI')
 param keyVaultUri string
 
-@description('Microsoft Foundry endpoint')
-param foundryEndpoint string
+@description('Azure AI Services endpoint')
+param aiServicesEndpoint string
 
-@description('Foundry model deployment name')
-param foundryModelDeployment string
+@description('AI Services model deployment name')
+param aiServicesModelDeployment string
 
 resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
@@ -74,8 +74,8 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'COSMOS_DB_ENDPOINT', value: cosmosDbEndpoint }
             { name: 'AI_SEARCH_ENDPOINT', value: aiSearchEndpoint }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
-            { name: 'FOUNDRY_ENDPOINT', value: foundryEndpoint }
-            { name: 'FOUNDRY_MODEL_DEPLOYMENT', value: foundryModelDeployment }
+            { name: 'AI_SERVICES_ENDPOINT', value: aiServicesEndpoint }
+            { name: 'AI_SERVICES_MODEL_DEPLOYMENT', value: aiServicesModelDeployment }
             { name: 'OTEL_SERVICE_NAME', value: 'kratos-agent-service' }
           ]
         }

@@ -16,13 +16,9 @@ class Settings(BaseSettings):
     ai_search_endpoint: str = ""
     key_vault_uri: str = ""
 
-    # Microsoft Foundry
-    foundry_endpoint: str = ""
-    foundry_model_deployment: str = "gpt-4o"
-
-    # Foundry API key for Copilot SDK BYOK
-    # Fetched from Key Vault at startup via Managed Identity — not hardcoded
-    foundry_api_key: str = ""
+    # Azure AI Services (deployed by Bicep)
+    ai_services_endpoint: str = ""
+    ai_services_model_deployment: str = "gpt-41"
 
     # Observability
     applicationinsights_connection_string: str = ""

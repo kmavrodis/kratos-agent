@@ -10,5 +10,6 @@
   "networkNetworkSecurityGroups": "nsg-",
   "operationalInsightsWorkspaces": "log-",
   "searchSearchServices": "srch-",
+  "cognitiveServicesAccounts": "oai-",
   "webStaticSites": "stapp-"
 }

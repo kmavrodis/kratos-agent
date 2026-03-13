@@ -2,12 +2,14 @@
 
 Replaces agent_loop.py. Uses CopilotClient to manage sessions per conversation,
 and translates SDK events to the existing SSE event schema.
+Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
 """
 
 import asyncio
 import logging
 from typing import AsyncGenerator
 
+from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
 from copilot import CopilotClient
 from opentelemetry import trace
 
@@ -36,24 +38,28 @@ class CopilotAgent:
 
     Each conversation gets its own SDK session, preserving multi-turn history
     automatically without manually loading from Cosmos DB on every turn.
+    Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
     """
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._client: CopilotClient | None = None
         self._sessions: dict[str, object] = {}
-        self._foundry_api_key: str = ""
+        self._credential: DefaultAzureCredential | None = None
+        self._token_provider = None
 
-    async def start(self, foundry_api_key: str) -> None:
+    async def start(self) -> None:
         """Initialize the Copilot CLI client. Called once on app startup.
 
-        BYOK mode — the Foundry API key is fetched from Key Vault by the caller
-        (main.py lifespan) using Managed Identity.
+        Uses DefaultAzureCredential to get tokens for Azure OpenAI — no API keys needed.
         """
-        self._foundry_api_key = foundry_api_key
+        self._credential = DefaultAzureCredential()
+        self._token_provider = get_bearer_token_provider(
+            self._credential, "https://cognitiveservices.azure.com/.default"
+        )
         self._client = CopilotClient()
         await self._client.start()
-        logger.info("CopilotClient started (BYOK mode)")
+        logger.info("CopilotClient started (Managed Identity auth)")
 
     async def stop(self) -> None:
         """Shutdown all sessions and the CLI client. Called on app shutdown."""
@@ -64,21 +70,21 @@ class CopilotAgent:
                 pass
         if self._client:
             await self._client.stop()
+        if self._credential:
+            await self._credential.close()
         logger.info("CopilotClient stopped")
 
     async def update_config(
         self,
-        foundry_endpoint: str,
-        foundry_model_deployment: str,
-        foundry_api_key: str,
+        ai_services_endpoint: str,
+        ai_services_model_deployment: str,
     ) -> None:
-        """Update BYOK config and drop all sessions so they recreate with new settings."""
-        if foundry_endpoint:
-            self.settings.foundry_endpoint = foundry_endpoint
-        if foundry_model_deployment:
-            self.settings.foundry_model_deployment = foundry_model_deployment
-        if foundry_api_key:
-            self._foundry_api_key = foundry_api_key
+        """Update config and drop all sessions so they recreate with new settings."""
+        if ai_services_endpoint:
+            self.settings.ai_services_endpoint = ai_services_endpoint
+        if ai_services_model_deployment:
+            self.settings.ai_services_model_deployment = ai_services_model_deployment
+            self.settings.ai_services_model_deployment = ai_services_model_deployment
 
         # Drop all existing sessions so they get recreated with the new config
         for session in self._sessions.values():
@@ -87,7 +93,7 @@ class CopilotAgent:
             except Exception:
                 pass
         self._sessions.clear()
-        logger.info("BYOK config updated — all sessions reset")
+        logger.info("Config updated — all sessions reset")
 
     async def _get_or_create_session(self, conversation_id: str) -> object:
         """Return an existing session or create a new one for this conversation."""
@@ -102,7 +108,7 @@ class CopilotAgent:
         ]
 
         session = await self._client.create_session({
-            "model": self.settings.foundry_model_deployment,
+            "model": self.settings.ai_services_model_deployment,
             "streaming": True,
             "tools": ALL_TOOLS,
             "skill_directories": skill_directories,
@@ -112,8 +118,8 @@ class CopilotAgent:
             },
             "provider": {
                 "type": "azure",
-                "base_url": f"{self.settings.foundry_endpoint.rstrip('/')}/openai/deployments/{self.settings.foundry_model_deployment}",
-                "api_key": self._foundry_api_key,
+                "base_url": f"{self.settings.ai_services_endpoint.rstrip('/')}/openai/deployments/{self.settings.ai_services_model_deployment}",
+                "token_provider": self._token_provider,
                 "wire_api": "completions",
                 "azure": {
                     "api_version": "2024-10-21",

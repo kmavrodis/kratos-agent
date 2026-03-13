@@ -12,8 +12,8 @@ from app.services.copilot_agent import CopilotAgent
 @pytest.fixture
 def settings():
     return Settings(
-        foundry_endpoint="https://test.openai.azure.com",
-        foundry_model_deployment="gpt-4o",
+        ai_services_endpoint="https://test.openai.azure.com",
+        ai_services_model_deployment="gpt-41",
     )
 
 
@@ -33,14 +33,18 @@ def test_copilot_agent_init(copilot_agent, settings):
 async def test_copilot_agent_start_stop(copilot_agent):
     """Test CopilotClient start and stop lifecycle."""
     mock_client = AsyncMock()
-    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client):
-        await copilot_agent.start(foundry_api_key="test-key")
+    mock_credential = AsyncMock()
+    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
+         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=mock_credential), \
+         patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
+        await copilot_agent.start()
 
         assert copilot_agent._client is mock_client
         mock_client.start.assert_awaited_once()
 
         await copilot_agent.stop()
         mock_client.stop.assert_awaited_once()
+        mock_credential.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -66,8 +70,10 @@ async def test_copilot_agent_run_streams_content(copilot_agent):
     mock_session.on = fake_on
     mock_session.send = AsyncMock()
 
-    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client):
-        await copilot_agent.start(foundry_api_key="test-key")
+    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
+         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
+        await copilot_agent.start()
 
         events = []
         async for event in copilot_agent.run(
@@ -118,8 +124,10 @@ async def test_copilot_agent_run_streams_tool_events(copilot_agent):
     mock_session.on = fake_on
     mock_session.send = AsyncMock()
 
-    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client):
-        await copilot_agent.start(foundry_api_key="test-key")
+    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
+         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
+        await copilot_agent.start()
 
         events = []
         async for event in copilot_agent.run(
@@ -156,8 +164,10 @@ async def test_copilot_agent_run_handles_error(copilot_agent):
     mock_session.on = fake_on
     mock_session.send = AsyncMock()
 
-    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client):
-        await copilot_agent.start(foundry_api_key="test-key")
+    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
+         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
+        await copilot_agent.start()
 
         events = []
         async for event in copilot_agent.run(
@@ -187,8 +197,10 @@ async def test_copilot_agent_session_reuse(copilot_agent):
     mock_session.on = fake_on
     mock_session.send = AsyncMock()
 
-    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client):
-        await copilot_agent.start(foundry_api_key="test-key")
+    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
+         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
+        await copilot_agent.start()
 
         # First call creates a session
         async for _ in copilot_agent.run(message="Hello", conversation_id="conv-reuse"):
@@ -207,8 +219,10 @@ async def test_copilot_agent_exception_drops_session(copilot_agent):
     mock_client = AsyncMock()
     mock_client.create_session = AsyncMock(side_effect=Exception("connection failed"))
 
-    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client):
-        await copilot_agent.start(foundry_api_key="test-key")
+    with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
+         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
+        await copilot_agent.start()
 
         events = []
         async for event in copilot_agent.run(message="Hello", conversation_id="conv-fail"):

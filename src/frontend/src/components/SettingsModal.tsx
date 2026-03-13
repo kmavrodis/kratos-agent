@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-interface BYOKStatus {
+interface AIServiceStatus {
   configured: boolean;
-  foundryEndpoint: string;
-  foundryModelDeployment: string;
+  aiServicesEndpoint: string;
+  aiServicesModelDeployment: string;
 }
 
 interface Props {
@@ -17,9 +17,8 @@ interface Props {
 
 export function SettingsModal({ open, onClose }: Props) {
   const [endpoint, setEndpoint] = useState("");
-  const [model, setModel] = useState("gpt-4o");
-  const [apiKey, setApiKey] = useState("");
-  const [status, setStatus] = useState<BYOKStatus | null>(null);
+  const [model, setModel] = useState("gpt-41");
+  const [status, setStatus] = useState<AIServiceStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -28,11 +27,10 @@ export function SettingsModal({ open, onClose }: Props) {
     if (!open) return;
     fetch(`${API_URL}/api/settings`)
       .then((res) => res.json())
-      .then((data: BYOKStatus) => {
+      .then((data: AIServiceStatus) => {
         setStatus(data);
-        setEndpoint(data.foundryEndpoint || "");
-        setModel(data.foundryModelDeployment || "gpt-4o");
-        setApiKey(""); // Never pre-fill key
+        setEndpoint(data.aiServicesEndpoint || "");
+        setModel(data.aiServicesModelDeployment || "gpt-41");
       })
       .catch(() => {
         setStatus(null);
@@ -47,15 +45,13 @@ export function SettingsModal({ open, onClose }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          foundryEndpoint: endpoint,
-          foundryModelDeployment: model,
-          foundryApiKey: apiKey,
+          aiServicesEndpoint: endpoint,
+          aiServicesModelDeployment: model,
         }),
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
-      const data: BYOKStatus = await res.json();
+      const data: AIServiceStatus = await res.json();
       setStatus(data);
-      setApiKey("");
       setMessage("Settings saved successfully!");
     } catch (err) {
       setMessage(`Error: ${err instanceof Error ? err.message : String(err)}`);
@@ -72,7 +68,7 @@ export function SettingsModal({ open, onClose }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
-            BYOK Configuration
+            AI Service Configuration
           </h2>
           <button
             onClick={onClose}
@@ -87,7 +83,7 @@ export function SettingsModal({ open, onClose }: Props) {
         {/* Body */}
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-gray-500">
-            Configure your Azure AI Foundry credentials to use your own model deployment (Bring Your Own Key).
+            View and update the Azure OpenAI endpoint and model deployment. Authentication uses Managed Identity — no API keys needed.
           </p>
 
           {/* Status indicator */}
@@ -100,14 +96,14 @@ export function SettingsModal({ open, onClose }: Props) {
               <span className={`w-2 h-2 rounded-full ${
                 status.configured ? "bg-green-500" : "bg-amber-500"
               }`} />
-              {status.configured ? "API key configured" : "No API key configured"}
+              {status.configured ? "Endpoint configured" : "No endpoint configured"}
             </div>
           )}
 
-          {/* Foundry Endpoint */}
+          {/* AI Services Endpoint */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Foundry Endpoint
+              AI Services Endpoint
             </label>
             <input
               type="url"
@@ -127,26 +123,9 @@ export function SettingsModal({ open, onClose }: Props) {
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="gpt-4o"
+              placeholder="gpt-41"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
-          </div>
-
-          {/* API Key */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={status?.configured ? "••••••••  (leave blank to keep current)" : "Enter your Foundry API key"}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Your key is sent to the backend but never stored in the browser or returned by the API.
-            </p>
           </div>
 
           {/* Message */}

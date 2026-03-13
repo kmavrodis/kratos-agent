@@ -103,16 +103,15 @@ class ErrorEvent(BaseModel):
 
 # ─── Settings ───
 
-class BYOKSettings(BaseModel):
-    """BYOK configuration submitted by the user."""
-    foundryEndpoint: str = Field(default="", description="Azure Foundry endpoint URL")
-    foundryModelDeployment: str = Field(default="gpt-4o", description="Model deployment name")
-    foundryApiKey: str = Field(default="", description="Foundry API key")
+class AIServiceSettings(BaseModel):
+    """AI service configuration submitted by the user."""
+    aiServicesEndpoint: str = Field(default="", description="Azure AI Services endpoint URL")
+    aiServicesModelDeployment: str = Field(default="gpt-41", description="Model deployment name")
 
 
-class BYOKStatus(BaseModel):
-    """Current BYOK config status (key is never exposed)."""
+class AIServiceStatus(BaseModel):
+    """Current AI service config status."""
     configured: bool = False
-    foundryEndpoint: str = ""
-    foundryModelDeployment: str = ""
+    aiServicesEndpoint: str = ""
+    aiServicesModelDeployment: str = ""
     code: str = "INTERNAL_ERROR"

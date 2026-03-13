@@ -7,6 +7,9 @@ param cosmosDbAccountName string
 @description('AI Search service name')
 param aiSearchName string
 
+@description('AI Services (OpenAI) account name')
+param aiServicesName string
+
 @description('Key Vault name')
 param keyVaultName string
 
@@ -21,6 +24,7 @@ var cosmosDbDataContributor = '00000000-0000-0000-0000-000000000002'
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var searchIndexDataReader = '1407120a-92aa-4202-b7e9-c0e197c71c8f'
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 
 // ─── References ───
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' existing = {
@@ -33,6 +37,10 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
 
 resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' existing = {
   name: aiSearchName
+}
+
+resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+  name: aiServicesName
 }
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
@@ -83,6 +91,17 @@ resource agentAcrRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+// ─── Agent Service → AI Services (OpenAI) ───
+resource agentAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServices.id, agentServicePrincipalId, cognitiveServicesOpenAIUser)
+  scope: aiServices
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUser)
+    principalId: agentServicePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ─── Deploying User → Cosmos DB (for local dev) ───
 resource userCosmosRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-02-15-preview' = if (!empty(principalId)) {
   parent: cosmosDb
@@ -100,6 +119,17 @@ resource userKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   scope: keyVault
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsUser)
+    principalId: principalId
+    principalType: 'User'
+  }
+}
+
+// ─── Deploying User → AI Services (for local dev) ───
+resource userAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
+  name: guid(aiServices.id, principalId, cognitiveServicesOpenAIUser)
+  scope: aiServices
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUser)
     principalId: principalId
     principalType: 'User'
   }

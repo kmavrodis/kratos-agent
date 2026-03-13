@@ -89,7 +89,7 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onOpenSettin
           </svg>
           BYOK Settings
         </button>
-        <p className="text-xs text-gray-400 mt-2 px-3">Copilot SDK + Foundry + MCP</p>
+        <p className="text-xs text-gray-400 mt-2 px-3">Copilot SDK + Azure OpenAI + MCP</p>
       </div>
     </aside>
   );

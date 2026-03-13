@@ -10,12 +10,6 @@
     },
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
-    },
-    "foundryEndpoint": {
-      "value": "${FOUNDRY_ENDPOINT}"
-    },
-    "foundryModelDeployment": {
-      "value": "${FOUNDRY_MODEL_DEPLOYMENT}"
     }
   }
 }
