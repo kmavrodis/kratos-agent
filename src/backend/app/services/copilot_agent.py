@@ -8,10 +8,18 @@ Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
 import asyncio
 from importlib.metadata import version
 import logging
+import time
 from typing import AsyncGenerator
 
-from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity.aio import ManagedIdentityCredential, get_bearer_token_provider
 from copilot import CopilotClient, PermissionRequestResult
+
+try:
+    from azure.identity.aio import AzureCLICredential, ChainedTokenCredential
+
+    _HAS_CLI_CREDENTIAL = True
+except ImportError:
+    _HAS_CLI_CREDENTIAL = False
 from opentelemetry import trace
 
 from app.config import Settings
@@ -49,18 +57,34 @@ class CopilotAgent:
         self._queues: dict[str, asyncio.Queue] = {}
         self._tool_counters: dict[str, int] = {}
         self._registered_handlers: set[str] = set()
-        self._credential: DefaultAzureCredential | None = None
+        self._credential: ManagedIdentityCredential | None = None
         self._token_provider = None
 
     async def start(self) -> None:
         """Initialize the Copilot CLI client. Called once on app startup.
 
-        Uses DefaultAzureCredential to get tokens for Azure OpenAI — no API keys needed.
+        Uses ManagedIdentityCredential (prod) with AzureCLICredential fallback (dev)
+        instead of DefaultAzureCredential, which probes many credential sources
+        sequentially and adds significant latency on each token acquisition.
         """
-        self._credential = DefaultAzureCredential()
-        self._token_provider = get_bearer_token_provider(
-            self._credential, "https://cognitiveservices.azure.com/.default"
-        )
+        if _HAS_CLI_CREDENTIAL:
+            self._credential = ChainedTokenCredential(
+                ManagedIdentityCredential(),
+                AzureCLICredential(),
+            )
+        else:
+            self._credential = ManagedIdentityCredential()
+        scope = "https://cognitiveservices.azure.com/.default"
+        self._token_provider = get_bearer_token_provider(self._credential, scope)
+
+        # Pre-warm: acquire the first token now so user requests don't pay the cost
+        try:
+            t0 = time.monotonic()
+            await self._credential.get_token(scope)
+            logger.info("Token pre-warmed successfully in %.1fms", (time.monotonic() - t0) * 1000)
+        except Exception:
+            logger.warning("Token pre-warm failed — first request will be slower", exc_info=True)
+
         self._client = CopilotClient()
         await self._client.start()
         logger.info(
@@ -115,6 +139,7 @@ class CopilotAgent:
             logger.info("Reusing SDK session for conversation=%s", conversation_id)
             return self._sessions[conversation_id]
 
+        t0 = time.monotonic()
         session = await self._client.create_session({
             "model": self.settings.ai_services_model_deployment,
             "streaming": True,
@@ -141,12 +166,14 @@ class CopilotAgent:
             "on_permission_request": lambda req, ctx: PermissionRequestResult(kind="approved"),
         })
 
+        elapsed_ms = (time.monotonic() - t0) * 1000
         self._sessions[conversation_id] = session
         logger.info(
-            "Created SDK session for conversation=%s model=%s custom_tools=%s",
+            "Created SDK session for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
             conversation_id,
             self.settings.ai_services_model_deployment,
             ",".join(tool.name for tool in ALL_TOOLS),
+            elapsed_ms,
         )
         return session
 
@@ -165,6 +192,7 @@ class CopilotAgent:
             try:
                 session = await self._get_or_create_session(conversation_id)
                 logger.info("Sending prompt for conversation=%s message=%r", conversation_id, message)
+                self._send_time = time.monotonic()
 
                 # Register the event handler ONCE per session, not per run() call.
                 # The handler routes events to whatever queue is active for that conversation.
@@ -178,6 +206,11 @@ class CopilotAgent:
                             return  # no active run for this conversation
                         try:
                             etype = event.type.value if hasattr(event.type, "value") else str(event.type)
+
+                            # Log time-to-first-event from send
+                            if hasattr(self, "_send_time"):
+                                ttfe = (time.monotonic() - self._send_time) * 1000
+                                logger.info("Event received type=%s ttfe=%.0fms conversation=%s", etype, ttfe, cid)
 
                             if etype == "assistant.message_delta":
                                 q.put_nowait(ContentEvent(content=event.data.delta_content or ""))
