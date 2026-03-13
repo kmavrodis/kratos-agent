@@ -13,8 +13,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     npm install -g @github/copilot && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy all project files
-COPY . .
+# Copy backend application
+COPY src/backend/ .
+
+# Copy skills config and skill definitions from repo root
+COPY skills.yaml .
+COPY skills/ ./skills/
 
 # Install dependencies
 RUN pip install --no-cache-dir .

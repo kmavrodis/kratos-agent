@@ -9,7 +9,7 @@ services:
     host: containerapp
     docker:
       path: ./Dockerfile
-      context: .
+      context: ../..
 
   web:
     project: ./src/frontend

@@ -13,7 +13,7 @@ from app.services.copilot_agent import CopilotAgent
 def settings():
     return Settings(
         ai_services_endpoint="https://test.openai.azure.com",
-        ai_services_model_deployment="gpt-41",
+        ai_services_model_deployment="gpt-52",
     )
 
 

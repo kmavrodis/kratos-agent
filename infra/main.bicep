@@ -18,6 +18,7 @@ param containerRegistryName string = ''
 param cosmosDbAccountName string = ''
 param aiSearchName string = ''
 param aiServicesName string = ''
+param bingSearchName string = ''
 param keyVaultName string = ''
 param appInsightsName string = ''
 param logAnalyticsName string = ''
@@ -123,6 +124,17 @@ module aiServices './modules/ai-services.bicep' = {
   }
 }
 
+// ─── Bing Search ───
+module bingSearch './modules/bing-search.bicep' = {
+  name: 'bing-search'
+  scope: rg
+  params: {
+    name: !empty(bingSearchName) ? bingSearchName : '${abbrs.bingSearchAccounts}${resourceToken}'
+    tags: tags
+    keyVaultName: keyVault.outputs.name
+  }
+}
+
 // ─── Container Registry ───
 module containerRegistry './modules/container-registry.bicep' = {
   name: 'container-registry'
@@ -163,6 +175,7 @@ module agentService './modules/agent-service.bicep' = {
     keyVaultUri: keyVault.outputs.uri
     aiServicesEndpoint: aiServices.outputs.endpoint
     aiServicesModelDeployment: aiServices.outputs.modelDeploymentName
+    bingSearchEndpoint: bingSearch.outputs.endpoint
   }
 }
 

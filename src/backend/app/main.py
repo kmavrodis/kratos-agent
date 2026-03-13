@@ -14,6 +14,11 @@ from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
 from app.services.skill_registry import SkillRegistry
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+)
+
 logger = logging.getLogger(__name__)
 
 

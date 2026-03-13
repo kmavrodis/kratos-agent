@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Azure AI Services (deployed by Bicep)
     ai_services_endpoint: str = ""
-    ai_services_model_deployment: str = "gpt-41"
+    ai_services_model_deployment: str = "gpt-52"
 
     # Observability
     applicationinsights_connection_string: str = ""

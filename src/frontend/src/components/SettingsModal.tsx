@@ -17,7 +17,7 @@ interface Props {
 
 export function SettingsModal({ open, onClose }: Props) {
   const [endpoint, setEndpoint] = useState("");
-  const [model, setModel] = useState("gpt-41");
+  const [model, setModel] = useState("gpt-52");
   const [status, setStatus] = useState<AIServiceStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -30,7 +30,7 @@ export function SettingsModal({ open, onClose }: Props) {
       .then((data: AIServiceStatus) => {
         setStatus(data);
         setEndpoint(data.aiServicesEndpoint || "");
-        setModel(data.aiServicesModelDeployment || "gpt-41");
+        setModel(data.aiServicesModelDeployment || "gpt-52");
       })
       .catch(() => {
         setStatus(null);
@@ -123,7 +123,7 @@ export function SettingsModal({ open, onClose }: Props) {
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="gpt-41"
+              placeholder="gpt-52"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>

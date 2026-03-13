@@ -6,11 +6,12 @@ Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
 """
 
 import asyncio
+from importlib.metadata import version
 import logging
 from typing import AsyncGenerator
 
 from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
-from copilot import CopilotClient
+from copilot import CopilotClient, PermissionRequestResult
 from opentelemetry import trace
 
 from app.config import Settings
@@ -31,6 +32,16 @@ You have access to domain skills (tools). Use them when the user needs:
 Reason before calling tools. Be transparent about what you're doing.
 Cite tool outputs in your final response.
 """
+
+
+def _approve_permission_request(request: object, context: dict[str, str]) -> PermissionRequestResult:
+    logger.info(
+        "Approving permission request session=%s kind=%s payload=%r",
+        context.get("session_id"),
+        getattr(getattr(request, "kind", None), "value", getattr(request, "kind", None)),
+        request,
+    )
+    return PermissionRequestResult(kind="approved")
 
 
 class CopilotAgent:
@@ -59,7 +70,10 @@ class CopilotAgent:
         )
         self._client = CopilotClient()
         await self._client.start()
-        logger.info("CopilotClient started (Managed Identity auth)")
+        logger.info(
+            "CopilotClient started (Managed Identity auth, sdk_version=%s)",
+            version("github-copilot-sdk"),
+        )
 
     async def stop(self) -> None:
         """Shutdown all sessions and the CLI client. Called on app shutdown."""
@@ -98,20 +112,13 @@ class CopilotAgent:
     async def _get_or_create_session(self, conversation_id: str) -> object:
         """Return an existing session or create a new one for this conversation."""
         if conversation_id in self._sessions:
+            logger.info("Reusing SDK session for conversation=%s", conversation_id)
             return self._sessions[conversation_id]
-
-        skill_directories = [
-            "./skills/web-search/SKILL.md",
-            "./skills/rag-search/SKILL.md",
-            "./skills/code-interpreter/SKILL.md",
-            "./skills/foundry-agent/SKILL.md",
-        ]
 
         session = await self._client.create_session({
             "model": self.settings.ai_services_model_deployment,
             "streaming": True,
             "tools": ALL_TOOLS,
-            "skill_directories": skill_directories,
             "system_message": {
                 "mode": "append",
                 "content": SYSTEM_PROMPT,
@@ -125,11 +132,16 @@ class CopilotAgent:
                     "api_version": "2024-10-21",
                 },
             },
-            "on_permission_request": lambda req, inv: {"decision": "allow"},
+            "on_permission_request": _approve_permission_request,
         })
 
         self._sessions[conversation_id] = session
-        logger.info("Created SDK session for conversation=%s", conversation_id)
+        logger.info(
+            "Created SDK session for conversation=%s model=%s custom_tools=%s",
+            conversation_id,
+            self.settings.ai_services_model_deployment,
+            ",".join(tool.name for tool in ALL_TOOLS),
+        )
         return session
 
     async def run(
@@ -141,46 +153,83 @@ class CopilotAgent:
 
         with tracer.start_as_current_span("copilot_agent.run", attributes={"conversation_id": conversation_id}):
             queue: asyncio.Queue = asyncio.Queue()
+            tool_events = 0
 
             try:
                 session = await self._get_or_create_session(conversation_id)
+                logger.info("Sending prompt for conversation=%s message=%r", conversation_id, message)
 
                 def on_event(event) -> None:
                     """Translate SDK events into our SSE event types."""
-                    etype = event.type.value if hasattr(event.type, "value") else str(event.type)
+                    nonlocal tool_events
+                    try:
+                        etype = event.type.value if hasattr(event.type, "value") else str(event.type)
+                        logger.info("SDK event conversation=%s type=%s", conversation_id, etype)
 
-                    if etype == "assistant.message_delta":
-                        queue.put_nowait(ContentEvent(content=event.data.delta_content or ""))
+                        if etype == "assistant.message_delta":
+                            queue.put_nowait(ContentEvent(content=event.data.delta_content or ""))
 
-                    elif etype == "tool.execution_start":
-                        queue.put_nowait(ThoughtEvent(
-                            content=f"Calling tool: {event.data.tool_name}",
-                            iteration=0,
-                        ))
-                        queue.put_nowait(ToolCallEvent(
-                            skillName=event.data.tool_name,
-                            status="started",
-                            input=str(getattr(event.data, "input", "")),
-                        ))
+                        elif etype == "tool.execution_start":
+                            tool_name = getattr(event.data, "tool_name", None) or "unknown"
+                            tool_events += 1
+                            logger.info(
+                                "Tool start conversation=%s tool=%s input=%r",
+                                conversation_id,
+                                tool_name,
+                                str(getattr(event.data, "input", ""))[:500],
+                            )
+                            queue.put_nowait(ThoughtEvent(
+                                content=f"Calling tool: {tool_name}",
+                                iteration=0,
+                            ))
+                            queue.put_nowait(ToolCallEvent(
+                                skillName=tool_name,
+                                status="started",
+                                input=str(getattr(event.data, "input", "")),
+                            ))
 
-                    elif etype == "tool.execution_complete":
-                        duration_ms = int(getattr(event.data, "duration_ms", 0))
-                        queue.put_nowait(ToolCallEvent(
-                            skillName=event.data.tool_name,
-                            status="completed",
-                            output=str(getattr(event.data, "output", ""))[:500],
-                            durationMs=duration_ms,
-                        ))
+                        elif etype == "tool.execution_complete":
+                            tool_name = getattr(event.data, "tool_name", None) or "unknown"
+                            duration_ms = int(getattr(event.data, "duration_ms", 0))
+                            success = getattr(event.data, "success", None)
+                            error = getattr(event.data, "error", None)
+                            logger.info(
+                                "Tool complete conversation=%s tool=%s success=%r duration_ms=%s output=%r error=%r",
+                                conversation_id,
+                                tool_name,
+                                success,
+                                duration_ms,
+                                str(getattr(event.data, "output", ""))[:500],
+                                error,
+                            )
+                            queue.put_nowait(ToolCallEvent(
+                                skillName=tool_name,
+                                status="completed",
+                                output=str(getattr(event.data, "output", ""))[:500],
+                                durationMs=duration_ms,
+                            ))
 
-                    elif etype == "session.idle":
-                        queue.put_nowait(None)  # sentinel — stream is done
+                        elif etype == "session.idle":
+                            logger.info(
+                                "Session idle conversation=%s tool_events=%s",
+                                conversation_id,
+                                tool_events,
+                            )
+                            queue.put_nowait(None)  # sentinel — stream is done
 
-                    elif etype == "session.error":
-                        queue.put_nowait(ErrorEvent(
-                            message=str(getattr(event.data, "message", "Unknown error")),
-                            code="SDK_ERROR",
-                        ))
-                        queue.put_nowait(None)
+                        elif etype == "session.error":
+                            logger.error(
+                                "Session error conversation=%s message=%s",
+                                conversation_id,
+                                str(getattr(event.data, "message", "Unknown error")),
+                            )
+                            queue.put_nowait(ErrorEvent(
+                                message=str(getattr(event.data, "message", "Unknown error")),
+                                code="SDK_ERROR",
+                            ))
+                            queue.put_nowait(None)
+                    except Exception:
+                        logger.exception("Error in session event handler conversation=%s", conversation_id)
 
                 session.on(on_event)
 
@@ -193,7 +242,15 @@ class CopilotAgent:
                         break
                     yield item
 
+                if tool_events == 0:
+                    logger.warning(
+                        "No tool events observed for conversation=%s prompt=%r",
+                        conversation_id,
+                        message,
+                    )
+
             except asyncio.TimeoutError:
+                logger.warning("Agent timed out for conversation=%s", conversation_id)
                 yield ErrorEvent(message="Agent timed out waiting for response", code="TIMEOUT")
             except Exception as e:
                 logger.exception("CopilotAgent failed for conversation=%s", conversation_id)

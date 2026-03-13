@@ -8,13 +8,13 @@ param location string
 param tags object = {}
 
 @description('Name of the GPT model deployment')
-param modelDeploymentName string = 'gpt-41'
+param modelDeploymentName string = 'gpt-52'
 
 @description('Model name to deploy')
-param modelName string = 'gpt-4.1'
+param modelName string = 'gpt-5.2'
 
 @description('Model version')
-param modelVersion string = '2025-04-14'
+param modelVersion string = '2025-12-11'
 
 @description('Deployment SKU capacity (thousands of tokens per minute)')
 param modelCapacity int = 30
@@ -38,7 +38,7 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-
   parent: aiServices
   name: modelDeploymentName
   sku: {
-    name: 'Standard'
+    name: 'GlobalStandard'
     capacity: modelCapacity
   }
   properties: {

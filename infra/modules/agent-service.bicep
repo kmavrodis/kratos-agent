@@ -31,6 +31,9 @@ param aiServicesEndpoint string
 @description('AI Services model deployment name')
 param aiServicesModelDeployment string
 
+@description('Bing Search endpoint')
+param bingSearchEndpoint string
+
 resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
@@ -76,6 +79,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'AI_SERVICES_ENDPOINT', value: aiServicesEndpoint }
             { name: 'AI_SERVICES_MODEL_DEPLOYMENT', value: aiServicesModelDeployment }
+            { name: 'BING_SEARCH_ENDPOINT', value: bingSearchEndpoint }
             { name: 'OTEL_SERVICE_NAME', value: 'kratos-agent-service' }
           ]
         }

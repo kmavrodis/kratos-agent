@@ -106,7 +106,7 @@ class ErrorEvent(BaseModel):
 class AIServiceSettings(BaseModel):
     """AI service configuration submitted by the user."""
     aiServicesEndpoint: str = Field(default="", description="Azure AI Services endpoint URL")
-    aiServicesModelDeployment: str = Field(default="gpt-41", description="Model deployment name")
+    aiServicesModelDeployment: str = Field(default="gpt-52", description="Model deployment name")
 
 
 class AIServiceStatus(BaseModel):

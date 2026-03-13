@@ -11,5 +11,6 @@
   "operationalInsightsWorkspaces": "log-",
   "searchSearchServices": "srch-",
   "cognitiveServicesAccounts": "oai-",
+  "bingSearchAccounts": "bing-",
   "webStaticSites": "stapp-"
 }
