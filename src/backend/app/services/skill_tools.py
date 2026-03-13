@@ -4,7 +4,6 @@ Each function here corresponds to one skill in skills.yaml.
 The SDK calls these when the agent decides to invoke a skill.
 """
 
-import json
 import logging
 import os
 import subprocess
@@ -16,7 +15,6 @@ logger = logging.getLogger(__name__)
 from azure.identity.aio import DefaultAzureCredential
 from azure.search.documents.aio import SearchClient
 from copilot.tools import define_tool
-from copilot.types import ToolInvocation
 from opentelemetry import trace
 from pydantic import BaseModel, Field
 
@@ -72,51 +70,18 @@ class WebSearchParams(BaseModel):
     query: str = Field(default="", description="The search query to look up on the internet")
 
 
-def _extract_query_argument(raw_arguments: object, fallback: str = "") -> str:
-    if isinstance(raw_arguments, dict):
-        for key in ("query", "q", "input", "text"):
-            value = raw_arguments.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-        return fallback.strip()
-
-    if isinstance(raw_arguments, str):
-        candidate = raw_arguments.strip()
-        if not candidate or candidate.lower() == "none":
-            return fallback.strip()
-
-        try:
-            parsed = json.loads(candidate)
-        except json.JSONDecodeError:
-            return candidate
-
-        if isinstance(parsed, dict):
-            return _extract_query_argument(parsed, fallback)
-        if isinstance(parsed, str):
-            return parsed.strip()
-
-    return fallback.strip()
-
-
-def _get_invocation_arguments(invocation: ToolInvocation | object) -> object:
-    if isinstance(invocation, dict):
-        return invocation.get("arguments")
-    return getattr(invocation, "arguments", None)
-
-
 @define_tool(description="Real-time internet search for current information and market data")
-async def web_search(params: WebSearchParams, invocation: ToolInvocation) -> dict:
+async def web_search(params: WebSearchParams) -> dict:
     """Search the internet for up-to-date information using Bing Search API."""
     with tracer.start_as_current_span("skill.web_search"):
         t0 = time.monotonic()
-        raw_arguments = _get_invocation_arguments(invocation)
-        query = _extract_query_argument(raw_arguments, params.query)
+        query = params.query
         endpoint = os.environ.get("BING_SEARCH_ENDPOINT", "https://api.bing.microsoft.com")
         search_url = endpoint.rstrip("/") + "/v7.0/search"
-        logger.info("web_search called: resolved_query=%r search_url=%s", query, search_url)
+        logger.info("web_search called: query=%r search_url=%s", query, search_url)
 
         if not query:
-            return {"error": "Missing required search query for web_search", "receivedArguments": raw_arguments}
+            return {"error": "Missing required search query for web_search"}
 
         try:
             api_key = await _get_bing_api_key()

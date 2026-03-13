@@ -34,16 +34,6 @@ Cite tool outputs in your final response.
 """
 
 
-def _approve_permission_request(request: object, context: dict[str, str]) -> PermissionRequestResult:
-    logger.info(
-        "Approving permission request session=%s kind=%s payload=%r",
-        context.get("session_id"),
-        getattr(getattr(request, "kind", None), "value", getattr(request, "kind", None)),
-        request,
-    )
-    return PermissionRequestResult(kind="approved")
-
-
 class CopilotAgent:
     """Manages one CopilotClient shared across the app lifetime.
 
@@ -56,6 +46,9 @@ class CopilotAgent:
         self.settings = settings
         self._client: CopilotClient | None = None
         self._sessions: dict[str, object] = {}
+        self._queues: dict[str, asyncio.Queue] = {}
+        self._tool_counters: dict[str, int] = {}
+        self._registered_handlers: set[str] = set()
         self._credential: DefaultAzureCredential | None = None
         self._token_provider = None
 
@@ -82,6 +75,10 @@ class CopilotAgent:
                 await session.destroy()
             except Exception:
                 pass
+        self._sessions.clear()
+        self._registered_handlers.clear()
+        self._queues.clear()
+        self._tool_counters.clear()
         if self._client:
             await self._client.stop()
         if self._credential:
@@ -107,6 +104,9 @@ class CopilotAgent:
             except Exception:
                 pass
         self._sessions.clear()
+        self._registered_handlers.clear()
+        self._queues.clear()
+        self._tool_counters.clear()
         logger.info("Config updated — all sessions reset")
 
     async def _get_or_create_session(self, conversation_id: str) -> object:
@@ -119,6 +119,12 @@ class CopilotAgent:
             "model": self.settings.ai_services_model_deployment,
             "streaming": True,
             "tools": ALL_TOOLS,
+            "skill_directories": [
+                "./skills/web-search/SKILL.md",
+                "./skills/rag-search/SKILL.md",
+                "./skills/code-interpreter/SKILL.md",
+                "./skills/foundry-agent/SKILL.md",
+            ],
             "system_message": {
                 "mode": "append",
                 "content": SYSTEM_PROMPT,
@@ -132,7 +138,7 @@ class CopilotAgent:
                     "api_version": "2024-10-21",
                 },
             },
-            "on_permission_request": _approve_permission_request,
+            "on_permission_request": lambda req, ctx: PermissionRequestResult(kind="approved"),
         })
 
         self._sessions[conversation_id] = session
@@ -153,85 +159,80 @@ class CopilotAgent:
 
         with tracer.start_as_current_span("copilot_agent.run", attributes={"conversation_id": conversation_id}):
             queue: asyncio.Queue = asyncio.Queue()
-            tool_events = 0
+            self._queues[conversation_id] = queue
+            self._tool_counters[conversation_id] = 0
 
             try:
                 session = await self._get_or_create_session(conversation_id)
                 logger.info("Sending prompt for conversation=%s message=%r", conversation_id, message)
 
-                def on_event(event) -> None:
-                    """Translate SDK events into our SSE event types."""
-                    nonlocal tool_events
-                    try:
-                        etype = event.type.value if hasattr(event.type, "value") else str(event.type)
-                        logger.info("SDK event conversation=%s type=%s", conversation_id, etype)
+                # Register the event handler ONCE per session, not per run() call.
+                # The handler routes events to whatever queue is active for that conversation.
+                if conversation_id not in self._registered_handlers:
+                    cid = conversation_id  # capture for closure
 
-                        if etype == "assistant.message_delta":
-                            queue.put_nowait(ContentEvent(content=event.data.delta_content or ""))
+                    def on_event(event) -> None:
+                        """Translate SDK events into our SSE event types."""
+                        q = self._queues.get(cid)
+                        if q is None:
+                            return  # no active run for this conversation
+                        try:
+                            etype = event.type.value if hasattr(event.type, "value") else str(event.type)
 
-                        elif etype == "tool.execution_start":
-                            tool_name = getattr(event.data, "tool_name", None) or "unknown"
-                            tool_events += 1
-                            logger.info(
-                                "Tool start conversation=%s tool=%s input=%r",
-                                conversation_id,
-                                tool_name,
-                                str(getattr(event.data, "input", ""))[:500],
-                            )
-                            queue.put_nowait(ThoughtEvent(
-                                content=f"Calling tool: {tool_name}",
-                                iteration=0,
-                            ))
-                            queue.put_nowait(ToolCallEvent(
-                                skillName=tool_name,
-                                status="started",
-                                input=str(getattr(event.data, "input", "")),
-                            ))
+                            if etype == "assistant.message_delta":
+                                q.put_nowait(ContentEvent(content=event.data.delta_content or ""))
 
-                        elif etype == "tool.execution_complete":
-                            tool_name = getattr(event.data, "tool_name", None) or "unknown"
-                            duration_ms = int(getattr(event.data, "duration_ms", 0))
-                            success = getattr(event.data, "success", None)
-                            error = getattr(event.data, "error", None)
-                            logger.info(
-                                "Tool complete conversation=%s tool=%s success=%r duration_ms=%s output=%r error=%r",
-                                conversation_id,
-                                tool_name,
-                                success,
-                                duration_ms,
-                                str(getattr(event.data, "output", ""))[:500],
-                                error,
-                            )
-                            queue.put_nowait(ToolCallEvent(
-                                skillName=tool_name,
-                                status="completed",
-                                output=str(getattr(event.data, "output", ""))[:500],
-                                durationMs=duration_ms,
-                            ))
+                            elif etype == "tool.execution_start":
+                                tool_name = getattr(event.data, "tool_name", None) or "unknown"
+                                self._tool_counters[cid] = self._tool_counters.get(cid, 0) + 1
+                                logger.info("Tool start conversation=%s tool=%s", cid, tool_name)
+                                q.put_nowait(ThoughtEvent(
+                                    content=f"Calling tool: {tool_name}",
+                                    iteration=0,
+                                ))
+                                q.put_nowait(ToolCallEvent(
+                                    skillName=tool_name,
+                                    status="started",
+                                    input=str(getattr(event.data, "input", "")),
+                                ))
 
-                        elif etype == "session.idle":
-                            logger.info(
-                                "Session idle conversation=%s tool_events=%s",
-                                conversation_id,
-                                tool_events,
-                            )
-                            queue.put_nowait(None)  # sentinel — stream is done
+                            elif etype == "tool.execution_complete":
+                                tool_name = getattr(event.data, "tool_name", None) or "unknown"
+                                duration_ms = int(getattr(event.data, "duration_ms", 0))
+                                success = getattr(event.data, "success", None)
+                                error = getattr(event.data, "error", None)
+                                logger.info(
+                                    "Tool complete conversation=%s tool=%s success=%r duration_ms=%s error=%r",
+                                    cid, tool_name, success, duration_ms, error,
+                                )
+                                q.put_nowait(ToolCallEvent(
+                                    skillName=tool_name,
+                                    status="completed",
+                                    output=str(getattr(event.data, "output", ""))[:500],
+                                    durationMs=duration_ms,
+                                ))
 
-                        elif etype == "session.error":
-                            logger.error(
-                                "Session error conversation=%s message=%s",
-                                conversation_id,
-                                str(getattr(event.data, "message", "Unknown error")),
-                            )
-                            queue.put_nowait(ErrorEvent(
-                                message=str(getattr(event.data, "message", "Unknown error")),
-                                code="SDK_ERROR",
-                            ))
-                            queue.put_nowait(None)
-                    except Exception:
-                        logger.exception("Error in session event handler conversation=%s", conversation_id)
+                            elif etype == "session.idle":
+                                tc = self._tool_counters.get(cid, 0)
+                                logger.info("Session idle conversation=%s tool_events=%s", cid, tc)
+                                q.put_nowait(None)  # sentinel — stream is done
 
-                session.on(on_event)
+                            elif etype == "session.error":
+                                logger.error(
+                                    "Session error conversation=%s message=%s",
+                                    cid,
+                                    str(getattr(event.data, "message", "Unknown error")),
+                                )
+                                q.put_nowait(ErrorEvent(
+                                    message=str(getattr(event.data, "message", "Unknown error")),
+                                    code="SDK_ERROR",
+                                ))
+                                q.put_nowait(None)
+                        except Exception:
+                            logger.exception("Error in session event handler conversation=%s", cid)
+
+                    session.on(on_event)
+                    self._registered_handlers.add(conversation_id)
 
                 await session.send({"prompt": message})
 
@@ -242,6 +243,7 @@ class CopilotAgent:
                         break
                     yield item
 
+                tool_events = self._tool_counters.get(conversation_id, 0)
                 if tool_events == 0:
                     logger.warning(
                         "No tool events observed for conversation=%s prompt=%r",
@@ -257,3 +259,6 @@ class CopilotAgent:
                 yield ErrorEvent(message=str(e), code="AGENT_ERROR")
                 # Drop the broken session so next turn gets a fresh one
                 self._sessions.pop(conversation_id, None)
+                self._registered_handlers.discard(conversation_id)
+            finally:
+                self._queues.pop(conversation_id, None)

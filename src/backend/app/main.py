@@ -18,6 +18,10 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s %(levelname)s %(name)s %(message)s',
 )
+# Silence chatty Azure SDK HTTP loggers — they log full request/response headers at INFO
+logging.getLogger("azure.cosmos").setLevel(logging.WARNING)
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.identity").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
