@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { ChatWindow } from "@/components/ChatWindow";
 import { Sidebar } from "@/components/Sidebar";
+import { SettingsModal } from "@/components/SettingsModal";
 import { Conversation } from "@/types";
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] =
     useState<Conversation | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const handleNewConversation = () => {
     const newConv: Conversation = {
@@ -34,7 +36,11 @@ export default function Home() {
         activeId={activeConversation?.id ?? null}
         onNew={handleNewConversation}
         onSelect={handleSelectConversation}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
+
+      {/* Settings modal */}
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Main chat area */}
       <main className="flex-1 flex flex-col">

@@ -100,26 +100,25 @@ copilot --version   # should print the installed version
 Add one new field to `Settings`:
 
 ```python
-# GitHub Copilot SDK auth (stored in Key Vault, injected as env var)
-copilot_github_token: str = ""
+# Azure Foundry API key for Copilot SDK BYOK
+# Fetched from Key Vault at startup via Managed Identity — not hardcoded
+foundry_api_key: str = ""
 ```
-
-The SDK will pick this up automatically if `COPILOT_GITHUB_TOKEN` is set in the environment.
-You can also pass it explicitly — see Step 5.
 
 ### `.env.example`
 
-Add:
+Add (for local dev only — production reads from Key Vault):
 ```env
-# GitHub Copilot SDK (required — store in Key Vault in production)
-COPILOT_GITHUB_TOKEN=ghp_your_token_here
+# Foundry API key for Copilot SDK BYOK (local dev only)
+# In production this is read from Key Vault via Managed Identity at startup
+FOUNDRY_API_KEY=your_foundry_api_key_here
 ```
 
 ### Azure Key Vault / Bicep (infra)
 
-Add a Key Vault secret for `copilot-github-token` and wire it to the Container App
-as environment variable `COPILOT_GITHUB_TOKEN`. Pattern mirrors the existing Foundry
-secret setup in the Bicep templates.
+The Foundry API key already lives in Key Vault (or add it there now as `foundry-api-key`).
+At app startup, the service reads it via Managed Identity and passes it to the SDK —
+**no env var injection needed in production**. See Step 5 for the startup code.
 
 ---
 
@@ -322,18 +321,18 @@ class CopilotAgent:
         # conversation_id → active SDK session
         self._sessions: dict[str, object] = {}
 
-    async def start(self) -> None:
-        """Initialize the Copilot CLI client. Called once on app startup."""
-        token = self.settings.copilot_github_token or os.environ.get("COPILOT_GITHUB_TOKEN", "")
+    async def start(self, foundry_api_key: str) -> None:
+        """Initialize the Copilot CLI client. Called once on app startup.
 
-        client_options: dict = {}
-        if token:
-            # Explicitly pass the token (overrides env var)
-            client_options["github_token"] = token
-
-        self._client = CopilotClient(client_options or None)
+        No GitHub token required — BYOK uses the Foundry API key directly.
+        The key is fetched from Key Vault by the caller (main.py lifespan)
+        using Managed Identity, so we never hardcode or env-inject it.
+        """
+        self._foundry_api_key = foundry_api_key
+        # No GitHub auth options — BYOK mode, provider config set per-session
+        self._client = CopilotClient()
         await self._client.start()
-        logger.info("CopilotClient started")
+        logger.info("CopilotClient started (BYOK mode, no GitHub token)")
 
     async def stop(self) -> None:
         """Shutdown all sessions and the CLI client. Called on app shutdown."""
@@ -360,13 +359,20 @@ class CopilotAgent:
         ]
 
         session = await self._client.create_session({
-            "model": "gpt-4o",           # or gpt-5, claude-sonnet-4.5, etc.
+            "model": self.settings.foundry_model_deployment,  # e.g. "gpt-4o"
             "streaming": True,
-            "tools": ALL_TOOLS,          # @define_tool functions from skill_tools.py
+            "tools": ALL_TOOLS,
             "skill_directories": skill_directories,
             "system_message": {
-                "mode": "append",        # Append to Copilot's default system prompt
+                "mode": "append",
                 "content": SYSTEM_PROMPT,
+            },
+            # BYOK provider — Azure AI Foundry, no GitHub token needed
+            "provider": {
+                "type": "openai",   # Foundry exposes OpenAI-compatible /openai/v1/ endpoint
+                "base_url": f"{self.settings.foundry_endpoint.rstrip('/')}/openai/v1/",
+                "api_key": self._foundry_api_key,  # fetched from Key Vault at startup
+                "wire_api": "responses",  # use "completions" for older models
             },
             "on_permission_request": lambda req, inv: {"decision": "allow"},
         })
@@ -451,23 +457,37 @@ class CopilotAgent:
 
 ## Step 6 — Update `main.py` (App Lifespan)
 
-Replace the current lifespan block to start/stop `CopilotAgent` instead of having
-no SDK client:
+Replace the current lifespan block to start/stop `CopilotAgent`. The Foundry API key
+is fetched from Key Vault via Managed Identity **here**, once at startup, then passed
+into the agent. This is the only place the key is ever read — it never touches env vars
+or config files in production.
 
 ```python
-# In lifespan(), after skill_registry.load():
-
+from azure.keyvault.secrets.aio import SecretClient
+from azure.identity.aio import DefaultAzureCredential
 from app.services.copilot_agent import CopilotAgent
 
+# In lifespan(), after skill_registry.load():
+
+# Fetch Foundry API key from Key Vault via Managed Identity
+foundry_api_key = ""
+if settings.key_vault_uri:
+    async with SecretClient(settings.key_vault_uri, DefaultAzureCredential()) as kv:
+        secret = await kv.get_secret("foundry-api-key")
+        foundry_api_key = secret.value
+else:
+    # Local dev fallback — read from env (never in production)
+    foundry_api_key = settings.foundry_api_key
+
 copilot_agent = CopilotAgent(settings)
-await copilot_agent.start()
+await copilot_agent.start(foundry_api_key)
 application.state.copilot_agent = copilot_agent
 
 # In the cleanup section (after yield):
 await copilot_agent.stop()
 ```
 
-The `AgentLoop` import and instantiation in `main.py` are **removed**.
+The `AgentLoop` import and instantiation are **removed** from `main.py`.
 
 ---
 
@@ -593,7 +613,7 @@ After each step, verify:
 
 | Trade-off | Mitigation |
 |---|---|
-| Managed Identity → GitHub token for the LLM call | Token stored in Key Vault, injected as env var |
-| Copilot CLI binary in Docker image (~extra ~100MB) | Multi-stage build keeps image lean |
+| Managed Identity for model calls → Foundry API key | Key fetched from Key Vault via Managed Identity at startup — never hardcoded |
+| Copilot CLI binary in Docker image | Multi-stage build keeps image lean (~100MB extra) |
 | SDK is Technical Preview (not production-stable) | Pin SDK version; monitor changelog |
-| Foundry model billing → GitHub Copilot quota billing | Monitor premium request quota; upgrade plan if needed |
+| No GitHub Copilot subscription costs | Billed directly via your existing Foundry/Azure contract |

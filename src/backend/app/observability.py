@@ -40,6 +40,6 @@ def setup_telemetry(settings: Settings) -> None:
     trace.set_tracer_provider(provider)
 
     # Auto-instrument FastAPI
-    FastAPIInstrumentor.instrument(tracer_provider=provider)
+    FastAPIInstrumentor().instrument(tracer_provider=provider)
 
     logger.info("OpenTelemetry initialized — service=%s", settings.otel_service_name)

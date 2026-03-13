@@ -1,4 +1,4 @@
-"""Agent endpoint — accepts user prompts and streams agentic loop responses via SSE."""
+"""Agent endpoint — accepts user prompts and streams Copilot SDK responses via SSE."""
 
 import json
 import logging
@@ -19,7 +19,6 @@ from app.models import (
     ThoughtEvent,
     ToolCallEvent,
 )
-from app.services.agent_loop import AgentLoop
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ router = APIRouter()
 
 @router.post("/chat")
 async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
-    """Run the agentic loop and stream results as Server-Sent Events.
+    """Run the Copilot SDK agent and stream results as Server-Sent Events.
 
     The response is a stream of JSON events:
     - thought: Agent reasoning / plan
@@ -38,7 +37,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
     - error: Error details
     """
     cosmos = request.app.state.cosmos_service
-    skill_registry = request.app.state.skill_registry
+    copilot_agent = request.app.state.copilot_agent
 
     async def event_generator():  # noqa: ANN202
         start_time = time.monotonic()
@@ -55,17 +54,11 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
             )
             await cosmos.upsert_message(user_message)
 
-            # Load conversation history
-            history = await cosmos.list_messages(body.conversationId)
-
-            # Run the agentic loop
-            agent_loop = AgentLoop(skill_registry=skill_registry, settings=request.app.state.cosmos_service.settings)
-
+            # Run the Copilot SDK agent
             assistant_content_parts: list[str] = []
 
-            async for event in agent_loop.run(
+            async for event in copilot_agent.run(
                 message=body.message,
-                history=history,
                 conversation_id=body.conversationId,
             ):
                 if isinstance(event, ThoughtEvent):
@@ -100,8 +93,8 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
             yield {"event": "done", "data": json.dumps(done.model_dump())}
 
         except Exception:
-            logger.exception("Agent loop failed for conversation=%s", body.conversationId)
-            error = ErrorEvent(message="An internal error occurred", code="AGENT_LOOP_ERROR")
+            logger.exception("Copilot agent failed for conversation=%s", body.conversationId)
+            error = ErrorEvent(message="An internal error occurred", code="AGENT_ERROR")
             yield {"event": "error", "data": json.dumps(error.model_dump())}
 
     return EventSourceResponse(event_generator())

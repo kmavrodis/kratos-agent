@@ -56,14 +56,43 @@ async def test_get_enabled_skills(skills_yaml: str):
 
 
 @pytest.mark.asyncio
-async def test_get_discovery_context(skills_yaml: str):
-    registry = SkillRegistry(config_path=skills_yaml)
+async def test_get_skill_directories(skills_yaml: str, tmp_path: Path):
+    """Test that get_skill_directories returns paths for enabled skills with SKILL.md."""
+    # Create SKILL.md files for the enabled skills
+    web_search_dir = tmp_path / "skills" / "web-search"
+    web_search_dir.mkdir(parents=True)
+    (web_search_dir / "SKILL.md").write_text("# Web Search Skill")
+
+    rag_search_dir = tmp_path / "skills" / "rag-search"
+    rag_search_dir.mkdir(parents=True)
+    (rag_search_dir / "SKILL.md").write_text("# RAG Search Skill")
+
+    # Update skills.yaml to point to tmp_path paths
+    config = tmp_path / "skills_dirs.yaml"
+    config.write_text(f"""
+skills:
+  - name: web-search
+    description: Real-time internet search
+    enabled: true
+    path: {web_search_dir}
+
+  - name: rag-search
+    description: Azure AI Search knowledge base
+    enabled: true
+    path: {rag_search_dir}
+
+  - name: disabled-skill
+    description: A disabled skill
+    enabled: false
+    path: {tmp_path}/skills/disabled
+""")
+    registry = SkillRegistry(config_path=str(config))
     await registry.load()
 
-    context = registry.get_discovery_context()
-    assert "web-search" in context
-    assert "rag-search" in context
-    assert "disabled-skill" not in context
+    dirs = registry.get_skill_directories()
+    assert len(dirs) == 2
+    assert any("web-search" in d for d in dirs)
+    assert any("rag-search" in d for d in dirs)
 
 
 @pytest.mark.asyncio

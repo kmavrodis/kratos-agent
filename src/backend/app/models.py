@@ -98,4 +98,21 @@ class ErrorEvent(BaseModel):
     """Streamed error event."""
     type: str = "error"
     message: str
+    code: str = "UNKNOWN_ERROR"
+
+
+# ─── Settings ───
+
+class BYOKSettings(BaseModel):
+    """BYOK configuration submitted by the user."""
+    foundryEndpoint: str = Field(default="", description="Azure Foundry endpoint URL")
+    foundryModelDeployment: str = Field(default="gpt-4o", description="Model deployment name")
+    foundryApiKey: str = Field(default="", description="Foundry API key")
+
+
+class BYOKStatus(BaseModel):
+    """Current BYOK config status (key is never exposed)."""
+    configured: bool = False
+    foundryEndpoint: str = ""
+    foundryModelDeployment: str = ""
     code: str = "INTERNAL_ERROR"

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     foundry_endpoint: str = ""
     foundry_model_deployment: str = "gpt-4o"
 
+    # Foundry API key for Copilot SDK BYOK
+    # Fetched from Key Vault at startup via Managed Identity — not hardcoded
+    foundry_api_key: str = ""
+
     # Observability
     applicationinsights_connection_string: str = ""
     otel_service_name: str = "kratos-agent-service"

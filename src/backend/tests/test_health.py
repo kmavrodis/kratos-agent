@@ -14,6 +14,7 @@ def client():
     # Mock the lifespan dependencies
     app.state.cosmos_service = MagicMock()
     app.state.skill_registry = MagicMock()
+    app.state.copilot_agent = MagicMock()
 
     return TestClient(app, raise_server_exceptions=False)
 

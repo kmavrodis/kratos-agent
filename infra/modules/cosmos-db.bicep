@@ -10,6 +10,9 @@ param tags object = {}
 @description('Subnet ID for private endpoint')
 param subnetId string
 
+@description('VNet ID for DNS zone link')
+param vnetId string
+
 @description('Key Vault name for storing connection info')
 param keyVaultName string
 
@@ -119,6 +122,40 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = {
         properties: {
           privateLinkServiceId: cosmosDb.id
           groupIds: ['Sql']
+        }
+      }
+    ]
+  }
+}
+
+// Private DNS Zone for Cosmos DB
+resource privateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  name: 'privatelink.documents.azure.com'
+  location: 'global'
+  tags: tags
+}
+
+resource dnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: privateDnsZone
+  name: '${name}-vnet-link'
+  location: 'global'
+  properties: {
+    virtualNetwork: {
+      id: vnetId
+    }
+    registrationEnabled: false
+  }
+}
+
+resource dnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-09-01' = {
+  parent: privateEndpoint
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      {
+        name: 'cosmos-dns'
+        properties: {
+          privateDnsZoneId: privateDnsZone.id
         }
       }
     ]

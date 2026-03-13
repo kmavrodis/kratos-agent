@@ -84,6 +84,7 @@ module keyVault './modules/key-vault.bicep' = {
     tags: tags
     principalId: principalId
     subnetId: network.outputs.privateEndpointSubnetId
+    vnetId: network.outputs.id
   }
 }
 
@@ -96,6 +97,7 @@ module cosmosDb './modules/cosmos-db.bicep' = {
     location: location
     tags: tags
     subnetId: network.outputs.privateEndpointSubnetId
+    vnetId: network.outputs.id
     keyVaultName: keyVault.outputs.name
   }
 }
@@ -109,6 +111,7 @@ module aiSearch './modules/ai-search.bicep' = {
     location: location
     tags: tags
     subnetId: network.outputs.privateEndpointSubnetId
+    vnetId: network.outputs.id
   }
 }
 

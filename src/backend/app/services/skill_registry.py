@@ -1,4 +1,9 @@
-"""Skill registry — loads and manages MCP skills from skills.yaml."""
+"""Skill registry — loads and manages MCP skills from skills.yaml.
+
+Simplified for Copilot SDK: the SDK reads SKILL.md files natively via
+skill_directories, so we no longer need get_discovery_context() or
+the instructions field.
+"""
 
 import logging
 from dataclasses import dataclass, field
@@ -11,23 +16,21 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SkillMetadata:
-    """Metadata for a registered MCP skill (Stage 1 — DISCOVER)."""
+    """Metadata for a registered MCP skill."""
 
     name: str
     description: str
     enabled: bool = True
     path: str = ""
-    instructions: str = ""  # Loaded on demand (Stage 2 — LOAD)
 
 
 @dataclass
 class SkillRegistry:
     """Registry of available MCP skills.
 
-    Implements the progressive disclosure model:
-    - Stage 1 (DISCOVER): name + description (~50 tokens per skill)
-    - Stage 2 (LOAD): Full instructions loaded on demand
-    - Stage 3 (EXECUTE): Scripts run at runtime
+    Loads skills.yaml to know which skills are enabled/disabled.
+    Provides skill paths to CopilotAgent for SDK session creation.
+    The SDK reads SKILL.md files natively via skill_directories.
     """
 
     config_path: str = "skills.yaml"
@@ -51,12 +54,6 @@ class SkillRegistry:
                 enabled=skill_cfg.get("enabled", True),
                 path=skill_cfg.get("path", ""),
             )
-
-            # Try to load SKILL.md for instructions
-            skill_md_path = Path(skill.path) / "SKILL.md"
-            if skill_md_path.exists():
-                skill.instructions = skill_md_path.read_text()
-
             self.skills[name] = skill
             logger.info("Registered skill: %s (enabled=%s)", name, skill.enabled)
 
@@ -70,12 +67,11 @@ class SkillRegistry:
         """Get a specific skill by name."""
         return self.skills.get(name)
 
-    def get_discovery_context(self) -> str:
-        """Build the discovery context string (~50 tokens per skill).
-
-        This is Stage 1 — passed to the model so it knows what skills are available.
-        """
-        lines = ["Available skills:"]
+    def get_skill_directories(self) -> list[str]:
+        """Return SKILL.md paths for all enabled skills (used by CopilotAgent)."""
+        dirs = []
         for skill in self.get_enabled_skills():
-            lines.append(f"- {skill.name}: {skill.description}")
-        return "\n".join(lines)
+            skill_md = Path(skill.path) / "SKILL.md"
+            if skill_md.exists():
+                dirs.append(str(skill_md))
+        return dirs

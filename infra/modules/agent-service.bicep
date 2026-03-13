@@ -42,6 +42,12 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: containerAppsEnvId
     configuration: {
       activeRevisionsMode: 'Single'
+      registries: [
+        {
+          server: '${replace(containerRegistryName, '-', '')}.azurecr.io'
+          identity: 'system'
+        }
+      ]
       ingress: {
         external: true
         targetPort: 8000
