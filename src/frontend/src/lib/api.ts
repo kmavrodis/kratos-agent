@@ -147,3 +147,36 @@ export async function deleteSkill(name: string): Promise<void> {
     throw new Error(err.detail || `Failed to delete skill: ${response.status}`);
   }
 }
+
+// ─── System Prompt Admin API ───
+
+import type { SystemPrompt } from "@/types";
+
+export async function getSystemPrompt(): Promise<SystemPrompt> {
+  const response = await fetch(`${API_URL}/api/admin/system-prompt`);
+  if (!response.ok) throw new Error(`Failed to get system prompt: ${response.status}`);
+  return response.json();
+}
+
+export async function updateSystemPrompt(content: string): Promise<SystemPrompt> {
+  const response = await fetch(`${API_URL}/api/admin/system-prompt`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to update system prompt: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function resetSystemPrompt(): Promise<void> {
+  const response = await fetch(`${API_URL}/api/admin/system-prompt`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to reset system prompt: ${response.status}`);
+  }
+}

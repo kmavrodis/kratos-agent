@@ -135,6 +135,33 @@ resource skillsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/con
   }
 }
 
+// Settings container — stores system prompt and other admin config
+resource settingsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'settings'
+  properties: {
+    resource: {
+      id: 'settings'
+      partitionKey: {
+        paths: ['/category']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          { path: '/*' }
+        ]
+        excludedPaths: [
+          { path: '/"_etag"/?' }
+        ]
+      }
+      defaultTtl: -1
+    }
+  }
+}
+
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = {
   name: '${name}-pe'
   location: location

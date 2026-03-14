@@ -54,3 +54,7 @@ logs/
 *.pem
 *.key
 secrets/
+
+
+# MCP
+.playwright-mcp/

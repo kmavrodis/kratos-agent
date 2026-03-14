@@ -159,3 +159,16 @@ class SkillUpdate(BaseModel):
 class SkillList(BaseModel):
     """List of skills."""
     skills: list[SkillResponse]
+
+
+# ─── System Prompt Admin ───
+
+class SystemPromptResponse(BaseModel):
+    """System prompt as returned by the admin API."""
+    content: str
+    isDefault: bool = False
+
+
+class SystemPromptUpdate(BaseModel):
+    """Payload for updating the system prompt."""
+    content: str = Field(..., min_length=1, max_length=50000)

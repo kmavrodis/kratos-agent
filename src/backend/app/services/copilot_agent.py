@@ -41,6 +41,8 @@ Reason before calling tools. Be transparent about what you're doing.
 Cite tool outputs in your final response.
 """
 
+DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT
+
 
 class CopilotAgent:
     """Manages one CopilotClient shared across the app lifetime.
@@ -55,6 +57,18 @@ class CopilotAgent:
         self._client: CopilotClient | None = None
         self._skill_registry: object | None = None
         self._sessions: dict[str, object] = {}
+        self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
+
+    @property
+    def system_prompt(self) -> str:
+        return self._system_prompt
+
+    @system_prompt.setter
+    def system_prompt(self, value: str) -> None:
+        self._system_prompt = value
+        # Clear sessions so new chats pick up the updated prompt
+        self._sessions.clear()
+        logger.info("System prompt updated — all sessions reset")
 
     def set_skill_registry(self, registry: object) -> None:
         """Inject the skill registry for dynamic tool/skill resolution."""
@@ -150,10 +164,10 @@ class CopilotAgent:
         # Resolve enabled tools and skill directories from the registry
         enabled_tools = ALL_TOOLS
         skill_dirs = [
-            "./skills/web-search/SKILL.md",
-            "./skills/rag-search/SKILL.md",
-            "./skills/code-interpreter/SKILL.md",
-            "./skills/foundry-agent/SKILL.md",
+            "./skills/web-search",
+            "./skills/rag-search",
+            "./skills/code-interpreter",
+            "./skills/foundry-agent",
         ]
         if self._skill_registry is not None:
             enabled_names = self._skill_registry.get_enabled_tool_names()
@@ -168,7 +182,7 @@ class CopilotAgent:
             "skill_directories": skill_dirs,
             "system_message": {
                 "mode": "append",
-                "content": SYSTEM_PROMPT,
+                "content": self._system_prompt,
             },
             "provider": {
                 "type": "azure",

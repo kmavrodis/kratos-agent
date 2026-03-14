@@ -7,7 +7,6 @@ The SDK reads SKILL.md content from the instructions field stored in Cosmos.
 
 import logging
 import re
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -176,21 +175,35 @@ class SkillRegistry:
         return self.skills.get(name)
 
     def get_skill_directories(self) -> list[str]:
-        """Write enabled skill instructions to temp files and return paths.
+        """Write enabled skill instructions to skill dirs and return directory paths.
 
-        The SDK expects file paths for skill_directories, so we materialize
-        the Cosmos-stored instructions to a temp directory.
+        The SDK expects directory paths for skill_directories — the Copilot CLI
+        looks for SKILL.md files inside each directory.  We write to ./skills/
+        (the app's working directory) so the CLI's filesystem tools can find them.
+        Also updates skills.yaml so the agent's skill index stays in sync.
         """
         dirs: list[str] = []
+        yaml_entries: list[dict] = []
         for skill in self.get_enabled_skills():
             if not skill.instructions:
                 continue
-            # Write to a temp file the SDK can read
-            tmp_dir = Path(tempfile.gettempdir()) / "kratos-skills" / skill.name
-            tmp_dir.mkdir(parents=True, exist_ok=True)
-            skill_md_path = tmp_dir / "SKILL.md"
+            # Write alongside baked-in skills so the CLI discovers them
+            skill_dir = Path("skills") / skill.name
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            skill_md_path = skill_dir / "SKILL.md"
             skill_md_path.write_text(skill.instructions)
-            dirs.append(str(skill_md_path))
+            dirs.append(str(skill_dir))
+            yaml_entries.append({
+                "name": skill.name,
+                "description": skill.description,
+                "path": str(skill_dir),
+                "enabled": True,
+            })
+        # Keep skills.yaml in sync so the agent's glob+view discovery matches
+        if yaml_entries:
+            Path("skills.yaml").write_text(
+                yaml.dump({"skills": yaml_entries}, default_flow_style=False, sort_keys=False)
+            )
         return dirs
 
     def get_enabled_tool_names(self) -> set[str]:

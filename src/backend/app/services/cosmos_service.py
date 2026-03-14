@@ -25,6 +25,7 @@ class CosmosService:
         self._conversations_container: Any = None
         self._messages_container: Any = None
         self._skills_container: Any = None
+        self._settings_container: Any = None
 
     async def initialize(self) -> None:
         """Initialize Cosmos DB client and containers."""
@@ -47,6 +48,14 @@ class CosmosService:
         except Exception:
             logger.warning("Skills container not found in Cosmos — admin features disabled until provisioned")
             self._skills_container = None
+
+        # Settings container — stores system prompt and other config
+        try:
+            self._settings_container = database.get_container_client("settings")
+            await self._settings_container.read()
+        except Exception:
+            logger.warning("Settings container not found in Cosmos — using defaults")
+            self._settings_container = None
 
         logger.info("Cosmos DB initialized -- database=%s", self.settings.cosmos_db_database)
 
@@ -135,3 +144,34 @@ class CosmosService:
         await self._skills_container.delete_item(
             item=skill_name, partition_key=skill_name
         )
+
+    # ─── Settings ─────────────────────────────────────────────────────────────
+
+    async def get_setting(self, setting_id: str) -> dict | None:
+        """Read a setting by id. Partition key is /category."""
+        if not self._settings_container:
+            return None
+        try:
+            return await self._settings_container.read_item(
+                item=setting_id, partition_key="system"
+            )
+        except Exception:
+            return None
+
+    async def upsert_setting(self, setting: dict) -> dict:
+        """Create or update a setting document."""
+        if not self._settings_container:
+            return setting
+        await self._settings_container.upsert_item(setting)
+        return setting
+
+    async def delete_setting(self, setting_id: str) -> None:
+        """Delete a setting document by id."""
+        if not self._settings_container:
+            return
+        try:
+            await self._settings_container.delete_item(
+                item=setting_id, partition_key="system"
+            )
+        except Exception:
+            pass

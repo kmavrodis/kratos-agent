@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import setup_telemetry
-from app.routers import admin_skills, agent, conversations, health, settings
+from app.routers import admin_prompt, admin_skills, agent, conversations, health, settings
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
 from app.services.skill_registry import SkillRegistry
@@ -47,6 +47,13 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize Copilot SDK agent (uses DefaultAzureCredential for Azure OpenAI)
     copilot_agent = CopilotAgent(settings)
     copilot_agent.set_skill_registry(skill_registry)
+
+    # Load system prompt from Cosmos (falls back to default if not set)
+    prompt_doc = await cosmos_service.get_setting("system-prompt")
+    if prompt_doc:
+        copilot_agent.system_prompt = prompt_doc["content"]
+        logger.info("Loaded custom system prompt from Cosmos (%d chars)", len(prompt_doc["content"]))
+
     await copilot_agent.start()
     application.state.copilot_agent = copilot_agent
 
@@ -80,3 +87,4 @@ app.include_router(conversations.router, prefix="/api/conversations", tags=["con
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
+app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])

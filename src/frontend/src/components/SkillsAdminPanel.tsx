@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { listSkills, createSkill, updateSkill, deleteSkill } from "@/lib/api";
+import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt } from "@/lib/api";
 import type { Skill } from "@/types";
+
+type Tab = "skills" | "prompt";
 
 interface Props {
   open: boolean;
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function SkillsAdminPanel({ open, onClose }: Props) {
+  const [tab, setTab] = useState<Tab>("skills");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -20,6 +23,13 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newInstructions, setNewInstructions] = useState("");
+
+  // System prompt state
+  const [promptContent, setPromptContent] = useState("");
+  const [promptDraft, setPromptDraft] = useState("");
+  const [promptIsDefault, setPromptIsDefault] = useState(true);
+  const [promptDirty, setPromptDirty] = useState(false);
+  const [promptLoading, setPromptLoading] = useState(false);
 
   const loadSkills = async () => {
     setLoading(true);
@@ -34,8 +44,27 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
     }
   };
 
+  const loadPrompt = async () => {
+    setPromptLoading(true);
+    setError("");
+    try {
+      const data = await getSystemPrompt();
+      setPromptContent(data.content);
+      setPromptDraft(data.content);
+      setPromptIsDefault(data.isDefault);
+      setPromptDirty(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load system prompt");
+    } finally {
+      setPromptLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (open) loadSkills();
+    if (open) {
+      loadSkills();
+      loadPrompt();
+    }
   }, [open]);
 
   const handleToggle = async (skill: Skill) => {
@@ -93,27 +122,74 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
     }
   };
 
+  const handleSavePrompt = async () => {
+    setError("");
+    try {
+      const data = await updateSystemPrompt(promptDraft);
+      setPromptContent(data.content);
+      setPromptIsDefault(data.isDefault);
+      setPromptDirty(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save system prompt");
+    }
+  };
+
+  const handleResetPrompt = async () => {
+    if (!confirm("Reset to the default system prompt? Your custom prompt will be deleted.")) return;
+    setError("");
+    try {
+      await resetSystemPrompt();
+      await loadPrompt();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset system prompt");
+    }
+  };
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Skills Manager</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Enable, disable, edit, or add new skill definitions
-            </p>
+        <div className="px-6 pt-4 pb-0 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Admin Panel</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Manage skills and system prompt
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setTab("skills")}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                tab === "skills"
+                  ? "border-primary-600 text-primary-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Skills
+            </button>
+            <button
+              onClick={() => setTab("prompt")}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                tab === "prompt"
+                  ? "border-primary-600 text-primary-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              System Prompt
+            </button>
+          </div>
         </div>
 
         {/* Error */}
@@ -125,7 +201,67 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {loading ? (
+          {tab === "prompt" ? (
+            /* ── System Prompt tab ── */
+            promptLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-medium text-gray-700">
+                    System prompt sent to the LLM at the start of every conversation
+                  </label>
+                  {promptIsDefault ? (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Default</span>
+                  ) : (
+                    <span className="text-xs bg-primary-50 text-primary-600 px-2 py-0.5 rounded-full">Custom</span>
+                  )}
+                </div>
+                <textarea
+                  value={promptDraft}
+                  onChange={(e) => {
+                    setPromptDraft(e.target.value);
+                    setPromptDirty(e.target.value !== promptContent);
+                  }}
+                  rows={16}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+                <div className="flex justify-between">
+                  <button
+                    onClick={handleResetPrompt}
+                    disabled={promptIsDefault}
+                    className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Reset to Default
+                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setPromptDraft(promptContent);
+                        setPromptDirty(false);
+                      }}
+                      disabled={!promptDirty}
+                      className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      onClick={handleSavePrompt}
+                      disabled={!promptDirty || !promptDraft.trim()}
+                      className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Save Prompt
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Changes take effect on the next new conversation. Existing sessions are not affected.
+                </p>
+              </div>
+            )
+          ) : loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
             </div>
@@ -325,8 +461,8 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
           )}
         </div>
 
-        {/* Footer — only show when on list view */}
-        {!editingSkill && !showCreate && (
+        {/* Footer — only show when on skills list view */}
+        {tab === "skills" && !editingSkill && !showCreate && (
           <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
             <button
               onClick={() => setShowCreate(true)}

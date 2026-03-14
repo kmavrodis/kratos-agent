@@ -110,3 +110,10 @@ export interface SkillUpdate {
   enabled?: boolean;
   instructions?: string;
 }
+
+// ─── System Prompt Admin ───
+
+export interface SystemPrompt {
+  content: string;
+  isDefault: boolean;
+}

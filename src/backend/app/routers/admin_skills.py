@@ -12,6 +12,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _reset_sessions(request: Request) -> None:
+    """Clear all SDK sessions so new conversations pick up skill changes."""
+    copilot_agent = getattr(request.app.state, "copilot_agent", None)
+    if copilot_agent is not None:
+        copilot_agent._sessions.clear()
+        logger.info("Cleared SDK sessions after skill change")
+
+
 def _to_response(skill: SkillMetadata) -> SkillResponse:
     return SkillResponse(
         name=skill.name,
@@ -56,6 +64,7 @@ async def create_skill(body: SkillCreate, request: Request) -> SkillResponse:
         tool_name=body.name.replace("-", "_"),
     )
     await registry.add_skill(skill)
+    _reset_sessions(request)
     logger.info("Admin created skill: %s", body.name)
     return _to_response(skill)
 
@@ -73,6 +82,7 @@ async def update_skill(skill_name: str, body: SkillUpdate, request: Request) -> 
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
+    _reset_sessions(request)
     logger.info("Admin updated skill: %s fields=%s", skill_name, list(updates.keys()))
     return _to_response(skill)
 
@@ -86,4 +96,5 @@ async def delete_skill(skill_name: str, request: Request) -> None:
     if not removed:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
 
+    _reset_sessions(request)
     logger.info("Admin deleted skill: %s", skill_name)
