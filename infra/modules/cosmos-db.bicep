@@ -108,6 +108,33 @@ resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
   }
 }
 
+// Skills container — stores skill definitions managed by the admin panel
+resource skillsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'skills'
+  properties: {
+    resource: {
+      id: 'skills'
+      partitionKey: {
+        paths: ['/name']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          { path: '/*' }
+        ]
+        excludedPaths: [
+          { path: '/"_etag"/?' }
+        ]
+      }
+      defaultTtl: -1
+    }
+  }
+}
+
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = {
   name: '${name}-pe'
   location: location

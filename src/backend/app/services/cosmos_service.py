@@ -1,7 +1,7 @@
-"""Cosmos DB service for conversation and message persistence.
+"""Cosmos DB service for conversation, message, and skill persistence.
 
 Uses Azure Managed Identity for passwordless authentication.
-Partition keys: conversations -> /userId, messages -> /conversationId
+Partition keys: conversations -> /userId, messages -> /conversationId, skills -> /name
 """
 
 import logging
@@ -17,13 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 class CosmosService:
-    """Manages conversation and message persistence in Azure Cosmos DB."""
+    """Manages conversation, message, and skill persistence in Azure Cosmos DB."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._client: CosmosClient | None = None
         self._conversations_container: Any = None
         self._messages_container: Any = None
+        self._skills_container: Any = None
 
     async def initialize(self) -> None:
         """Initialize Cosmos DB client and containers."""
@@ -37,6 +38,7 @@ class CosmosService:
         database = self._client.get_database_client(self.settings.cosmos_db_database)
         self._conversations_container = database.get_container_client("conversations")
         self._messages_container = database.get_container_client("messages")
+        self._skills_container = database.get_container_client("skills")
         logger.info("Cosmos DB initialized -- database=%s", self.settings.cosmos_db_database)
 
     async def upsert_conversation(self, conversation: Conversation) -> None:
@@ -86,3 +88,41 @@ class CosmosService:
             query=query, parameters=params, partition_key=conversation_id
         )
         return [Message(**item) async for item in items]
+
+    # ─── Skills ───────────────────────────────────────────────────────────────
+
+    async def upsert_skill(self, skill: dict) -> dict:
+        """Create or update a skill document. Partition key is /name."""
+        if not self._skills_container:
+            return skill
+        await self._skills_container.upsert_item(skill)
+        return skill
+
+    async def get_skill(self, skill_name: str) -> dict | None:
+        """Read a skill by name (which is also the id and partition key)."""
+        if not self._skills_container:
+            return None
+        try:
+            return await self._skills_container.read_item(
+                item=skill_name, partition_key=skill_name
+            )
+        except Exception:
+            return None
+
+    async def list_skills(self) -> list[dict]:
+        """List all skills."""
+        if not self._skills_container:
+            return []
+        query = "SELECT * FROM c ORDER BY c.name ASC"
+        items = self._skills_container.query_items(
+            query=query, enable_cross_partition_query=True
+        )
+        return [item async for item in items]
+
+    async def delete_skill(self, skill_name: str) -> None:
+        """Delete a skill document by name."""
+        if not self._skills_container:
+            return
+        await self._skills_container.delete_item(
+            item=skill_name, partition_key=skill_name
+        )

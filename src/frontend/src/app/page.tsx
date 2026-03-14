@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChatWindow } from "@/components/ChatWindow";
 import { Sidebar } from "@/components/Sidebar";
 import { SettingsModal } from "@/components/SettingsModal";
+import { SkillsAdminPanel } from "@/components/SkillsAdminPanel";
 import { Conversation } from "@/types";
 
 export default function Home() {
@@ -11,6 +12,7 @@ export default function Home() {
   const [activeConversation, setActiveConversation] =
     useState<Conversation | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
 
   const handleNewConversation = () => {
     const newConv: Conversation = {
@@ -37,10 +39,14 @@ export default function Home() {
         onNew={handleNewConversation}
         onSelect={handleSelectConversation}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSkills={() => setSkillsOpen(true)}
       />
 
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Skills admin panel */}
+      <SkillsAdminPanel open={skillsOpen} onClose={() => setSkillsOpen(false)} />
 
       {/* Main chat area */}
       <main className="flex-1 flex flex-col">

@@ -94,3 +94,56 @@ export async function listConversations(): Promise<{ conversations: unknown[] }>
   }
   return response.json();
 }
+
+// ─── Skills Admin API ───
+
+import type { Skill, SkillCreate, SkillUpdate } from "@/types";
+
+export async function listSkills(): Promise<Skill[]> {
+  const response = await fetch(`${API_URL}/api/admin/skills`);
+  if (!response.ok) throw new Error(`Failed to list skills: ${response.status}`);
+  const data = await response.json();
+  return data.skills;
+}
+
+export async function getSkill(name: string): Promise<Skill> {
+  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}`);
+  if (!response.ok) throw new Error(`Failed to get skill: ${response.status}`);
+  return response.json();
+}
+
+export async function createSkill(skill: SkillCreate): Promise<Skill> {
+  const response = await fetch(`${API_URL}/api/admin/skills`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(skill),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to create skill: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function updateSkill(name: string, updates: SkillUpdate): Promise<Skill> {
+  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to update skill: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function deleteSkill(name: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to delete skill: ${response.status}`);
+  }
+}

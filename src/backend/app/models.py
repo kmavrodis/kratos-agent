@@ -128,3 +128,34 @@ class AIServiceStatus(BaseModel):
     aiServicesEndpoint: str = ""
     aiServicesModelDeployment: str = ""
     code: str = "INTERNAL_ERROR"
+
+
+# ─── Skills Admin ───
+
+class SkillResponse(BaseModel):
+    """Skill as returned by the admin API."""
+    name: str
+    description: str
+    enabled: bool = True
+    instructions: str = ""
+    toolName: str = ""
+
+
+class SkillCreate(BaseModel):
+    """Payload for creating a new skill."""
+    name: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9][a-z0-9\-]*$")
+    description: str = Field(default="", max_length=500)
+    enabled: bool = True
+    instructions: str = Field(default="", max_length=10000)
+
+
+class SkillUpdate(BaseModel):
+    """Payload for updating a skill. All fields optional."""
+    description: str | None = Field(default=None, max_length=500)
+    enabled: bool | None = None
+    instructions: str | None = Field(default=None, max_length=10000)
+
+
+class SkillList(BaseModel):
+    """List of skills."""
+    skills: list[SkillResponse]

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import setup_telemetry
-from app.routers import agent, conversations, health, settings
+from app.routers import admin_skills, agent, conversations, health, settings
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
 from app.services.skill_registry import SkillRegistry
@@ -39,13 +39,14 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await cosmos_service.initialize()
     application.state.cosmos_service = cosmos_service
 
-    # Load skill registry
+    # Load skill registry from Cosmos DB (seeds from YAML on first run)
     skill_registry = SkillRegistry(settings.skills_config_path)
-    await skill_registry.load()
+    await skill_registry.load(cosmos_service)
     application.state.skill_registry = skill_registry
 
     # Initialize Copilot SDK agent (uses DefaultAzureCredential for Azure OpenAI)
     copilot_agent = CopilotAgent(settings)
+    copilot_agent.set_skill_registry(skill_registry)
     await copilot_agent.start()
     application.state.copilot_agent = copilot_agent
 
@@ -78,3 +79,4 @@ app.include_router(health.router, tags=["health"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
+app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])

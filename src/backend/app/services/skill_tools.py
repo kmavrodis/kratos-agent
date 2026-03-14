@@ -217,3 +217,6 @@ async def foundry_agent(params: FoundryAgentParams) -> dict:
 
 # All tools to register with every SDK session
 ALL_TOOLS = [web_search, rag_search, code_interpreter, foundry_agent]
+
+# Map from tool function name → tool object (used by CopilotAgent to filter by enabled skills)
+TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}

@@ -87,3 +87,26 @@ export type AgentEvent =
   | UsageEvent
   | DoneEvent
   | ErrorEvent;
+
+// ─── Skills Admin ───
+
+export interface Skill {
+  name: string;
+  description: string;
+  enabled: boolean;
+  instructions: string;
+  toolName: string;
+}
+
+export interface SkillCreate {
+  name: string;
+  description: string;
+  enabled: boolean;
+  instructions: string;
+}
+
+export interface SkillUpdate {
+  description?: string;
+  enabled?: boolean;
+  instructions?: string;
+}

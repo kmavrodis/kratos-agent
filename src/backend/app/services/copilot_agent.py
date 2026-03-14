@@ -53,7 +53,12 @@ class CopilotAgent:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._client: CopilotClient | None = None
+        self._skill_registry: object | None = None
         self._sessions: dict[str, object] = {}
+
+    def set_skill_registry(self, registry: object) -> None:
+        """Inject the skill registry for dynamic tool/skill resolution."""
+        self._skill_registry = registry
         self._queues: dict[str, asyncio.Queue] = {}
         self._tool_counters: dict[str, int] = {}
         self._registered_handlers: set[str] = set()
@@ -142,17 +147,25 @@ class CopilotAgent:
             logger.info("Reusing SDK session for conversation=%s", conversation_id)
             return self._sessions[conversation_id]
 
+        # Resolve enabled tools and skill directories from the registry
+        enabled_tools = ALL_TOOLS
+        skill_dirs = [
+            "./skills/web-search/SKILL.md",
+            "./skills/rag-search/SKILL.md",
+            "./skills/code-interpreter/SKILL.md",
+            "./skills/foundry-agent/SKILL.md",
+        ]
+        if self._skill_registry is not None:
+            enabled_names = self._skill_registry.get_enabled_tool_names()
+            enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
+            skill_dirs = self._skill_registry.get_skill_directories()
+
         t0 = time.monotonic()
         session = await self._client.create_session({
             "model": self.settings.ai_services_model_deployment,
             "streaming": True,
-            "tools": ALL_TOOLS,
-            "skill_directories": [
-                "./skills/web-search/SKILL.md",
-                "./skills/rag-search/SKILL.md",
-                "./skills/code-interpreter/SKILL.md",
-                "./skills/foundry-agent/SKILL.md",
-            ],
+            "tools": enabled_tools,
+            "skill_directories": skill_dirs,
             "system_message": {
                 "mode": "append",
                 "content": SYSTEM_PROMPT,
@@ -175,7 +188,7 @@ class CopilotAgent:
             "Created SDK session for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
             conversation_id,
             self.settings.ai_services_model_deployment,
-            ",".join(tool.name for tool in ALL_TOOLS),
+            ",".join(tool.name for tool in enabled_tools),
             elapsed_ms,
         )
         return session
