@@ -6,6 +6,7 @@ The SDK reads SKILL.md content from the instructions field stored in Cosmos.
 """
 
 import logging
+import re
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,39 @@ logger = logging.getLogger(__name__)
 
 # File path for YAML seed data
 _DEFAULT_SKILLS_YAML = "skills.yaml"
+
+# Regex matching YAML frontmatter block: ---\n...\n---
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
+
+
+def _parse_frontmatter(text: str) -> tuple[dict, str]:
+    """Parse YAML frontmatter from SKILL.md content.
+
+    Returns (frontmatter_dict, body_without_frontmatter).
+    If no frontmatter is found, returns ({}, original_text).
+    """
+    match = _FRONTMATTER_RE.match(text)
+    if not match:
+        return {}, text
+    try:
+        fm = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError:
+        return {}, text
+    body = text[match.end():]
+    return fm, body
+
+
+def _update_frontmatter(text: str, name: str, description: str) -> str:
+    """Update or insert YAML frontmatter with the given name and description.
+
+    Preserves the body content and any extra frontmatter fields.
+    """
+    fm, body = _parse_frontmatter(text)
+    fm["name"] = name
+    fm["description"] = description
+    # Dump frontmatter in a stable key order
+    fm_str = yaml.dump(fm, default_flow_style=False, sort_keys=False).strip()
+    return f"---\n{fm_str}\n---\n\n{body.lstrip()}"
 
 
 @dataclass
@@ -111,9 +145,19 @@ class SkillRegistry:
                 if skill_md.exists():
                     instructions = skill_md.read_text()
 
+            # Use description from skills.yaml; ensure frontmatter stays in sync
+            description = skill_cfg.get("description", "")
+            if instructions:
+                fm, _ = _parse_frontmatter(instructions)
+                # If SKILL.md frontmatter has a richer description, prefer it
+                if fm.get("description"):
+                    description = fm["description"]
+                # Re-write frontmatter so it matches the canonical description
+                instructions = _update_frontmatter(instructions, name, description)
+
             skill = SkillMetadata(
                 name=name,
-                description=skill_cfg.get("description", ""),
+                description=description,
                 enabled=skill_cfg.get("enabled", True),
                 instructions=instructions,
                 tool_name=name.replace("-", "_"),
@@ -156,17 +200,33 @@ class SkillRegistry:
     # ─── Admin operations ─────────────────────────────────────────────────
 
     async def update_skill(self, name: str, updates: dict) -> SkillMetadata | None:
-        """Update a skill in the registry and Cosmos DB."""
+        """Update a skill in the registry and Cosmos DB.
+
+        Keeps SKILL.md frontmatter and Cosmos fields in sync:
+        - If description changes, update frontmatter inside instructions.
+        - If instructions change, extract name/description from frontmatter.
+        """
         skill = self.skills.get(name)
         if not skill:
             return None
 
-        if "description" in updates:
-            skill.description = updates["description"]
         if "enabled" in updates:
             skill.enabled = updates["enabled"]
+
+        # If instructions changed, extract frontmatter into Cosmos fields
         if "instructions" in updates:
             skill.instructions = updates["instructions"]
+            fm, _ = _parse_frontmatter(skill.instructions)
+            if fm.get("description"):
+                skill.description = fm["description"]
+
+        # If description changed explicitly, update both field and frontmatter
+        if "description" in updates:
+            skill.description = updates["description"]
+            if skill.instructions:
+                skill.instructions = _update_frontmatter(
+                    skill.instructions, skill.name, skill.description
+                )
 
         self.skills[name] = skill
 
@@ -176,7 +236,21 @@ class SkillRegistry:
         return skill
 
     async def add_skill(self, skill: SkillMetadata) -> SkillMetadata:
-        """Add a new skill to the registry and Cosmos DB."""
+        """Add a new skill to the registry and Cosmos DB.
+
+        If instructions contain frontmatter, extract description from it.
+        If instructions lack frontmatter, inject it from the Cosmos fields.
+        """
+        if skill.instructions:
+            fm, _ = _parse_frontmatter(skill.instructions)
+            if fm.get("description"):
+                # Frontmatter has description — use it as the canonical value
+                skill.description = fm["description"]
+            # Ensure frontmatter is present and in sync
+            skill.instructions = _update_frontmatter(
+                skill.instructions, skill.name, skill.description
+            )
+
         self.skills[skill.name] = skill
 
         if self._cosmos_service:
