@@ -23,7 +23,7 @@ except ImportError:
 from opentelemetry import trace
 
 from app.config import Settings
-from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent
+from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent
 from app.services.skill_tools import ALL_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,9 @@ class CopilotAgent:
         self._registered_handlers: set[str] = set()
         self._credential: ManagedIdentityCredential | None = None
         self._token_provider = None
+        self._usage: dict[str, dict] = {}
+        self._first_token_time: dict[str, float] = {}
+        self._model_response_start: dict[str, float] = {}
 
     async def start(self) -> None:
         """Initialize the Copilot CLI client. Called once on app startup.
@@ -188,6 +191,9 @@ class CopilotAgent:
             queue: asyncio.Queue = asyncio.Queue()
             self._queues[conversation_id] = queue
             self._tool_counters[conversation_id] = 0
+            self._usage[conversation_id] = {"prompt": 0, "completion": 0, "total": 0}
+            self._first_token_time.pop(conversation_id, None)
+            self._model_response_start.pop(conversation_id, None)
 
             try:
                 session = await self._get_or_create_session(conversation_id)
@@ -198,6 +204,8 @@ class CopilotAgent:
                 # The handler routes events to whatever queue is active for that conversation.
                 if conversation_id not in self._registered_handlers:
                     cid = conversation_id  # capture for closure
+
+                    _pending_tools: list[str] = []  # track started tools in order for matching
 
                     def on_event(event) -> None:
                         """Translate SDK events into our SSE event types."""
@@ -213,12 +221,42 @@ class CopilotAgent:
                                 logger.info("Event received type=%s ttfe=%.0fms conversation=%s", etype, ttfe, cid)
 
                             if etype == "assistant.message_delta":
+                                # Track time-to-first-token
+                                if cid not in self._first_token_time and hasattr(self, "_send_time"):
+                                    self._first_token_time[cid] = (time.monotonic() - self._send_time) * 1000
                                 q.put_nowait(ContentEvent(content=event.data.delta_content or ""))
 
+                            elif etype == "assistant.turn_start":
+                                # Model started processing — mark for latency calc
+                                self._model_response_start[cid] = time.monotonic()
+
+                            elif etype in ("assistant.usage", "session.usage_info"):
+                                # Capture token usage from the model
+                                data = event.data
+                                prompt_t = int(getattr(data, "prompt_tokens", 0) or getattr(data, "input_tokens", 0) or 0)
+                                completion_t = int(getattr(data, "completion_tokens", 0) or getattr(data, "output_tokens", 0) or 0)
+                                total_t = int(getattr(data, "total_tokens", 0) or 0) or (prompt_t + completion_t)
+                                usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "total": 0})
+                                usage["prompt"] += prompt_t
+                                usage["completion"] += completion_t
+                                usage["total"] += total_t
+                                self._usage[cid] = usage
+                                logger.info(
+                                    "Usage conversation=%s prompt_tokens=%d completion_tokens=%d total=%d",
+                                    cid, prompt_t, completion_t, total_t,
+                                )
+                                if total_t > 0:
+                                    q.put_nowait(UsageEvent(
+                                        promptTokens=usage["prompt"],
+                                        completionTokens=usage["completion"],
+                                        totalTokens=usage["total"],
+                                    ))
+
                             elif etype == "tool.execution_start":
-                                tool_name = getattr(event.data, "tool_name", None) or "unknown"
+                                tool_name = getattr(event.data, "tool_name", None) or getattr(event.data, "name", None) or "unknown"
                                 self._tool_counters[cid] = self._tool_counters.get(cid, 0) + 1
-                                logger.info("Tool start conversation=%s tool=%s", cid, tool_name)
+                                _pending_tools.append(tool_name)
+                                logger.info("Tool start conversation=%s tool=%s pending=%s", cid, tool_name, _pending_tools)
                                 q.put_nowait(ThoughtEvent(
                                     content=f"Calling tool: {tool_name}",
                                     iteration=0,
@@ -230,8 +268,19 @@ class CopilotAgent:
                                 ))
 
                             elif etype == "tool.execution_complete":
-                                tool_name = getattr(event.data, "tool_name", None) or "unknown"
-                                duration_ms = int(getattr(event.data, "duration_ms", 0))
+                                # SDK often doesn't include tool_name on complete events,
+                                # so match back to the oldest pending started tool.
+                                raw_name = getattr(event.data, "tool_name", None) or getattr(event.data, "name", None)
+                                if raw_name:
+                                    tool_name = raw_name
+                                    # Remove from pending if present
+                                    if tool_name in _pending_tools:
+                                        _pending_tools.remove(tool_name)
+                                elif _pending_tools:
+                                    tool_name = _pending_tools.pop(0)
+                                else:
+                                    tool_name = "unknown"
+                                duration_ms = int(getattr(event.data, "duration_ms", 0) or getattr(event.data, "duration", 0) or 0)
                                 success = getattr(event.data, "success", None)
                                 error = getattr(event.data, "error", None)
                                 logger.info(
@@ -240,14 +289,21 @@ class CopilotAgent:
                                 )
                                 q.put_nowait(ToolCallEvent(
                                     skillName=tool_name,
-                                    status="completed",
-                                    output=str(getattr(event.data, "output", ""))[:500],
+                                    status="completed" if success is not False else "failed",
+                                    output=str(getattr(event.data, "output", "") or getattr(event.data, "result", ""))[:500],
                                     durationMs=duration_ms,
                                 ))
 
                             elif etype == "session.idle":
                                 tc = self._tool_counters.get(cid, 0)
-                                logger.info("Session idle conversation=%s tool_events=%s", cid, tc)
+                                usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "total": 0})
+                                ttft = int(self._first_token_time.get(cid, 0))
+                                model_start = self._model_response_start.get(cid)
+                                model_latency = int((time.monotonic() - model_start) * 1000) if model_start else 0
+                                logger.info(
+                                    "Session idle conversation=%s tool_events=%s tokens=%s ttft=%dms model_latency=%dms",
+                                    cid, tc, usage, ttft, model_latency,
+                                )
                                 q.put_nowait(None)  # sentinel — stream is done
 
                             elif etype == "session.error":
@@ -295,3 +351,17 @@ class CopilotAgent:
                 self._registered_handlers.discard(conversation_id)
             finally:
                 self._queues.pop(conversation_id, None)
+
+    def get_run_stats(self, conversation_id: str) -> dict:
+        """Return accumulated stats for the last run of a conversation."""
+        usage = self._usage.get(conversation_id, {"prompt": 0, "completion": 0, "total": 0})
+        ttft = int(self._first_token_time.get(conversation_id, 0))
+        model_start = self._model_response_start.get(conversation_id)
+        model_latency = int((time.monotonic() - model_start) * 1000) if model_start else 0
+        return {
+            "prompt_tokens": usage["prompt"],
+            "completion_tokens": usage["completion"],
+            "total_tokens": usage["total"],
+            "time_to_first_token_ms": ttft,
+            "model_latency_ms": model_latency,
+        }

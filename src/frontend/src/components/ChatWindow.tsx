@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Conversation, ChatMessage, ToolCallInfo } from "@/types";
+import { Conversation, ChatMessage, ToolCallInfo, RunStats } from "@/types";
 import { streamAgentChat } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
 import { ThoughtChain } from "./ThoughtChain";
@@ -16,12 +16,17 @@ export function ChatWindow({ conversation }: Props) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [thoughts, setThoughts] = useState<string[]>([]);
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallInfo[]>([]);
+  const [runStats, setRunStats] = useState<RunStats | null>(null);
+  const [messageStats, setMessageStats] = useState<Record<string, { thoughts: string[]; toolCalls: ToolCallInfo[]; runStats: RunStats }>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const thoughtsRef = useRef<string[]>([]);
+  const toolCallsRef = useRef<ToolCallInfo[]>([]);
+  const runStatsRef = useRef<RunStats | null>(null);
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, thoughts, activeToolCalls]);
+  }, [messages, thoughts, activeToolCalls, runStats]);
 
   const handleSend = async () => {
     const trimmed = input.trim();
@@ -40,6 +45,10 @@ export function ChatWindow({ conversation }: Props) {
     setIsStreaming(true);
     setThoughts([]);
     setActiveToolCalls([]);
+    setRunStats(null);
+    thoughtsRef.current = [];
+    toolCallsRef.current = [];
+    runStatsRef.current = null;
 
     let assistantContent = "";
 
@@ -54,14 +63,15 @@ export function ChatWindow({ conversation }: Props) {
 
         switch (event.type) {
           case "thought":
-            setThoughts((prev) => [...prev, data.content as string]);
+            setThoughts((prev) => {
+              const next = [...prev, data.content as string];
+              thoughtsRef.current = next;
+              return next;
+            });
             break;
 
           case "tool_call":
             setActiveToolCalls((prev) => {
-              const existing = prev.findIndex(
-                (tc) => tc.skillName === data.skillName
-              );
               const toolCall: ToolCallInfo = {
                 skillName: data.skillName as string,
                 status: data.status as "started" | "completed" | "failed",
@@ -69,12 +79,34 @@ export function ChatWindow({ conversation }: Props) {
                 output: data.output as string,
                 durationMs: data.durationMs as number,
               };
-              if (existing >= 0) {
-                const updated = [...prev];
-                updated[existing] = toolCall;
-                return updated;
+              let next: ToolCallInfo[];
+              if (toolCall.status !== "started") {
+                // Find the first "started" entry with the same name and update it
+                const existing = prev.findIndex(
+                  (tc) =>
+                    tc.skillName === toolCall.skillName &&
+                    tc.status === "started"
+                );
+                if (existing >= 0) {
+                  next = [...prev];
+                  next[existing] = { ...next[existing], ...toolCall };
+                } else {
+                  // Fallback: find any entry with the same name
+                  const fallback = prev.findIndex(
+                    (tc) => tc.skillName === toolCall.skillName
+                  );
+                  if (fallback >= 0) {
+                    next = [...prev];
+                    next[fallback] = { ...next[fallback], ...toolCall };
+                  } else {
+                    next = [...prev, toolCall];
+                  }
+                }
+              } else {
+                next = [...prev, toolCall];
               }
-              return [...prev, toolCall];
+              toolCallsRef.current = next;
+              return next;
             });
             break;
 
@@ -114,6 +146,21 @@ export function ChatWindow({ conversation }: Props) {
               },
             ]);
             break;
+
+          case "done": {
+            const stats: RunStats = {
+              totalDurationMs: (data.totalDurationMs as number) || 0,
+              totalToolCalls: (data.totalToolCalls as number) || 0,
+              promptTokens: (data.promptTokens as number) || 0,
+              completionTokens: (data.completionTokens as number) || 0,
+              totalTokens: (data.totalTokens as number) || 0,
+              timeToFirstTokenMs: (data.timeToFirstTokenMs as number) || 0,
+              modelLatencyMs: (data.modelLatencyMs as number) || 0,
+            };
+            setRunStats(stats);
+            runStatsRef.current = stats;
+            break;
+          }
         }
       },
       (error) => {
@@ -130,6 +177,17 @@ export function ChatWindow({ conversation }: Props) {
         setIsStreaming(false);
       },
       () => {
+        // Persist execution details for this assistant message
+        if (runStatsRef.current) {
+          setMessageStats((prev) => ({
+            ...prev,
+            [assistantId]: {
+              thoughts: thoughtsRef.current,
+              toolCalls: toolCallsRef.current,
+              runStats: runStatsRef.current!,
+            },
+          }));
+        }
         setIsStreaming(false);
       }
     );
@@ -157,12 +215,30 @@ export function ChatWindow({ conversation }: Props) {
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <div key={msg.id}>
+            <MessageBubble message={msg} />
+            {/* Show persisted execution details below each assistant message */}
+            {msg.role === "assistant" && messageStats[msg.id] && (
+              <div className="mt-2">
+                <ThoughtChain
+                  thoughts={messageStats[msg.id].thoughts}
+                  toolCalls={messageStats[msg.id].toolCalls}
+                  isStreaming={false}
+                  runStats={messageStats[msg.id].runStats}
+                />
+              </div>
+            )}
+          </div>
         ))}
 
-        {/* Thought chain (visible during streaming) */}
+        {/* Live thought chain (visible during streaming) */}
         {isStreaming && (thoughts.length > 0 || activeToolCalls.length > 0) && (
-          <ThoughtChain thoughts={thoughts} toolCalls={activeToolCalls} />
+          <ThoughtChain
+            thoughts={thoughts}
+            toolCalls={activeToolCalls}
+            isStreaming={true}
+            runStats={runStats}
+          />
         )}
 
         <div ref={messagesEndRef} />

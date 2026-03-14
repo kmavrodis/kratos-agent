@@ -18,6 +18,7 @@ from app.models import (
     MessageRole,
     ThoughtEvent,
     ToolCallEvent,
+    UsageEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                     if event.status == "completed":
                         total_tool_calls += 1
                     yield {"event": "tool_call", "data": json.dumps(event.model_dump())}
+                elif isinstance(event, UsageEvent):
+                    yield {"event": "usage", "data": json.dumps(event.model_dump())}
                 elif isinstance(event, ContentEvent):
                     assistant_content_parts.append(event.content)
                     yield {"event": "content", "data": json.dumps(event.model_dump())}
@@ -85,10 +88,16 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
             await cosmos.upsert_message(assistant_message)
 
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
+            stats = copilot_agent.get_run_stats(body.conversationId)
             done = DoneEvent(
                 conversationId=body.conversationId,
                 totalDurationMs=elapsed_ms,
                 totalToolCalls=total_tool_calls,
+                promptTokens=stats["prompt_tokens"],
+                completionTokens=stats["completion_tokens"],
+                totalTokens=stats["total_tokens"],
+                timeToFirstTokenMs=stats["time_to_first_token_ms"],
+                modelLatencyMs=stats["model_latency_ms"],
             )
             yield {"event": "done", "data": json.dumps(done.model_dump())}
 

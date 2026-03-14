@@ -45,11 +45,23 @@ export interface ContentEvent {
   content: string;
 }
 
+export interface UsageEvent {
+  type: "usage";
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface DoneEvent {
   type: "done";
   conversationId: string;
   totalDurationMs: number;
   totalToolCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  timeToFirstTokenMs: number;
+  modelLatencyMs: number;
 }
 
 export interface ErrorEvent {
@@ -58,9 +70,20 @@ export interface ErrorEvent {
   code: string;
 }
 
+export interface RunStats {
+  totalDurationMs: number;
+  totalToolCalls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  timeToFirstTokenMs: number;
+  modelLatencyMs: number;
+}
+
 export type AgentEvent =
   | ThoughtEvent
   | ToolCallEvent
   | ContentEvent
+  | UsageEvent
   | DoneEvent
   | ErrorEvent;
