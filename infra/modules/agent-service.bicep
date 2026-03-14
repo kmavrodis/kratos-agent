@@ -57,7 +57,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'http'
         corsPolicy: {
           allowedOrigins: ['*']
-          allowedMethods: ['GET', 'POST', 'OPTIONS']
+          allowedMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS']
           allowedHeaders: ['*']
           maxAge: 3600
         }
