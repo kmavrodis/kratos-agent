@@ -38,7 +38,16 @@ class CosmosService:
         database = self._client.get_database_client(self.settings.cosmos_db_database)
         self._conversations_container = database.get_container_client("conversations")
         self._messages_container = database.get_container_client("messages")
-        self._skills_container = database.get_container_client("skills")
+
+        # Skills container may not exist yet (requires Bicep provision)
+        try:
+            self._skills_container = database.get_container_client("skills")
+            # Verify it exists with a lightweight metadata read
+            await self._skills_container.read()
+        except Exception:
+            logger.warning("Skills container not found in Cosmos — admin features disabled until provisioned")
+            self._skills_container = None
+
         logger.info("Cosmos DB initialized -- database=%s", self.settings.cosmos_db_database)
 
     async def upsert_conversation(self, conversation: Conversation) -> None:
