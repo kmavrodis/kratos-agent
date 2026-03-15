@@ -132,9 +132,7 @@ class CosmosService:
         if not self._skills_container:
             return []
         query = "SELECT * FROM c ORDER BY c.name ASC"
-        items = self._skills_container.query_items(
-            query=query, enable_cross_partition_query=True
-        )
+        items = self._skills_container.query_items(query=query)
         return [item async for item in items]
 
     async def delete_skill(self, skill_name: str) -> None:
