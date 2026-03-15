@@ -9,7 +9,8 @@ import asyncio
 from importlib.metadata import version
 import logging
 import time
-from typing import AsyncGenerator
+import uuid
+from typing import TYPE_CHECKING, AsyncGenerator
 
 from azure.identity.aio import ManagedIdentityCredential, get_bearer_token_provider
 from copilot import CopilotClient, PermissionRequestResult
@@ -23,8 +24,11 @@ except ImportError:
 from opentelemetry import trace
 
 from app.config import Settings
-from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent
+from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
 from app.services.skill_tools import ALL_TOOLS
+
+if TYPE_CHECKING:
+    from app.services.cosmos_service import CosmosService
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -56,8 +60,11 @@ class CopilotAgent:
         self.settings = settings
         self._client: CopilotClient | None = None
         self._skill_registry: object | None = None
+        self._cosmos_service: "CosmosService | None" = None
         self._sessions: dict[str, object] = {}
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
+        # Futures for resolving user input requests from the SDK
+        self._user_input_futures: dict[str, asyncio.Future] = {}
 
     @property
     def system_prompt(self) -> str:
@@ -81,6 +88,10 @@ class CopilotAgent:
         self._usage: dict[str, dict] = {}
         self._first_token_time: dict[str, float] = {}
         self._model_response_start: dict[str, float] = {}
+
+    def set_cosmos_service(self, cosmos_service: "CosmosService") -> None:
+        """Inject the Cosmos service for session persistence."""
+        self._cosmos_service = cosmos_service
 
     async def start(self) -> None:
         """Initialize the Copilot CLI client. Called once on app startup.
@@ -118,13 +129,14 @@ class CopilotAgent:
         """Shutdown all sessions and the CLI client. Called on app shutdown."""
         for session in self._sessions.values():
             try:
-                await session.destroy()
+                await session.disconnect()
             except Exception:
                 pass
         self._sessions.clear()
         self._registered_handlers.clear()
         self._queues.clear()
         self._tool_counters.clear()
+        self._user_input_futures.clear()
         if self._client:
             await self._client.stop()
         if self._credential:
@@ -146,36 +158,19 @@ class CopilotAgent:
         # Drop all existing sessions so they get recreated with the new config
         for session in self._sessions.values():
             try:
-                await session.destroy()
+                await session.disconnect()
             except Exception:
                 pass
         self._sessions.clear()
         self._registered_handlers.clear()
         self._queues.clear()
         self._tool_counters.clear()
+        self._user_input_futures.clear()
         logger.info("Config updated — all sessions reset")
 
-    async def _get_or_create_session(self, conversation_id: str) -> object:
-        """Return an existing session or create a new one for this conversation."""
-        if conversation_id in self._sessions:
-            logger.info("Reusing SDK session for conversation=%s", conversation_id)
-            return self._sessions[conversation_id]
-
-        # Resolve enabled tools and skill directories from the registry
-        enabled_tools = ALL_TOOLS
-        skill_dirs = [
-            "./skills/web-search",
-            "./skills/rag-search",
-            "./skills/code-interpreter",
-            "./skills/foundry-agent",
-        ]
-        if self._skill_registry is not None:
-            enabled_names = self._skill_registry.get_enabled_tool_names()
-            enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
-            skill_dirs = self._skill_registry.get_skill_directories()
-
-        t0 = time.monotonic()
-        session = await self._client.create_session({
+    def _build_session_config(self, enabled_tools: list, skill_dirs: list) -> dict:
+        """Build the shared session config dict used for both create and resume."""
+        return {
             "model": self.settings.ai_services_model_deployment,
             "streaming": True,
             "tools": enabled_tools,
@@ -194,24 +189,124 @@ class CopilotAgent:
                 },
             },
             "on_permission_request": lambda req, ctx: PermissionRequestResult(kind="approved"),
-        })
+            "on_user_input_request": self._handle_user_input_request,
+        }
 
-        elapsed_ms = (time.monotonic() - t0) * 1000
+    async def _handle_user_input_request(self, request: dict, context: dict) -> dict:
+        """Called by the SDK when the agent uses ask_user. Pushes an event to the SSE
+        queue and awaits the user's response via an asyncio.Future."""
+        conversation_id = context.get("session_id", "")
+        # Find the matching conversation ID from our session map
+        for cid, session in self._sessions.items():
+            if hasattr(session, "session_id") and session.session_id == conversation_id:
+                conversation_id = cid
+                break
+
+        request_id = str(uuid.uuid4())
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        self._user_input_futures[request_id] = future
+
+        # Push the request event to the SSE queue
+        q = self._queues.get(conversation_id)
+        if q:
+            q.put_nowait(UserInputRequestEvent(
+                requestId=request_id,
+                question=request.get("question", ""),
+                choices=request.get("choices", []),
+                allowFreeform=request.get("allowFreeform", True),
+            ))
+
+        # Wait for the user to respond (timeout 5 minutes)
+        try:
+            answer = await asyncio.wait_for(future, timeout=300.0)
+        except asyncio.TimeoutError:
+            self._user_input_futures.pop(request_id, None)
+            return {"answer": "No response provided", "wasFreeform": True}
+        finally:
+            self._user_input_futures.pop(request_id, None)
+
+        return {"answer": answer, "wasFreeform": True}
+
+    def resolve_user_input(self, request_id: str, answer: str) -> bool:
+        """Resolve a pending user input request. Returns True if found."""
+        future = self._user_input_futures.get(request_id)
+        if future and not future.done():
+            future.set_result(answer)
+            return True
+        return False
+
+    async def _get_or_create_session(self, conversation_id: str) -> object:
+        """Return an existing session or create/resume one for this conversation."""
+        if conversation_id in self._sessions:
+            logger.info("Reusing SDK session for conversation=%s", conversation_id)
+            return self._sessions[conversation_id]
+
+        # Resolve enabled tools and skill directories from the registry
+        enabled_tools = ALL_TOOLS
+        skill_dirs = [
+            "./skills/web-search",
+            "./skills/rag-search",
+            "./skills/code-interpreter",
+            "./skills/foundry-agent",
+        ]
+        if self._skill_registry is not None:
+            enabled_names = self._skill_registry.get_enabled_tool_names()
+            enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
+            skill_dirs = self._skill_registry.get_skill_directories()
+
+        config = self._build_session_config(enabled_tools, skill_dirs)
+
+        # Try to resume an existing SDK session from Cosmos DB
+        sdk_session_id = None
+        if self._cosmos_service:
+            sdk_session_id = await self._cosmos_service.get_session_mapping(conversation_id)
+
+        t0 = time.monotonic()
+        session = None
+
+        if sdk_session_id:
+            try:
+                session = await self._client.resume_session(sdk_session_id, config)
+                elapsed_ms = (time.monotonic() - t0) * 1000
+                logger.info(
+                    "Resumed SDK session=%s for conversation=%s elapsed=%.0fms",
+                    sdk_session_id, conversation_id, elapsed_ms,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to resume SDK session=%s for conversation=%s — creating new",
+                    sdk_session_id, conversation_id, exc_info=True,
+                )
+                session = None
+
+        if session is None:
+            t0 = time.monotonic()
+            session = await self._client.create_session(config)
+            elapsed_ms = (time.monotonic() - t0) * 1000
+
+            # Persist the new SDK session ID to Cosmos DB
+            if self._cosmos_service and hasattr(session, "session_id"):
+                await self._cosmos_service.upsert_session_mapping(
+                    conversation_id, session.session_id
+                )
+
+            logger.info(
+                "Created SDK session=%s for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
+                getattr(session, "session_id", "?"),
+                conversation_id,
+                self.settings.ai_services_model_deployment,
+                ",".join(tool.name for tool in enabled_tools),
+                elapsed_ms,
+            )
         self._sessions[conversation_id] = session
-        logger.info(
-            "Created SDK session for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
-            conversation_id,
-            self.settings.ai_services_model_deployment,
-            ",".join(tool.name for tool in enabled_tools),
-            elapsed_ms,
-        )
         return session
 
     async def run(
         self,
         message: str,
         conversation_id: str,
-    ) -> AsyncGenerator[ThoughtEvent | ToolCallEvent | ContentEvent | ErrorEvent, None]:
+        attachments: list[dict] | None = None,
+    ) -> AsyncGenerator[ThoughtEvent | ToolCallEvent | ContentEvent | ErrorEvent | UserInputRequestEvent, None]:
         """Send a message and stream SDK events as typed SSE events."""
 
         with tracer.start_as_current_span("copilot_agent.run", attributes={"conversation_id": conversation_id}):
@@ -350,7 +445,10 @@ class CopilotAgent:
                     session.on(on_event)
                     self._registered_handlers.add(conversation_id)
 
-                await session.send({"prompt": message})
+                send_opts: dict = {"prompt": message}
+                if attachments:
+                    send_opts["attachments"] = attachments
+                await session.send(send_opts)
 
                 # Drain the queue until sentinel
                 while True:
@@ -376,6 +474,8 @@ class CopilotAgent:
                 # Drop the broken session so next turn gets a fresh one
                 self._sessions.pop(conversation_id, None)
                 self._registered_handlers.discard(conversation_id)
+                if self._cosmos_service:
+                    await self._cosmos_service.delete_session_mapping(conversation_id)
             finally:
                 self._queues.pop(conversation_id, None)
 

@@ -26,6 +26,7 @@ class CosmosService:
         self._messages_container: Any = None
         self._skills_container: Any = None
         self._settings_container: Any = None
+        self._sessions_container: Any = None
 
     async def initialize(self) -> None:
         """Initialize Cosmos DB client and containers."""
@@ -56,6 +57,14 @@ class CosmosService:
         except Exception:
             logger.warning("Settings container not found in Cosmos — using defaults")
             self._settings_container = None
+
+        # Sessions container — stores SDK session ID ↔ conversation ID mapping
+        try:
+            self._sessions_container = database.get_container_client("sessions")
+            await self._sessions_container.read()
+        except Exception:
+            logger.warning("Sessions container not found in Cosmos — session resume disabled")
+            self._sessions_container = None
 
         logger.info("Cosmos DB initialized -- database=%s", self.settings.cosmos_db_database)
 
@@ -170,6 +179,42 @@ class CosmosService:
         try:
             await self._settings_container.delete_item(
                 item=setting_id, partition_key="system"
+            )
+        except Exception:
+            pass
+
+    # ─── Sessions (SDK session ID mapping) ────────────────────────────────────
+
+    async def upsert_session_mapping(self, conversation_id: str, sdk_session_id: str) -> None:
+        """Store the SDK session ID for a conversation."""
+        if not self._sessions_container:
+            return
+        doc = {
+            "id": conversation_id,
+            "conversationId": conversation_id,
+            "sdkSessionId": sdk_session_id,
+        }
+        await self._sessions_container.upsert_item(doc)
+
+    async def get_session_mapping(self, conversation_id: str) -> str | None:
+        """Return the SDK session ID for a conversation, or None."""
+        if not self._sessions_container:
+            return None
+        try:
+            item = await self._sessions_container.read_item(
+                item=conversation_id, partition_key=conversation_id
+            )
+            return item.get("sdkSessionId")
+        except Exception:
+            return None
+
+    async def delete_session_mapping(self, conversation_id: str) -> None:
+        """Delete the session mapping for a conversation."""
+        if not self._sessions_container:
+            return
+        try:
+            await self._sessions_container.delete_item(
+                item=conversation_id, partition_key=conversation_id
             )
         except Exception:
             pass

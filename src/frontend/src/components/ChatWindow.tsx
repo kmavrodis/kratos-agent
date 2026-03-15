@@ -1,10 +1,17 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Conversation, ChatMessage, ToolCallInfo, RunStats } from "@/types";
-import { streamAgentChat } from "@/lib/api";
+import { Conversation, ChatMessage, ToolCallInfo, RunStats, Attachment } from "@/types";
+import { streamAgentChat, respondToUserInput } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
 import { ThoughtChain } from "./ThoughtChain";
+
+interface UserInputPrompt {
+  requestId: string;
+  question: string;
+  choices: string[];
+  allowFreeform: boolean;
+}
 
 interface Props {
   conversation: Conversation;
@@ -18,7 +25,11 @@ export function ChatWindow({ conversation }: Props) {
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallInfo[]>([]);
   const [runStats, setRunStats] = useState<RunStats | null>(null);
   const [messageStats, setMessageStats] = useState<Record<string, { thoughts: string[]; toolCalls: ToolCallInfo[]; runStats: RunStats }>>({});
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [userInputPrompt, setUserInputPrompt] = useState<UserInputPrompt | null>(null);
+  const [userInputAnswer, setUserInputAnswer] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const thoughtsRef = useRef<string[]>([]);
   const toolCallsRef = useRef<ToolCallInfo[]>([]);
   const runStatsRef = useRef<RunStats | null>(null);
@@ -49,6 +60,9 @@ export function ChatWindow({ conversation }: Props) {
     thoughtsRef.current = [];
     toolCallsRef.current = [];
     runStatsRef.current = null;
+
+    const currentAttachments = attachments.length > 0 ? [...attachments] : undefined;
+    setAttachments([]);
 
     let assistantContent = "";
 
@@ -161,6 +175,16 @@ export function ChatWindow({ conversation }: Props) {
             runStatsRef.current = stats;
             break;
           }
+
+          case "user_input_request": {
+            setUserInputPrompt({
+              requestId: data.requestId as string,
+              question: data.question as string,
+              choices: (data.choices as string[]) || [],
+              allowFreeform: (data.allowFreeform as boolean) ?? true,
+            });
+            break;
+          }
         }
       },
       (error) => {
@@ -189,7 +213,9 @@ export function ChatWindow({ conversation }: Props) {
           }));
         }
         setIsStreaming(false);
-      }
+        setUserInputPrompt(null);
+      },
+      currentAttachments
     );
   };
 
@@ -198,6 +224,47 @@ export function ChatWindow({ conversation }: Props) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newAttachments: Attachment[] = await Promise.all(
+      Array.from(files).map(
+        (file) =>
+          new Promise<Attachment>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const base64 = (reader.result as string).split(",")[1] || "";
+              resolve({
+                type: "file" as const,
+                path: file.name,
+                displayName: file.name,
+                content: base64,
+              });
+            };
+            reader.readAsDataURL(file);
+          })
+      )
+    );
+    setAttachments((prev) => [...prev, ...newAttachments]);
+    // Reset the input so the same file can be selected again
+    e.target.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUserInputSubmit = async (answer: string) => {
+    if (!userInputPrompt) return;
+    try {
+      await respondToUserInput(conversation.id, userInputPrompt.requestId, answer);
+    } catch (err) {
+      console.error("Failed to respond to user input:", err);
+    }
+    setUserInputPrompt(null);
+    setUserInputAnswer("");
   };
 
   return (
@@ -241,12 +308,97 @@ export function ChatWindow({ conversation }: Props) {
           />
         )}
 
+        {/* User input request from agent */}
+        {userInputPrompt && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 max-w-2xl mx-auto">
+            <p className="text-sm font-medium text-amber-800 mb-2">
+              {userInputPrompt.question}
+            </p>
+            {userInputPrompt.choices.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {userInputPrompt.choices.map((choice) => (
+                  <button
+                    key={choice}
+                    onClick={() => handleUserInputSubmit(choice)}
+                    className="px-3 py-1.5 text-sm bg-white border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors"
+                  >
+                    {choice}
+                  </button>
+                ))}
+              </div>
+            )}
+            {userInputPrompt.allowFreeform && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={userInputAnswer}
+                  onChange={(e) => setUserInputAnswer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && userInputAnswer.trim()) {
+                      handleUserInputSubmit(userInputAnswer.trim());
+                    }
+                  }}
+                  placeholder="Type your answer..."
+                  className="flex-1 text-sm border border-amber-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <button
+                  onClick={() => handleUserInputSubmit(userInputAnswer.trim())}
+                  disabled={!userInputAnswer.trim()}
+                  className="px-3 py-1.5 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                >
+                  Send
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Attachment pills */}
+      {attachments.length > 0 && (
+        <div className="border-t border-gray-100 px-6 py-2 bg-gray-50 flex flex-wrap gap-2">
+          {attachments.map((att, idx) => (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-white border border-gray-200 rounded-lg"
+            >
+              <svg className="w-3 h-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+              {att.displayName || ("path" in att ? att.path : "")}
+              <button
+                onClick={() => removeAttachment(idx)}
+                className="ml-1 text-gray-400 hover:text-gray-600"
+              >
+                &times;
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Input area */}
       <div className="border-t border-gray-200 px-6 py-4 bg-white">
         <div className="flex items-end gap-3 max-w-4xl mx-auto">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            title="Attach files"
+            className="p-3 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+          </button>
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

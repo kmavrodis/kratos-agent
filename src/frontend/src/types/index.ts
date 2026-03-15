@@ -70,6 +70,38 @@ export interface ErrorEvent {
   code: string;
 }
 
+export interface UserInputRequestEvent {
+  type: "user_input_request";
+  requestId: string;
+  question: string;
+  choices: string[];
+  allowFreeform: boolean;
+}
+
+// ─── Attachments ───
+
+export interface FileAttachment {
+  type: "file";
+  path: string;
+  displayName: string;
+  content?: string; // base64-encoded file content
+}
+
+export interface DirectoryAttachment {
+  type: "directory";
+  path: string;
+  displayName: string;
+}
+
+export interface SelectionAttachment {
+  type: "selection";
+  filePath: string;
+  displayName: string;
+  text: string;
+}
+
+export type Attachment = FileAttachment | DirectoryAttachment | SelectionAttachment;
+
 export interface RunStats {
   totalDurationMs: number;
   totalToolCalls: number;
@@ -86,7 +118,8 @@ export type AgentEvent =
   | ContentEvent
   | UsageEvent
   | DoneEvent
-  | ErrorEvent;
+  | ErrorEvent
+  | UserInputRequestEvent;
 
 // ─── Skills Admin ───
 

@@ -1,5 +1,7 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+import type { Attachment } from "@/types";
+
 /**
  * Send a message to the agent and receive streaming SSE events.
  */
@@ -8,13 +10,19 @@ export async function streamAgentChat(
   message: string,
   onEvent: (event: { type: string; data: unknown }) => void,
   onError: (error: Error) => void,
-  onDone: () => void
+  onDone: () => void,
+  attachments?: Attachment[]
 ): Promise<void> {
   try {
+    const payload: Record<string, unknown> = { conversationId, message };
+    if (attachments && attachments.length > 0) {
+      payload.attachments = attachments;
+    }
+
     const response = await fetch(`${API_URL}/api/agent/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversationId, message }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
@@ -82,6 +90,24 @@ export async function createConversation(
   }
 
   return response.json();
+}
+
+/**
+ * Respond to a user input request from the agent.
+ */
+export async function respondToUserInput(
+  conversationId: string,
+  requestId: string,
+  answer: string
+): Promise<void> {
+  const response = await fetch(`${API_URL}/api/agent/user-input`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ conversationId, requestId, answer }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to respond to user input: ${response.status}`);
+  }
 }
 
 /**

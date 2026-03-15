@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -56,11 +56,37 @@ class MessageCreate(BaseModel):
     content: str
 
 
+# ─── Attachments ───
+
+class FileAttachment(BaseModel):
+    type: Literal["file"] = "file"
+    path: str
+    displayName: str = ""
+    content: str | None = None  # base64-encoded file content from browser uploads
+
+
+class DirectoryAttachment(BaseModel):
+    type: Literal["directory"] = "directory"
+    path: str
+    displayName: str = ""
+
+
+class SelectionAttachment(BaseModel):
+    type: Literal["selection"] = "selection"
+    filePath: str
+    displayName: str
+    text: str = ""
+
+
+Attachment = FileAttachment | DirectoryAttachment | SelectionAttachment
+
+
 # ─── Agent ───
 
 class AgentRequest(BaseModel):
     conversationId: str
     message: str
+    attachments: list[Attachment] = Field(default_factory=list)
 
 
 class ToolCallEvent(BaseModel):
@@ -112,6 +138,22 @@ class ErrorEvent(BaseModel):
     type: str = "error"
     message: str
     code: str = "UNKNOWN_ERROR"
+
+
+class UserInputRequestEvent(BaseModel):
+    """Streamed event when the agent asks the user a question."""
+    type: str = "user_input_request"
+    requestId: str
+    question: str
+    choices: list[str] = Field(default_factory=list)
+    allowFreeform: bool = True
+
+
+class UserInputResponseRequest(BaseModel):
+    """Payload for responding to a user input request."""
+    conversationId: str
+    requestId: str
+    answer: str
 
 
 # ─── Settings ───

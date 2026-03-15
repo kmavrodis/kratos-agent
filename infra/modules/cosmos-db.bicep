@@ -162,6 +162,33 @@ resource settingsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
   }
 }
 
+// Sessions container — stores SDK session ID ↔ conversation ID mapping
+resource sessionsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'sessions'
+  properties: {
+    resource: {
+      id: 'sessions'
+      partitionKey: {
+        paths: ['/conversationId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        automatic: true
+        includedPaths: [
+          { path: '/*' }
+        ]
+        excludedPaths: [
+          { path: '/"_etag"/?' }
+        ]
+      }
+      defaultTtl: -1
+    }
+  }
+}
+
 resource privateEndpoint 'Microsoft.Network/privateEndpoints@2023-09-01' = {
   name: '${name}-pe'
   location: location

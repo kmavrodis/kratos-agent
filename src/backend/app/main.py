@@ -47,6 +47,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize Copilot SDK agent (uses DefaultAzureCredential for Azure OpenAI)
     copilot_agent = CopilotAgent(settings)
     copilot_agent.set_skill_registry(skill_registry)
+    copilot_agent.set_cosmos_service(cosmos_service)
 
     # Load system prompt from Cosmos (falls back to default if not set)
     prompt_doc = await cosmos_service.get_setting("system-prompt")
