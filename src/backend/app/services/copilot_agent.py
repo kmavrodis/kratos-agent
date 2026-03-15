@@ -181,7 +181,7 @@ class CopilotAgent:
             "tools": enabled_tools,
             "skill_directories": skill_dirs,
             "system_message": {
-                "mode": "append",
+                "mode": "replace",
                 "content": self._system_prompt,
             },
             "provider": {

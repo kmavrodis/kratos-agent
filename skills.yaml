@@ -1,20 +1,9 @@
 skills:
-  - name: web-search
-    description: Real-time internet search for current information
-    enabled: true
-    path: ./skills/web-search
-
-  - name: rag-search
-    description: Azure AI Search knowledge base for grounded answers
-    enabled: true
-    path: ./skills/rag-search
-
-  - name: code-interpreter
-    description: Sandboxed Python execution for computation and analysis
-    enabled: true
-    path: ./skills/code-interpreter
-
-  - name: foundry-agent
-    description: Delegate tasks to specialized Microsoft Foundry sub-agents
-    enabled: true
-    path: ./skills/foundry-agent
+- name: web-search
+  description: Real-time internet search
+  path: skills/web-search
+  enabled: true
+- name: rag-search
+  description: Azure AI Search knowledge base
+  path: skills/rag-search
+  enabled: true
