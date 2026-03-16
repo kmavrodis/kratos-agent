@@ -34,6 +34,9 @@ param aiServicesModelDeployment string
 @description('Bing Search endpoint')
 param bingSearchEndpoint string
 
+@description('Azure Blob Storage endpoint for skills')
+param blobStorageEndpoint string
+
 resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
@@ -80,6 +83,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AI_SERVICES_ENDPOINT', value: aiServicesEndpoint }
             { name: 'AI_SERVICES_MODEL_DEPLOYMENT', value: aiServicesModelDeployment }
             { name: 'BING_SEARCH_ENDPOINT', value: bingSearchEndpoint }
+            { name: 'BLOB_STORAGE_ENDPOINT', value: blobStorageEndpoint }
             { name: 'OTEL_SERVICE_NAME', value: 'kratos-agent-service' }
           ]
         }

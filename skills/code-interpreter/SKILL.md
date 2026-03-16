@@ -1,6 +1,7 @@
 ---
 name: code-interpreter
 description: Sandboxed Python execution for computation, data analysis, and code generation
+enabled: true
 ---
 
 ## Instructions

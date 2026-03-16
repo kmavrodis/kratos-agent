@@ -1,6 +1,5 @@
 """Tests for the skill registry."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -9,31 +8,36 @@ from app.services.skill_registry import SkillRegistry
 
 
 @pytest.fixture
-def skills_yaml(tmp_path: Path) -> str:
-    config = tmp_path / "skills.yaml"
-    config.write_text("""
-skills:
-  - name: web-search
-    description: Real-time internet search
-    enabled: true
-    path: ./skills/web-search
+def skills_dir(tmp_path: Path) -> Path:
+    """Create a local skills directory with sample skills."""
+    # web-search skill
+    ws = tmp_path / "skills" / "web-search"
+    ws.mkdir(parents=True)
+    (ws / "SKILL.md").write_text(
+        "---\nname: web-search\ndescription: Real-time internet search\nenabled: true\n---\n\n# Web Search"
+    )
 
-  - name: rag-search
-    description: Azure AI Search knowledge base
-    enabled: true
-    path: ./skills/rag-search
+    # rag-search skill
+    rs = tmp_path / "skills" / "rag-search"
+    rs.mkdir(parents=True)
+    (rs / "SKILL.md").write_text(
+        "---\nname: rag-search\ndescription: Azure AI Search knowledge base\nenabled: true\n---\n\n# RAG Search"
+    )
 
-  - name: disabled-skill
-    description: A disabled skill
-    enabled: false
-    path: ./skills/disabled
-""")
-    return str(config)
+    # disabled skill — enabled: false in frontmatter
+    ds = tmp_path / "skills" / "disabled-skill"
+    ds.mkdir(parents=True)
+    (ds / "SKILL.md").write_text(
+        "---\nname: disabled-skill\ndescription: A disabled skill\nenabled: false\n---\n\n# Disabled Skill"
+    )
+
+    return tmp_path / "skills"
 
 
 @pytest.mark.asyncio
-async def test_load_skills(skills_yaml: str):
-    registry = SkillRegistry(config_path=skills_yaml)
+async def test_load_skills(skills_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.chdir(skills_dir.parent)
+    registry = SkillRegistry()
     await registry.load()
 
     assert len(registry.skills) == 3
@@ -43,8 +47,9 @@ async def test_load_skills(skills_yaml: str):
 
 
 @pytest.mark.asyncio
-async def test_get_enabled_skills(skills_yaml: str):
-    registry = SkillRegistry(config_path=skills_yaml)
+async def test_get_enabled_skills(skills_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.chdir(skills_dir.parent)
+    registry = SkillRegistry()
     await registry.load()
 
     enabled = registry.get_enabled_skills()
@@ -56,37 +61,9 @@ async def test_get_enabled_skills(skills_yaml: str):
 
 
 @pytest.mark.asyncio
-async def test_get_skill_directories(skills_yaml: str, tmp_path: Path):
-    """Test that get_skill_directories returns paths for enabled skills with SKILL.md."""
-    # Create SKILL.md files for the enabled skills
-    web_search_dir = tmp_path / "skills" / "web-search"
-    web_search_dir.mkdir(parents=True)
-    (web_search_dir / "SKILL.md").write_text("# Web Search Skill")
-
-    rag_search_dir = tmp_path / "skills" / "rag-search"
-    rag_search_dir.mkdir(parents=True)
-    (rag_search_dir / "SKILL.md").write_text("# RAG Search Skill")
-
-    # Update skills.yaml to point to tmp_path paths
-    config = tmp_path / "skills_dirs.yaml"
-    config.write_text(f"""
-skills:
-  - name: web-search
-    description: Real-time internet search
-    enabled: true
-    path: {web_search_dir}
-
-  - name: rag-search
-    description: Azure AI Search knowledge base
-    enabled: true
-    path: {rag_search_dir}
-
-  - name: disabled-skill
-    description: A disabled skill
-    enabled: false
-    path: {tmp_path}/skills/disabled
-""")
-    registry = SkillRegistry(config_path=str(config))
+async def test_get_skill_directories(skills_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.chdir(skills_dir.parent)
+    registry = SkillRegistry()
     await registry.load()
 
     dirs = registry.get_skill_directories()
@@ -96,7 +73,20 @@ skills:
 
 
 @pytest.mark.asyncio
-async def test_missing_config():
-    registry = SkillRegistry(config_path="/nonexistent/skills.yaml")
+async def test_no_skills_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.chdir(tmp_path)
+    registry = SkillRegistry()
     await registry.load()
     assert len(registry.skills) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_enabled_tool_names(skills_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.chdir(skills_dir.parent)
+    registry = SkillRegistry()
+    await registry.load()
+
+    tool_names = registry.get_enabled_tool_names()
+    assert "web_search" in tool_names
+    assert "rag_search" in tool_names
+    assert "disabled_skill" not in tool_names

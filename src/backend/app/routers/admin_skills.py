@@ -1,4 +1,4 @@
-"""Admin API for managing skills — CRUD operations backed by Cosmos DB."""
+"""Admin API for managing skills — CRUD operations backed by Blob Storage."""
 
 import logging
 

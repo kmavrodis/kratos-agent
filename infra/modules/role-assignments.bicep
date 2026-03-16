@@ -16,6 +16,9 @@ param keyVaultName string
 @description('Container Registry name')
 param containerRegistryName string
 
+@description('Storage Account name for skills blob storage')
+param storageAccountName string
+
 @description('Deploying user principal ID')
 param principalId string = ''
 
@@ -25,6 +28,7 @@ var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var searchIndexDataReader = '1407120a-92aa-4202-b7e9-c0e197c71c8f'
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
 // ─── References ───
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' existing = {
@@ -45,6 +49,10 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' existing =
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: replace(containerRegistryName, '-', '')
+}
+
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+  name: storageAccountName
 }
 
 // ─── Agent Service → Cosmos DB ───
@@ -102,6 +110,17 @@ resource agentAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01
   }
 }
 
+// ─── Agent Service → Blob Storage (Skills) ───
+resource agentStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, agentServicePrincipalId, storageBlobDataContributor)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
+    principalId: agentServicePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ─── Deploying User → Cosmos DB (for local dev) ───
 resource userCosmosRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-02-15-preview' = if (!empty(principalId)) {
   parent: cosmosDb
@@ -130,6 +149,17 @@ resource userAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
   scope: aiServices
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUser)
+    principalId: principalId
+    principalType: 'User'
+  }
+}
+
+// ─── Deploying User → Blob Storage (for local dev) ───
+resource userStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
+  name: guid(storageAccount.id, principalId, storageBlobDataContributor)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
     principalId: principalId
     principalType: 'User'
   }

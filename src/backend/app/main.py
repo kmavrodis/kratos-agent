@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.observability import setup_telemetry
 from app.routers import admin_prompt, admin_skills, agent, conversations, files, health, settings
+from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
 from app.services.skill_registry import SkillRegistry
@@ -39,9 +40,14 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await cosmos_service.initialize()
     application.state.cosmos_service = cosmos_service
 
-    # Load skill registry from Cosmos DB (seeds from YAML on first run)
-    skill_registry = SkillRegistry(settings.skills_config_path)
-    await skill_registry.load(cosmos_service)
+    # Initialize Blob Storage service for skills
+    blob_skill_service = BlobSkillService(settings)
+    await blob_skill_service.initialize()
+    application.state.blob_skill_service = blob_skill_service
+
+    # Load skill registry from blob storage (seeds on first run)
+    skill_registry = SkillRegistry()
+    await skill_registry.load(blob_skill_service)
     application.state.skill_registry = skill_registry
 
     # Initialize Copilot SDK agent (uses DefaultAzureCredential for Azure OpenAI)
@@ -63,6 +69,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
     # Cleanup
     await copilot_agent.stop()
+    await blob_skill_service.close()
     logger.info("Kratos Agent Service shutting down")
 
 

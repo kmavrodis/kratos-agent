@@ -1,9 +1,0 @@
-skills:
-- name: web-search
-  description: Real-time internet search
-  path: skills/web-search
-  enabled: true
-- name: rag-search
-  description: Azure AI Search knowledge base
-  path: skills/rag-search
-  enabled: true

@@ -16,8 +16,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 # Copy backend application
 COPY src/backend/ .
 
-# Copy skills config and skill definitions from repo root
-COPY skills.yaml .
+# Copy baked-in skill definitions (seeded to blob on first run)
 COPY skills/ ./skills/
 
 # Install dependencies

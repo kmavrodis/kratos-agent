@@ -12,5 +12,6 @@
   "searchSearchServices": "srch-",
   "cognitiveServicesAccounts": "oai-",
   "bingSearchAccounts": "bing-",
-  "webStaticSites": "stapp-"
+  "webStaticSites": "stapp-",
+  "storageAccounts": "st"
 }

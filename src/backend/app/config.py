@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     ai_services_endpoint: str = ""
     ai_services_model_deployment: str = "gpt-52"
 
+    # Azure Blob Storage for skills
+    blob_storage_endpoint: str = ""
+    blob_skills_container: str = "skills"
+
     # Observability
     applicationinsights_connection_string: str = ""
     otel_service_name: str = "kratos-agent-service"
@@ -28,9 +32,6 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"  # noqa: S104
     port: int = 8000
     environment: str = "development"
-
-    # Skills config
-    skills_config_path: str = "skills.yaml"
 
     # Cosmos DB database
     cosmos_db_database: str = "kratos-agent"

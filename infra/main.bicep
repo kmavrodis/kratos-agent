@@ -25,6 +25,7 @@ param logAnalyticsName string = ''
 param staticWebAppName string = ''
 param agentServiceName string = ''
 param vnetName string = ''
+param storageAccountName string = ''
 
 // ─── Resource Naming ───
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -135,6 +136,17 @@ module bingSearch './modules/bing-search.bicep' = {
   }
 }
 
+// ─── Blob Storage (Skills) ───
+module blobStorage './modules/blob-storage.bicep' = {
+  name: 'blob-storage'
+  scope: rg
+  params: {
+    name: !empty(storageAccountName) ? storageAccountName : '${abbrs.storageAccounts}${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
 // ─── Container Registry ───
 module containerRegistry './modules/container-registry.bicep' = {
   name: 'container-registry'
@@ -176,6 +188,7 @@ module agentService './modules/agent-service.bicep' = {
     aiServicesEndpoint: aiServices.outputs.endpoint
     aiServicesModelDeployment: aiServices.outputs.modelDeploymentName
     bingSearchEndpoint: bingSearch.outputs.endpoint
+    blobStorageEndpoint: blobStorage.outputs.endpoint
   }
 }
 
@@ -201,6 +214,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     aiServicesName: aiServices.outputs.name
     keyVaultName: keyVault.outputs.name
     containerRegistryName: containerRegistry.outputs.name
+    storageAccountName: blobStorage.outputs.name
     principalId: principalId
   }
 }
@@ -218,3 +232,4 @@ output AZURE_STATIC_WEB_APP_URL string = staticWebApp.outputs.url
 output AGENT_SERVICE_URL string = agentService.outputs.url
 output AI_SERVICES_ENDPOINT string = aiServices.outputs.endpoint
 output AI_SERVICES_MODEL_DEPLOYMENT string = aiServices.outputs.modelDeploymentName
+output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint

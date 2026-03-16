@@ -1,21 +1,29 @@
-"""Skill registry — loads and manages skills from Cosmos DB.
+"""Skill registry — loads and manages skills from Azure Blob Storage.
 
-Skills are stored in Cosmos DB so they can be managed via an admin panel.
-On first startup (empty Cosmos), seeds from the local skills.yaml + SKILL.md files.
-The SDK reads SKILL.md content from the instructions field stored in Cosmos.
+Skills are stored as folder trees in blob:
+  skills/{name}/SKILL.md
+  skills/{name}/scripts/...
+
+All metadata (name, description, enabled) lives in the SKILL.md YAML
+frontmatter.  On startup, the registry syncs blob → local filesystem
+and populates an in-memory registry.  On first run (empty blob), seeds
+from baked-in skill folders shipped in the container image.
 """
+
+from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from app.services.blob_skill_service import BlobSkillService
 
-# File path for YAML seed data
-_DEFAULT_SKILLS_YAML = "skills.yaml"
+logger = logging.getLogger(__name__)
 
 # Regex matching YAML frontmatter block: ---\n...\n---
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
@@ -38,17 +46,25 @@ def _parse_frontmatter(text: str) -> tuple[dict, str]:
     return fm, body
 
 
-def _update_frontmatter(text: str, name: str, description: str) -> str:
-    """Update or insert YAML frontmatter with the given name and description.
-
-    Preserves the body content and any extra frontmatter fields.
-    """
+def _update_frontmatter(text: str, **updates: object) -> str:
+    """Update YAML frontmatter fields, preserving body and other fields."""
     fm, body = _parse_frontmatter(text)
-    fm["name"] = name
-    fm["description"] = description
-    # Dump frontmatter in a stable key order
+    fm.update(updates)
     fm_str = yaml.dump(fm, default_flow_style=False, sort_keys=False).strip()
     return f"---\n{fm_str}\n---\n\n{body.lstrip()}"
+
+
+def _skill_from_md(name: str, instructions: str, local_path: str = "") -> "SkillMetadata":
+    """Build a SkillMetadata from a SKILL.md string, using frontmatter for all fields."""
+    fm, _ = _parse_frontmatter(instructions)
+    return SkillMetadata(
+        name=fm.get("name", name),
+        description=fm.get("description", ""),
+        enabled=fm.get("enabled", True),
+        instructions=instructions,
+        tool_name=fm.get("name", name).replace("-", "_"),
+        local_path=local_path,
+    )
 
 
 @dataclass
@@ -60,111 +76,71 @@ class SkillMetadata:
     enabled: bool = True
     instructions: str = ""
     tool_name: str = ""  # maps to the @define_tool function name
-
-    def to_cosmos_doc(self) -> dict:
-        return {
-            "id": self.name,
-            "name": self.name,
-            "description": self.description,
-            "enabled": self.enabled,
-            "instructions": self.instructions,
-            "toolName": self.tool_name or self.name.replace("-", "_"),
-        }
-
-    @staticmethod
-    def from_cosmos_doc(doc: dict) -> "SkillMetadata":
-        return SkillMetadata(
-            name=doc["name"],
-            description=doc.get("description", ""),
-            enabled=doc.get("enabled", True),
-            instructions=doc.get("instructions", ""),
-            tool_name=doc.get("toolName", ""),
-        )
+    local_path: str = ""  # local filesystem path after sync
 
 
 @dataclass
 class SkillRegistry:
-    """Registry of available skills backed by Cosmos DB.
+    """Registry of available skills backed by Azure Blob Storage.
 
-    On load(), reads skills from Cosmos. If empty, seeds from local
-    skills.yaml + SKILL.md files (first-run migration).
+    On load(), syncs skills from blob → local filesystem.
+    If blob is empty, seeds from baked-in skills/ directory.
+    Falls back to loading from local skills/ directory when blob is unavailable.
     """
 
-    config_path: str = _DEFAULT_SKILLS_YAML
     skills: dict[str, SkillMetadata] = field(default_factory=dict)
-    _cosmos_service: object | None = field(default=None, repr=False)
+    _blob_service: BlobSkillService | None = field(default=None, repr=False)
 
-    async def load(self, cosmos_service: object | None = None) -> None:
-        """Load skills from Cosmos DB, seeding from YAML on first run."""
-        self._cosmos_service = cosmos_service
+    async def load(self, blob_service: BlobSkillService | None = None) -> None:
+        """Load skills from blob storage, seeding on first run."""
+        self._blob_service = blob_service
 
-        # Try loading from Cosmos first
-        if cosmos_service is not None:
-            docs = await cosmos_service.list_skills()
-            if docs:
-                for doc in docs:
-                    skill = SkillMetadata.from_cosmos_doc(doc)
-                    self.skills[skill.name] = skill
-                logger.info("Loaded %d skills from Cosmos DB", len(self.skills))
-                return
+        if blob_service is not None and blob_service.is_available:
+            # Seed baked-in skills if blob is empty (first deployment)
+            existing = await blob_service.list_skill_names()
+            if not existing:
+                logger.info("Blob storage empty — seeding from baked-in skills/")
+                await blob_service.seed_from_local("skills")
 
-            # Cosmos is empty — seed from local YAML + SKILL.md files
-            logger.info("No skills in Cosmos — seeding from %s", self.config_path)
-            await self._seed_from_yaml(cosmos_service)
+            # Sync all skills from blob → local filesystem
+            await blob_service.sync_to_local()
+            local_dir = blob_service.local_dir
+
+            for skill_name in await blob_service.list_skill_names():
+                skill_md_path = local_dir / skill_name / "SKILL.md"
+                if not skill_md_path.exists():
+                    continue
+                instructions = skill_md_path.read_text()
+                skill = _skill_from_md(skill_name, instructions, str(local_dir / skill_name))
+                self.skills[skill.name] = skill
+
+            logger.info("Loaded %d skills from blob storage", len(self.skills))
             return
 
-        # No Cosmos available — fall back to YAML-only loading (local dev)
-        await self._load_from_yaml()
+        # No blob available — fall back to local skills/ directory
+        await self._load_from_local()
 
-    async def _seed_from_yaml(self, cosmos_service: object) -> None:
-        """Read skills.yaml + SKILL.md files, write them to Cosmos, and populate registry."""
-        await self._load_from_yaml()
-        for skill in self.skills.values():
-            await cosmos_service.upsert_skill(skill.to_cosmos_doc())
-        logger.info("Seeded %d skills into Cosmos DB", len(self.skills))
-
-    async def _load_from_yaml(self) -> None:
-        """Load skills from the local YAML config file (fallback / seed source)."""
-        config_file = Path(self.config_path)
-        if not config_file.exists():
-            logger.warning("Skills config not found at %s", self.config_path)
+    async def _load_from_local(self) -> None:
+        """Load skills from the baked-in skills/ directory (local dev fallback)."""
+        skills_dir = Path("skills")
+        if not skills_dir.exists():
+            logger.warning("No local skills/ directory found")
             return
 
-        with open(config_file) as f:
-            config = yaml.safe_load(f)
+        for skill_dir in sorted(skills_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
 
-        for skill_cfg in config.get("skills", []):
-            name = skill_cfg["name"]
-            skill_path = skill_cfg.get("path", "")
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
 
-            # Read SKILL.md instructions if the file exists
-            instructions = ""
-            if skill_path:
-                skill_md = Path(skill_path) / "SKILL.md"
-                if skill_md.exists():
-                    instructions = skill_md.read_text()
+            instructions = skill_md.read_text()
+            skill = _skill_from_md(skill_dir.name, instructions, str(skill_dir))
+            self.skills[skill.name] = skill
+            logger.info("Registered skill: %s (enabled=%s)", skill.name, skill.enabled)
 
-            # Use description from skills.yaml; ensure frontmatter stays in sync
-            description = skill_cfg.get("description", "")
-            if instructions:
-                fm, _ = _parse_frontmatter(instructions)
-                # If SKILL.md frontmatter has a richer description, prefer it
-                if fm.get("description"):
-                    description = fm["description"]
-                # Re-write frontmatter so it matches the canonical description
-                instructions = _update_frontmatter(instructions, name, description)
-
-            skill = SkillMetadata(
-                name=name,
-                description=description,
-                enabled=skill_cfg.get("enabled", True),
-                instructions=instructions,
-                tool_name=name.replace("-", "_"),
-            )
-            self.skills[name] = skill
-            logger.info("Registered skill: %s (enabled=%s)", name, skill.enabled)
-
-        logger.info("Loaded %d skills from %s", len(self.skills), self.config_path)
+        logger.info("Loaded %d skills from local directory", len(self.skills))
 
     def get_enabled_skills(self) -> list[SkillMetadata]:
         """Return all enabled skills."""
@@ -175,35 +151,21 @@ class SkillRegistry:
         return self.skills.get(name)
 
     def get_skill_directories(self) -> list[str]:
-        """Write enabled skill instructions to skill dirs and return directory paths.
+        """Return local directory paths for enabled skills with instructions.
 
-        The SDK expects directory paths for skill_directories — the Copilot CLI
-        looks for SKILL.md files inside each directory.  We write to ./skills/
-        (the app's working directory) so the CLI's filesystem tools can find them.
-        Also updates skills.yaml so the agent's skill index stays in sync.
+        The SDK expects directory paths containing SKILL.md files.
+        After blob sync, these are already on the local filesystem.
         """
         dirs: list[str] = []
-        yaml_entries: list[dict] = []
         for skill in self.get_enabled_skills():
-            if not skill.instructions:
-                continue
-            # Write alongside baked-in skills so the CLI discovers them
-            skill_dir = Path("skills") / skill.name
-            skill_dir.mkdir(parents=True, exist_ok=True)
-            skill_md_path = skill_dir / "SKILL.md"
-            skill_md_path.write_text(skill.instructions)
-            dirs.append(str(skill_dir))
-            yaml_entries.append({
-                "name": skill.name,
-                "description": skill.description,
-                "path": str(skill_dir),
-                "enabled": True,
-            })
-        # Keep skills.yaml in sync so the agent's glob+view discovery matches
-        if yaml_entries:
-            Path("skills.yaml").write_text(
-                yaml.dump({"skills": yaml_entries}, default_flow_style=False, sort_keys=False)
-            )
+            if skill.local_path:
+                skill_dir = Path(skill.local_path)
+                # Ensure SKILL.md is written (may have been updated via admin)
+                if skill.instructions:
+                    skill_dir.mkdir(parents=True, exist_ok=True)
+                    (skill_dir / "SKILL.md").write_text(skill.instructions)
+                if skill_dir.exists():
+                    dirs.append(str(skill_dir))
         return dirs
 
     def get_enabled_tool_names(self) -> set[str]:
@@ -213,12 +175,7 @@ class SkillRegistry:
     # ─── Admin operations ─────────────────────────────────────────────────
 
     async def update_skill(self, name: str, updates: dict) -> SkillMetadata | None:
-        """Update a skill in the registry and Cosmos DB.
-
-        Keeps SKILL.md frontmatter and Cosmos fields in sync:
-        - If description changes, update frontmatter inside instructions.
-        - If instructions change, extract name/description from frontmatter.
-        """
+        """Update a skill in the registry and persist to blob via SKILL.md."""
         skill = self.skills.get(name)
         if not skill:
             return None
@@ -226,61 +183,85 @@ class SkillRegistry:
         if "enabled" in updates:
             skill.enabled = updates["enabled"]
 
-        # If instructions changed, extract frontmatter into Cosmos fields
         if "instructions" in updates:
             skill.instructions = updates["instructions"]
             fm, _ = _parse_frontmatter(skill.instructions)
             if fm.get("description"):
                 skill.description = fm["description"]
 
-        # If description changed explicitly, update both field and frontmatter
         if "description" in updates:
             skill.description = updates["description"]
-            if skill.instructions:
-                skill.instructions = _update_frontmatter(
-                    skill.instructions, skill.name, skill.description
-                )
+
+        # Ensure frontmatter reflects current state
+        skill.instructions = _update_frontmatter(
+            skill.instructions,
+            name=skill.name,
+            description=skill.description,
+            enabled=skill.enabled,
+        )
 
         self.skills[name] = skill
 
-        if self._cosmos_service:
-            await self._cosmos_service.upsert_skill(skill.to_cosmos_doc())
+        # Persist SKILL.md to blob
+        if self._blob_service and self._blob_service.is_available:
+            await self._blob_service.upload_skill_file(
+                name, "SKILL.md", skill.instructions.encode()
+            )
+
+        # Update local copy
+        if skill.local_path:
+            local_dir = Path(skill.local_path)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "SKILL.md").write_text(skill.instructions)
 
         return skill
 
     async def add_skill(self, skill: SkillMetadata) -> SkillMetadata:
-        """Add a new skill to the registry and Cosmos DB.
-
-        If instructions contain frontmatter, extract description from it.
-        If instructions lack frontmatter, inject it from the Cosmos fields.
-        """
+        """Add a new skill to the registry and persist to blob via SKILL.md."""
         if skill.instructions:
             fm, _ = _parse_frontmatter(skill.instructions)
             if fm.get("description"):
-                # Frontmatter has description — use it as the canonical value
                 skill.description = fm["description"]
-            # Ensure frontmatter is present and in sync
-            skill.instructions = _update_frontmatter(
-                skill.instructions, skill.name, skill.description
-            )
+
+        # Ensure frontmatter contains all metadata
+        skill.instructions = _update_frontmatter(
+            skill.instructions,
+            name=skill.name,
+            description=skill.description,
+            enabled=skill.enabled,
+        )
+
+        # Set local path
+        if self._blob_service and self._blob_service.is_available:
+            skill.local_path = str(self._blob_service.local_dir / skill.name)
+        else:
+            skill.local_path = str(Path("skills") / skill.name)
 
         self.skills[skill.name] = skill
 
-        if self._cosmos_service:
-            await self._cosmos_service.upsert_skill(skill.to_cosmos_doc())
+        # Persist SKILL.md to blob
+        if self._blob_service and self._blob_service.is_available:
+            await self._blob_service.upload_skill_file(
+                skill.name, "SKILL.md", skill.instructions.encode()
+            )
+
+        # Write local copy
+        local_dir = Path(skill.local_path)
+        local_dir.mkdir(parents=True, exist_ok=True)
+        (local_dir / "SKILL.md").write_text(skill.instructions)
 
         logger.info("Added skill: %s", skill.name)
         return skill
 
     async def remove_skill(self, name: str) -> bool:
-        """Remove a skill from the registry and Cosmos DB."""
+        """Remove a skill from the registry and blob storage."""
         if name not in self.skills:
             return False
 
         del self.skills[name]
 
-        if self._cosmos_service:
-            await self._cosmos_service.delete_skill(name)
+        if self._blob_service and self._blob_service.is_available:
+            await self._blob_service.delete_skill(name)
 
         logger.info("Removed skill: %s", name)
         return True

@@ -1,6 +1,7 @@
 ---
 name: foundry-agent
 description: Delegate specialized tasks to Microsoft Foundry sub-agents for evaluation, guardrails, and model routing
+enabled: true
 ---
 
 ## Instructions
