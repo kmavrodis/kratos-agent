@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import setup_telemetry
-from app.routers import admin_prompt, admin_skills, agent, conversations, health, settings
+from app.routers import admin_prompt, admin_skills, agent, conversations, files, health, settings
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
 from app.services.skill_registry import SkillRegistry
@@ -89,3 +89,4 @@ app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
+app.include_router(files.router, prefix="/api/files", tags=["files"])
