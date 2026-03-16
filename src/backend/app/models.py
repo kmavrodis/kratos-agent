@@ -120,6 +120,7 @@ class UsageEvent(BaseModel):
     type: str = "usage"
     promptTokens: int = 0
     completionTokens: int = 0
+    reasoningTokens: int = 0
     totalTokens: int = 0
 
 
@@ -131,6 +132,7 @@ class DoneEvent(BaseModel):
     totalToolCalls: int = 0
     promptTokens: int = 0
     completionTokens: int = 0
+    reasoningTokens: int = 0
     totalTokens: int = 0
     timeToFirstTokenMs: int = 0
     modelLatencyMs: int = 0

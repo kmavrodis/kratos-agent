@@ -132,6 +132,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 totalToolCalls=total_tool_calls,
                 promptTokens=stats["prompt_tokens"],
                 completionTokens=stats["completion_tokens"],
+                reasoningTokens=stats.get("reasoning_tokens", 0),
                 totalTokens=stats["total_tokens"],
                 timeToFirstTokenMs=stats["time_to_first_token_ms"],
                 modelLatencyMs=stats["model_latency_ms"],

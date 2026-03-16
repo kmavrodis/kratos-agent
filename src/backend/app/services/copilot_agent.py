@@ -7,7 +7,9 @@ Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
 
 import asyncio
 from importlib.metadata import version
+import json
 import logging
+import re
 import time
 import uuid
 from typing import TYPE_CHECKING, AsyncGenerator
@@ -32,6 +34,51 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
+
+# Regex patterns for extracting actual skill name from the generic "skill" tool
+_SKILL_OUTPUT_RE = re.compile(r'Skill ["\']([^"\']+ )["\']')
+_SKILL_INPUT_NAME_RE = re.compile(r'["\']?name["\']?\s*[:=]\s*["\']([^"\'\.]+)["\']')
+
+
+def _resolve_skill_display_name(event_data, fallback: str = "skill") -> str:
+    """Extract the real skill name (e.g. 'email-draft') from a generic 'skill' tool event."""
+    # 1. Try explicit attributes the SDK might set
+    for attr in ("skill_name", "skill_id"):
+        val = getattr(event_data, attr, None)
+        if val and isinstance(val, str):
+            return val
+
+    # 2. Try parsing from input (dict, JSON, or repr)
+    raw_input = getattr(event_data, "input", None)
+    if raw_input is not None:
+        # If it's already a dict, look for 'name' key
+        if isinstance(raw_input, dict):
+            for key in ("name", "skill_name", "skill"):
+                if key in raw_input and raw_input[key]:
+                    return str(raw_input[key])
+        input_str = str(raw_input)
+        # Try JSON
+        try:
+            parsed = json.loads(input_str)
+            if isinstance(parsed, dict):
+                for key in ("name", "skill_name", "skill"):
+                    if key in parsed and parsed[key]:
+                        return str(parsed[key])
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        # Try key=value patterns in repr strings
+        m = _SKILL_INPUT_NAME_RE.search(input_str)
+        if m:
+            return m.group(1).strip()
+
+    # 3. Try parsing from output (e.g. 'Skill "email-draft" loaded successfully')
+    raw_output = getattr(event_data, "output", None) or getattr(event_data, "result", None)
+    if raw_output:
+        m = _SKILL_OUTPUT_RE.search(str(raw_output))
+        if m:
+            return m.group(1).strip()
+
+    return fallback
 
 SYSTEM_PROMPT = """You are Kratos, an enterprise AI assistant.
 
@@ -126,10 +173,9 @@ class CopilotAgent:
         if registry is not None and hasattr(registry, "system_prompt") and registry.system_prompt:
             # Parse out just the body (skip YAML frontmatter)
             prompt = registry.system_prompt
-            import re
-            match = re.match(r"^---\s*\n.*?\n---\s*\n?", prompt, re.DOTALL)
-            if match:
-                prompt = prompt[match.end():].strip()
+            m = re.match(r"^---\s*\n.*?\n---\s*\n?", prompt, re.DOTALL)
+            if m:
+                prompt = prompt[m.end():].strip()
             return prompt
         return self._system_prompt
 
@@ -399,24 +445,39 @@ class CopilotAgent:
                                 prompt_t = int(getattr(data, "prompt_tokens", 0) or getattr(data, "input_tokens", 0) or 0)
                                 completion_t = int(getattr(data, "completion_tokens", 0) or getattr(data, "output_tokens", 0) or 0)
                                 total_t = int(getattr(data, "total_tokens", 0) or 0) or (prompt_t + completion_t)
-                                usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "total": 0})
+
+                                # Extract reasoning tokens from completion_tokens_details
+                                reasoning_t = 0
+                                details = getattr(data, "completion_tokens_details", None)
+                                if details:
+                                    reasoning_t = int(getattr(details, "reasoning_tokens", 0) or 0)
+                                if not reasoning_t:
+                                    reasoning_t = int(getattr(data, "reasoning_tokens", 0) or 0)
+
+                                usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                                 usage["prompt"] += prompt_t
                                 usage["completion"] += completion_t
+                                usage["reasoning"] += reasoning_t
                                 usage["total"] += total_t
                                 self._usage[cid] = usage
                                 logger.info(
-                                    "Usage conversation=%s prompt_tokens=%d completion_tokens=%d total=%d",
-                                    cid, prompt_t, completion_t, total_t,
+                                    "Usage conversation=%s prompt_tokens=%d completion_tokens=%d reasoning_tokens=%d total=%d",
+                                    cid, prompt_t, completion_t, reasoning_t, total_t,
                                 )
                                 if total_t > 0:
                                     q.put_nowait(UsageEvent(
                                         promptTokens=usage["prompt"],
                                         completionTokens=usage["completion"],
+                                        reasoningTokens=usage["reasoning"],
                                         totalTokens=usage["total"],
                                     ))
 
                             elif etype == "tool.execution_start":
                                 tool_name = getattr(event.data, "tool_name", None) or getattr(event.data, "name", None) or "unknown"
+                                # Resolve actual skill name for the generic "skill" meta-tool
+                                if tool_name == "skill":
+                                    tool_name = _resolve_skill_display_name(event.data, fallback="skill")
+                                    logger.info("Resolved skill display name: %s (attrs=%s)", tool_name, {a: repr(getattr(event.data, a, None)) for a in dir(event.data) if not a.startswith('_')})
                                 self._tool_counters[cid] = self._tool_counters.get(cid, 0) + 1
                                 _pending_tools.append(tool_name)
                                 logger.info("Tool start conversation=%s tool=%s pending=%s", cid, tool_name, _pending_tools)
@@ -436,9 +497,15 @@ class CopilotAgent:
                                 raw_name = getattr(event.data, "tool_name", None) or getattr(event.data, "name", None)
                                 if raw_name:
                                     tool_name = raw_name
+                                    # Resolve generic "skill" to actual name
+                                    if tool_name == "skill":
+                                        tool_name = _resolve_skill_display_name(event.data, fallback="skill")
                                     # Remove from pending if present
                                     if tool_name in _pending_tools:
                                         _pending_tools.remove(tool_name)
+                                    elif "skill" in _pending_tools:
+                                        # Fallback: remove unresolved "skill" entry
+                                        _pending_tools.remove("skill")
                                 elif _pending_tools:
                                     tool_name = _pending_tools.pop(0)
                                 else:
@@ -522,13 +589,14 @@ class CopilotAgent:
 
     def get_run_stats(self, conversation_id: str) -> dict:
         """Return accumulated stats for the last run of a conversation."""
-        usage = self._usage.get(conversation_id, {"prompt": 0, "completion": 0, "total": 0})
+        usage = self._usage.get(conversation_id, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
         ttft = int(self._first_token_time.get(conversation_id, 0))
         model_start = self._model_response_start.get(conversation_id)
         model_latency = int((time.monotonic() - model_start) * 1000) if model_start else 0
         return {
             "prompt_tokens": usage["prompt"],
             "completion_tokens": usage["completion"],
+            "reasoning_tokens": usage.get("reasoning", 0),
             "total_tokens": usage["total"],
             "time_to_first_token_ms": ttft,
             "model_latency_ms": model_latency,

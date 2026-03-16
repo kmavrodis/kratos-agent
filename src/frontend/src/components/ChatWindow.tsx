@@ -167,6 +167,7 @@ export function ChatWindow({ conversation }: Props) {
               totalToolCalls: (data.totalToolCalls as number) || 0,
               promptTokens: (data.promptTokens as number) || 0,
               completionTokens: (data.completionTokens as number) || 0,
+              reasoningTokens: (data.reasoningTokens as number) || 0,
               totalTokens: (data.totalTokens as number) || 0,
               timeToFirstTokenMs: (data.timeToFirstTokenMs as number) || 0,
               modelLatencyMs: (data.modelLatencyMs as number) || 0,

@@ -50,6 +50,7 @@ export interface UsageEvent {
   type: "usage";
   promptTokens: number;
   completionTokens: number;
+  reasoningTokens: number;
   totalTokens: number;
 }
 
@@ -60,6 +61,7 @@ export interface DoneEvent {
   totalToolCalls: number;
   promptTokens: number;
   completionTokens: number;
+  reasoningTokens: number;
   totalTokens: number;
   timeToFirstTokenMs: number;
   modelLatencyMs: number;
@@ -108,6 +110,7 @@ export interface RunStats {
   totalToolCalls: number;
   promptTokens: number;
   completionTokens: number;
+  reasoningTokens: number;
   totalTokens: number;
   timeToFirstTokenMs: number;
   modelLatencyMs: number;

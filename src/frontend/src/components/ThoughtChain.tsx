@@ -16,179 +16,94 @@ function formatDuration(ms: number): string {
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 }
 
-function TokenBar({
-  prompt,
-  completion,
-  total,
-}: {
-  prompt: number;
-  completion: number;
-  total: number;
-}) {
-  if (total === 0) return null;
-  const promptPct = Math.round((prompt / total) * 100);
-  const completionPct = 100 - promptPct;
+/** Extract real skill name from a generic "skill" tool event */
+function resolveSkillName(tc: ToolCallInfo): string {
+  if (tc.skillName !== "skill") return tc.skillName;
+  // Try parsing from output: Skill "email-draft" loaded successfully
+  const outputMatch = tc.output?.match(/Skill ["']([^"']+)["']/);
+  if (outputMatch) return outputMatch[1];
+  // Try parsing from input: name='email-draft' or "name": "email-draft"
+  const inputMatch = tc.input?.match(/['"]?name['"]?\s*[:=]\s*['"]([^'"]+)['"]/);
+  if (inputMatch) return inputMatch[1];
+  return tc.skillName;
+}
+
+/** Pretty-print tool name: web_search → Web Search */
+function prettyToolName(name: string): string {
+  return name
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Colour palette for tool status badges */
+const STATUS_COLORS = {
+  started: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", dot: "bg-blue-400" },
+  completed: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-400" },
+  failed: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200", dot: "bg-red-400" },
+} as const;
+
+function ToolPill({ tc }: { tc: ToolCallInfo }) {
+  const colors = STATUS_COLORS[tc.status] || STATUS_COLORS.completed;
+  const isRunning = tc.status === "started";
+
   return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between text-xs text-gray-500">
-        <span>Token usage</span>
-        <span className="font-mono font-medium text-gray-700">
-          {total.toLocaleString()}
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
+    >
+      {isRunning ? (
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${colors.dot}`} />
         </span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
-        <div
-          className="bg-indigo-400 transition-all duration-500"
-          style={{ width: `${promptPct}%` }}
-          title={`Prompt: ${prompt.toLocaleString()}`}
-        />
-        <div
-          className="bg-emerald-400 transition-all duration-500"
-          style={{ width: `${completionPct}%` }}
-          title={`Completion: ${completion.toLocaleString()}`}
-        />
-      </div>
-      <div className="flex gap-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
-          Prompt{" "}
-          <span className="font-mono text-gray-700">
-            {prompt.toLocaleString()}
-          </span>
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
-          Completion{" "}
-          <span className="font-mono text-gray-700">
-            {completion.toLocaleString()}
-          </span>
-        </span>
-      </div>
-    </div>
+      ) : (
+        <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
+      )}
+      {prettyToolName(tc.skillName)}
+      {!isRunning && tc.durationMs !== undefined && tc.durationMs > 0 && (
+        <span className="opacity-60 font-mono text-[10px]">{formatDuration(tc.durationMs)}</span>
+      )}
+    </span>
   );
 }
 
-function ToolCard({ tc }: { tc: ToolCallInfo }) {
+function ToolDetail({ tc }: { tc: ToolCallInfo }) {
   const [expanded, setExpanded] = useState(false);
   const hasDetails =
     (tc.input && tc.input !== "None" && tc.input !== "") ||
     (tc.output && tc.output !== "None" && tc.output !== "");
-  const isRunning = tc.status === "started";
-  const isFailed = tc.status === "failed";
+
+  if (!hasDetails) return null;
 
   return (
-    <div
-      className={`rounded-lg border transition-all ${
-        isRunning
-          ? "border-blue-200 bg-blue-50/50"
-          : isFailed
-          ? "border-red-200 bg-red-50/30"
-          : "border-gray-200 bg-white"
-      }`}
-    >
-      <div
-        className={`flex items-center gap-2.5 px-3 py-2 ${
-          hasDetails ? "cursor-pointer" : ""
-        }`}
-        onClick={() => hasDetails && setExpanded(!expanded)}
+    <div className="rounded-lg border border-gray-100 bg-gray-50/50 overflow-hidden">
+      <button
+        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 transition-colors text-left"
+        onClick={() => setExpanded(!expanded)}
       >
-        {/* Status icon */}
-        {isRunning ? (
-          <div className="relative flex-shrink-0">
-            <div className="w-5 h-5 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
-          </div>
-        ) : isFailed ? (
-          <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-            <svg
-              className="w-3 h-3 text-red-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </div>
-        ) : (
-          <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
-            <svg
-              className="w-3 h-3 text-emerald-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-        )}
-
-        {/* Tool name */}
-        <span className="font-mono text-xs font-semibold text-gray-800 tracking-tight">
-          {tc.skillName}
-        </span>
-
-        {/* Duration badge */}
-        {!isRunning && tc.durationMs !== undefined && tc.durationMs > 0 && (
-          <span className="ml-auto text-xs font-mono text-gray-400">
-            {formatDuration(tc.durationMs)}
-          </span>
-        )}
-
-        {/* Running indicator */}
-        {isRunning && (
-          <span className="ml-auto text-xs text-blue-500 font-medium animate-pulse">
-            running
-          </span>
-        )}
-
-        {/* Expand chevron */}
-        {hasDetails && !isRunning && (
-          <svg
-            className={`w-3.5 h-3.5 text-gray-400 transition-transform ${
-              expanded ? "rotate-90" : ""
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-        )}
-      </div>
-
-      {/* Expanded details */}
+        <span className="font-mono text-xs text-gray-600">{tc.skillName}</span>
+        <svg
+          className={`w-3 h-3 text-gray-400 ml-auto transition-transform ${expanded ? "rotate-90" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
       {expanded && (
         <div className="border-t border-gray-100 px-3 py-2 space-y-2">
           {tc.input && tc.input !== "None" && tc.input !== "" && (
             <div>
-              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">
-                Input
-              </div>
-              <pre className="text-xs bg-gray-50 rounded-md p-2 whitespace-pre-wrap break-all text-gray-700 max-h-32 overflow-y-auto font-mono">
+              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Input</div>
+              <pre className="text-xs bg-white rounded-md p-2 whitespace-pre-wrap break-all text-gray-700 max-h-32 overflow-y-auto font-mono border border-gray-100">
                 {tc.input}
               </pre>
             </div>
           )}
           {tc.output && tc.output !== "None" && tc.output !== "" && (
             <div>
-              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">
-                Output
-              </div>
-              <pre className="text-xs bg-gray-50 rounded-md p-2 whitespace-pre-wrap break-all text-gray-700 max-h-32 overflow-y-auto font-mono">
+              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Output</div>
+              <pre className="text-xs bg-white rounded-md p-2 whitespace-pre-wrap break-all text-gray-700 max-h-32 overflow-y-auto font-mono border border-gray-100">
                 {tc.output}
               </pre>
             </div>
@@ -199,153 +114,195 @@ function ToolCard({ tc }: { tc: ToolCallInfo }) {
   );
 }
 
+function TokenBar({
+  prompt,
+  completion,
+  reasoning,
+  total,
+}: {
+  prompt: number;
+  completion: number;
+  reasoning: number;
+  total: number;
+}) {
+  if (total === 0) return null;
+  const promptPct = Math.round((prompt / total) * 100);
+  // Reasoning is a subset of completion, but show it as a third segment
+  const reasoningPct = Math.round((reasoning / total) * 100);
+  const outputPct = Math.max(0, Math.round(((completion - reasoning) / total) * 100));
+  const remainPct = Math.max(0, 100 - promptPct - reasoningPct - outputPct);
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-xs text-gray-500">
+        <span>Token usage</span>
+        <span className="font-mono font-medium text-gray-700">{total.toLocaleString()}</span>
+      </div>
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex">
+        <div className="bg-indigo-400 transition-all duration-500" style={{ width: `${promptPct}%` }} title={`Prompt: ${prompt.toLocaleString()}`} />
+        {reasoning > 0 && (
+          <div className="bg-amber-400 transition-all duration-500" style={{ width: `${reasoningPct}%` }} title={`Reasoning: ${reasoning.toLocaleString()}`} />
+        )}
+        <div className="bg-emerald-400 transition-all duration-500" style={{ width: `${outputPct + remainPct}%` }} title={`Output: ${(completion - reasoning).toLocaleString()}`} />
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
+          Prompt <span className="font-mono text-gray-700">{prompt.toLocaleString()}</span>
+        </span>
+        {reasoning > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+            Reasoning <span className="font-mono text-gray-700">{reasoning.toLocaleString()}</span>
+          </span>
+        )}
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
+          Output <span className="font-mono text-gray-700">{(completion - reasoning).toLocaleString()}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function ThoughtChain({
   thoughts,
   toolCalls,
   isStreaming,
   runStats,
 }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const hasContent = thoughts.length > 0 || toolCalls.length > 0 || runStats;
   if (!hasContent) return null;
 
-  const completedTools = toolCalls.filter((t) => t.status === "completed").length;
-  const totalTools = toolCalls.length;
+  // Deduplicate: keep only the latest event per resolved tool name (completed overrides started)
+  const toolMap = new Map<string, ToolCallInfo>();
+  for (const tc of toolCalls) {
+    const resolvedName = resolveSkillName(tc);
+    const resolved = { ...tc, skillName: resolvedName };
+    const existing = toolMap.get(resolvedName);
+    if (!existing || tc.status !== "started") {
+      toolMap.set(resolvedName, resolved);
+    }
+  }
+  const uniqueTools = Array.from(toolMap.values());
+
+  const completedTools = uniqueTools.filter((t) => t.status === "completed").length;
+  const totalTools = uniqueTools.length;
+
+  // Detailed tool calls (keep all events including duplicates for the detail view)
+  const completedOrFailedCalls = toolCalls
+    .filter((t) => t.status !== "started")
+    .map((tc) => ({ ...tc, skillName: resolveSkillName(tc) }));
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden text-sm">
-      {/* Header bar */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
-      >
-        {isStreaming ? (
-          <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin flex-shrink-0" />
-        ) : (
-          <svg
-            className="w-4 h-4 text-indigo-500 flex-shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M13 10V3L4 14h7v7l9-11h-7z"
-            />
-          </svg>
-        )}
-        <span className="font-medium text-gray-700 text-xs">
-          {isStreaming ? "Agent executing…" : "Execution details"}
-        </span>
-
-        {/* Summary badges in header */}
-        <div className="ml-auto flex items-center gap-2">
-          {totalTools > 0 && (
-            <span className="text-xs text-gray-400 font-mono">
+    <div className="space-y-2">
+      {/* Tool pills — always visible */}
+      {uniqueTools.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {isStreaming && (
+            <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin flex-shrink-0" />
+          )}
+          {uniqueTools.map((tc, i) => (
+            <ToolPill key={`${tc.skillName}-${i}`} tc={tc} />
+          ))}
+          {totalTools > 0 && !isStreaming && (
+            <span className="text-xs text-gray-400 ml-1">
               {completedTools}/{totalTools} tools
             </span>
           )}
-          {runStats && !isStreaming && (
-            <span className="text-xs text-gray-400 font-mono">
-              {formatDuration(runStats.totalDurationMs)}
-            </span>
-          )}
-          {runStats && !isStreaming && runStats.totalTokens > 0 && (
-            <span className="text-xs text-gray-400 font-mono">
-              {runStats.totalTokens.toLocaleString()} tok
-            </span>
-          )}
-          <svg
-            className={`w-3.5 h-3.5 text-gray-400 transition-transform ${
-              collapsed ? "" : "rotate-90"
-            }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
         </div>
-      </button>
+      )}
 
-      {!collapsed && (
-        <div className="px-4 py-3 space-y-3">
-          {/* Agent reasoning */}
-          {thoughts.length > 0 && (
-            <div className="space-y-1">
-              {thoughts.map((thought, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-2 text-xs text-gray-600"
-                >
-                  <span className="text-indigo-400 mt-px flex-shrink-0">
-                    &rsaquo;
-                  </span>
-                  <span>{thought}</span>
+      {/* Expandable details section */}
+      {(completedOrFailedCalls.length > 0 || (runStats && !isStreaming) || thoughts.length > 0) && (
+        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden text-sm">
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="w-full flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+          >
+            <svg
+              className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="font-medium text-gray-600 text-xs">
+              {isStreaming ? "Executing…" : "Execution details"}
+            </span>
+            <div className="ml-auto flex items-center gap-2">
+              {runStats && !isStreaming && (
+                <span className="text-xs text-gray-400 font-mono">{formatDuration(runStats.totalDurationMs)}</span>
+              )}
+              {runStats && !isStreaming && runStats.totalTokens > 0 && (
+                <span className="text-xs text-gray-400 font-mono">{runStats.totalTokens.toLocaleString()} tok</span>
+              )}
+              {runStats && !isStreaming && runStats.reasoningTokens > 0 && (
+                <span className="text-xs text-amber-500 font-mono">{runStats.reasoningTokens.toLocaleString()} reasoning</span>
+              )}
+              <svg
+                className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showDetails ? "rotate-90" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+
+          {showDetails && (
+            <div className="px-4 py-3 space-y-3">
+              {/* Agent reasoning thoughts */}
+              {thoughts.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Reasoning</div>
+                  {thoughts.map((thought, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                      <span className="text-indigo-400 mt-px flex-shrink-0">&rsaquo;</span>
+                      <span>{thought}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          {/* Tool calls timeline */}
-          {toolCalls.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                Tools
-              </div>
-              {toolCalls.map((tc, i) => (
-                <ToolCard key={i} tc={tc} />
-              ))}
-            </div>
-          )}
+              {/* Tool call I/O details */}
+              {completedOrFailedCalls.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Tool details</div>
+                  {completedOrFailedCalls.map((tc, i) => (
+                    <ToolDetail key={i} tc={tc} />
+                  ))}
+                </div>
+              )}
 
-          {/* Performance metrics */}
-          {runStats && !isStreaming && (
-            <div className="space-y-3 border-t border-gray-100 pt-3">
-              {/* Timing grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <MetricCell
-                  label="Total time"
-                  value={formatDuration(runStats.totalDurationMs)}
-                  icon="clock"
-                />
-                {runStats.timeToFirstTokenMs > 0 && (
-                  <MetricCell
-                    label="First token"
-                    value={formatDuration(runStats.timeToFirstTokenMs)}
-                    icon="zap"
-                  />
-                )}
-                {runStats.modelLatencyMs > 0 && (
-                  <MetricCell
-                    label="Model latency"
-                    value={formatDuration(runStats.modelLatencyMs)}
-                    icon="cpu"
-                  />
-                )}
-                {runStats.totalToolCalls > 0 && (
-                  <MetricCell
-                    label="Tool calls"
-                    value={String(runStats.totalToolCalls)}
-                    icon="tool"
-                  />
-                )}
-              </div>
+              {/* Performance metrics */}
+              {runStats && !isStreaming && (
+                <div className="space-y-3 border-t border-gray-100 pt-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <MetricCell label="Total time" value={formatDuration(runStats.totalDurationMs)} icon="clock" />
+                    {runStats.timeToFirstTokenMs > 0 && (
+                      <MetricCell label="First token" value={formatDuration(runStats.timeToFirstTokenMs)} icon="zap" />
+                    )}
+                    {runStats.modelLatencyMs > 0 && (
+                      <MetricCell label="Model latency" value={formatDuration(runStats.modelLatencyMs)} icon="cpu" />
+                    )}
+                    {runStats.totalToolCalls > 0 && (
+                      <MetricCell label="Tool calls" value={String(runStats.totalToolCalls)} icon="tool" />
+                    )}
+                  </div>
 
-              {/* Token usage bar */}
-              {runStats.totalTokens > 0 && (
-                <TokenBar
-                  prompt={runStats.promptTokens}
-                  completion={runStats.completionTokens}
-                  total={runStats.totalTokens}
-                />
+                  {runStats.totalTokens > 0 && (
+                    <TokenBar
+                      prompt={runStats.promptTokens}
+                      completion={runStats.completionTokens}
+                      reasoning={runStats.reasoningTokens}
+                      total={runStats.totalTokens}
+                    />
+                  )}
+                </div>
               )}
             </div>
           )}
