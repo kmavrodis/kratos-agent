@@ -96,11 +96,8 @@ class SkillRegistry:
         self._blob_service = blob_service
 
         if blob_service is not None and blob_service.is_available:
-            # Seed baked-in skills if blob is empty (first deployment)
-            existing = await blob_service.list_skill_names()
-            if not existing:
-                logger.info("Blob storage empty — seeding from baked-in skills/")
-                await blob_service.seed_from_local("skills")
+            # Seed any baked-in skills not yet in blob (first deploy or new skills added)
+            await blob_service.seed_from_local("skills")
 
             # Sync all skills from blob → local filesystem
             await blob_service.sync_to_local()
