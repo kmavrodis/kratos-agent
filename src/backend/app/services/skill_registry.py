@@ -1,13 +1,14 @@
 """Skill registry — loads and manages skills from Azure Blob Storage.
 
-Skills are stored as folder trees in blob:
-  skills/{name}/SKILL.md
-  skills/{name}/scripts/...
+Skills are organized into use-cases:
+  use-cases/{use-case}/SYSTEM_PROMPT.md
+  use-cases/{use-case}/skills/{name}/SKILL.md
+  use-cases/{use-case}/skills/{name}/scripts/...
 
 All metadata (name, description, enabled) lives in the SKILL.md YAML
-frontmatter.  On startup, the registry syncs blob → local filesystem
-and populates an in-memory registry.  On first run (empty blob), seeds
-from baked-in skill folders shipped in the container image.
+frontmatter.  Each use-case has its own SkillRegistry instance and
+system prompt.  On startup, the service loads all use-cases from blob
+(or local fallback) into an in-memory dict of registries.
 """
 
 from __future__ import annotations
@@ -81,47 +82,65 @@ class SkillMetadata:
 
 @dataclass
 class SkillRegistry:
-    """Registry of available skills backed by Azure Blob Storage.
+    """Registry of available skills for a single use-case.
 
-    On load(), syncs skills from blob → local filesystem.
-    If blob is empty, seeds from baked-in skills/ directory.
-    Falls back to loading from local skills/ directory when blob is unavailable.
+    Each use-case gets its own SkillRegistry loaded from blob or local disk.
     """
 
+    use_case: str = "generic"
+    system_prompt: str = ""
     skills: dict[str, SkillMetadata] = field(default_factory=dict)
     _blob_service: BlobSkillService | None = field(default=None, repr=False)
 
-    async def load(self, blob_service: BlobSkillService | None = None) -> None:
-        """Load skills from blob storage, seeding on first run."""
+    async def load(self, use_case: str, blob_service: BlobSkillService | None = None) -> None:
+        """Load skills for a use-case from blob storage, seeding on first run."""
+        self.use_case = use_case
         self._blob_service = blob_service
 
         if blob_service is not None and blob_service.is_available:
-            # Seed any baked-in skills not yet in blob (first deploy or new skills added)
-            await blob_service.seed_from_local("skills")
+            # Seed any baked-in use-cases/skills not yet in blob
+            await blob_service.seed_from_local("use-cases")
 
-            # Sync all skills from blob → local filesystem
-            await blob_service.sync_to_local()
-            local_dir = blob_service.local_dir
+            # Sync this use-case from blob → local filesystem
+            await blob_service.sync_to_local(use_case)
+            local_dir = blob_service.local_dir(use_case)
 
-            for skill_name in await blob_service.list_skill_names():
-                skill_md_path = local_dir / skill_name / "SKILL.md"
+            # Read system prompt
+            prompt_path = local_dir / "SYSTEM_PROMPT.md"
+            if prompt_path.exists():
+                self.system_prompt = prompt_path.read_text()
+
+            # Load skills
+            for skill_name in await blob_service.list_skill_names(use_case):
+                skill_md_path = local_dir / "skills" / skill_name / "SKILL.md"
                 if not skill_md_path.exists():
                     continue
                 instructions = skill_md_path.read_text()
-                skill = _skill_from_md(skill_name, instructions, str(local_dir / skill_name))
+                skill = _skill_from_md(skill_name, instructions, str(local_dir / "skills" / skill_name))
                 self.skills[skill.name] = skill
 
-            logger.info("Loaded %d skills from blob storage", len(self.skills))
+            logger.info("Loaded use-case '%s': %d skills from blob", use_case, len(self.skills))
             return
 
-        # No blob available — fall back to local skills/ directory
-        await self._load_from_local()
+        # No blob available — fall back to local use-cases/ directory
+        await self._load_from_local(use_case)
 
-    async def _load_from_local(self) -> None:
-        """Load skills from the baked-in skills/ directory (local dev fallback)."""
-        skills_dir = Path("skills")
+    async def _load_from_local(self, use_case: str) -> None:
+        """Load a use-case from the baked-in use-cases/ directory (local dev fallback)."""
+        uc_dir = Path("use-cases") / use_case
+        if not uc_dir.exists():
+            logger.warning("No local use-case directory found: %s", uc_dir)
+            return
+
+        # Read system prompt
+        prompt_path = uc_dir / "SYSTEM_PROMPT.md"
+        if prompt_path.exists():
+            self.system_prompt = prompt_path.read_text()
+
+        # Load skills
+        skills_dir = uc_dir / "skills"
         if not skills_dir.exists():
-            logger.warning("No local skills/ directory found")
+            logger.warning("No skills directory in use-case: %s", use_case)
             return
 
         for skill_dir in sorted(skills_dir.iterdir()):
@@ -135,9 +154,9 @@ class SkillRegistry:
             instructions = skill_md.read_text()
             skill = _skill_from_md(skill_dir.name, instructions, str(skill_dir))
             self.skills[skill.name] = skill
-            logger.info("Registered skill: %s (enabled=%s)", skill.name, skill.enabled)
+            logger.info("Registered skill: %s/%s (enabled=%s)", use_case, skill.name, skill.enabled)
 
-        logger.info("Loaded %d skills from local directory", len(self.skills))
+        logger.info("Loaded use-case '%s': %d skills from local", use_case, len(self.skills))
 
     def get_enabled_skills(self) -> list[SkillMetadata]:
         """Return all enabled skills."""
@@ -202,7 +221,7 @@ class SkillRegistry:
         # Persist SKILL.md to blob
         if self._blob_service and self._blob_service.is_available:
             await self._blob_service.upload_skill_file(
-                name, "SKILL.md", skill.instructions.encode()
+                self.use_case, name, "SKILL.md", skill.instructions.encode()
             )
 
         # Update local copy
@@ -230,16 +249,16 @@ class SkillRegistry:
 
         # Set local path
         if self._blob_service and self._blob_service.is_available:
-            skill.local_path = str(self._blob_service.local_dir / skill.name)
+            skill.local_path = str(self._blob_service.local_dir(self.use_case) / "skills" / skill.name)
         else:
-            skill.local_path = str(Path("skills") / skill.name)
+            skill.local_path = str(Path("use-cases") / self.use_case / "skills" / skill.name)
 
         self.skills[skill.name] = skill
 
         # Persist SKILL.md to blob
         if self._blob_service and self._blob_service.is_available:
             await self._blob_service.upload_skill_file(
-                skill.name, "SKILL.md", skill.instructions.encode()
+                self.use_case, skill.name, "SKILL.md", skill.instructions.encode()
             )
 
         # Write local copy
@@ -247,7 +266,7 @@ class SkillRegistry:
         local_dir.mkdir(parents=True, exist_ok=True)
         (local_dir / "SKILL.md").write_text(skill.instructions)
 
-        logger.info("Added skill: %s", skill.name)
+        logger.info("Added skill: %s/%s", self.use_case, skill.name)
         return skill
 
     async def remove_skill(self, name: str) -> bool:

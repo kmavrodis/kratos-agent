@@ -46,6 +46,9 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
     cosmos = request.app.state.cosmos_service
     copilot_agent = request.app.state.copilot_agent
 
+    # Associate conversation with the requested use-case
+    copilot_agent.set_conversation_use_case(body.conversationId, body.useCase)
+
     async def event_generator():  # noqa: ANN202
         start_time = time.monotonic()
         total_tool_calls = 0

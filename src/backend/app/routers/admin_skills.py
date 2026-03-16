@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.models import SkillCreate, SkillList, SkillResponse, SkillUpdate
 from app.services.skill_registry import SkillMetadata, SkillRegistry
@@ -10,6 +10,18 @@ from app.services.skill_registry import SkillMetadata, SkillRegistry
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _get_registry(request: Request, use_case: str) -> SkillRegistry:
+    """Resolve the SkillRegistry for the given use-case."""
+    registries = getattr(request.app.state, "registries", {})
+    registry = registries.get(use_case)
+    if registry is None:
+        # Fall back to the legacy single registry
+        registry = getattr(request.app.state, "skill_registry", None)
+    if registry is None:
+        raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
+    return registry
 
 
 def _reset_sessions(request: Request) -> None:
@@ -31,17 +43,17 @@ def _to_response(skill: SkillMetadata) -> SkillResponse:
 
 
 @router.get("", response_model=SkillList)
-async def list_skills(request: Request) -> SkillList:
-    """List all registered skills."""
-    registry: SkillRegistry = request.app.state.skill_registry
+async def list_skills(request: Request, use_case: str = Query("generic")) -> SkillList:
+    """List all registered skills for a use-case."""
+    registry = _get_registry(request, use_case)
     skills = sorted(registry.skills.values(), key=lambda s: s.name)
     return SkillList(skills=[_to_response(s) for s in skills])
 
 
 @router.get("/{skill_name}", response_model=SkillResponse)
-async def get_skill(skill_name: str, request: Request) -> SkillResponse:
+async def get_skill(skill_name: str, request: Request, use_case: str = Query("generic")) -> SkillResponse:
     """Get a single skill by name."""
-    registry: SkillRegistry = request.app.state.skill_registry
+    registry = _get_registry(request, use_case)
     skill = registry.get_skill(skill_name)
     if not skill:
         raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
@@ -49,9 +61,9 @@ async def get_skill(skill_name: str, request: Request) -> SkillResponse:
 
 
 @router.post("", response_model=SkillResponse, status_code=201)
-async def create_skill(body: SkillCreate, request: Request) -> SkillResponse:
+async def create_skill(body: SkillCreate, request: Request, use_case: str = Query("generic")) -> SkillResponse:
     """Create a new skill definition."""
-    registry: SkillRegistry = request.app.state.skill_registry
+    registry = _get_registry(request, use_case)
 
     if registry.get_skill(body.name):
         raise HTTPException(status_code=409, detail=f"Skill '{body.name}' already exists")
@@ -70,9 +82,9 @@ async def create_skill(body: SkillCreate, request: Request) -> SkillResponse:
 
 
 @router.patch("/{skill_name}", response_model=SkillResponse)
-async def update_skill(skill_name: str, body: SkillUpdate, request: Request) -> SkillResponse:
+async def update_skill(skill_name: str, body: SkillUpdate, request: Request, use_case: str = Query("generic")) -> SkillResponse:
     """Update an existing skill (partial update)."""
-    registry: SkillRegistry = request.app.state.skill_registry
+    registry = _get_registry(request, use_case)
 
     updates = body.model_dump(exclude_none=True)
     if not updates:
@@ -88,9 +100,9 @@ async def update_skill(skill_name: str, body: SkillUpdate, request: Request) -> 
 
 
 @router.delete("/{skill_name}", status_code=204)
-async def delete_skill(skill_name: str, request: Request) -> None:
+async def delete_skill(skill_name: str, request: Request, use_case: str = Query("generic")) -> None:
     """Delete a skill definition."""
-    registry: SkillRegistry = request.app.state.skill_registry
+    registry = _get_registry(request, use_case)
 
     removed = await registry.remove_skill(skill_name)
     if not removed:

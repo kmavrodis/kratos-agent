@@ -1,6 +1,6 @@
 "use client";
 
-import { Conversation } from "@/types";
+import { Conversation, UseCase } from "@/types";
 
 interface Props {
   conversations: Conversation[];
@@ -9,9 +9,12 @@ interface Props {
   onSelect: (conv: Conversation) => void;
   onOpenSettings: () => void;
   onOpenSkills: () => void;
+  useCases: UseCase[];
+  selectedUseCase: string;
+  onSelectUseCase: (name: string) => void;
 }
 
-export function Sidebar({ conversations, activeId, onNew, onSelect, onOpenSettings, onOpenSkills }: Props) {
+export function Sidebar({ conversations, activeId, onNew, onSelect, onOpenSettings, onOpenSkills, useCases, selectedUseCase, onSelectUseCase }: Props) {
   return (
     <aside className="w-72 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
       {/* Logo / brand */}
@@ -28,6 +31,26 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onOpenSettin
           </div>
         </div>
       </div>
+
+      {/* Use-case selector */}
+      {useCases.length > 1 && (
+        <div className="px-3 py-3 border-b border-gray-200">
+          <label className="block text-xs font-medium text-gray-500 mb-1.5 px-1">
+            Agent Persona
+          </label>
+          <select
+            value={selectedUseCase}
+            onChange={(e) => onSelectUseCase(e.target.value)}
+            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          >
+            {useCases.map((uc) => (
+              <option key={uc.name} value={uc.name}>
+                {uc.displayName} ({uc.skillCount} skills)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* New conversation button */}
       <div className="px-3 py-3">
@@ -64,13 +87,18 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onOpenSettin
               <li key={conv.id}>
                 <button
                   onClick={() => onSelect(conv)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate ${
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     activeId === conv.id
                       ? "bg-primary-50 text-primary-700 font-medium"
                       : "text-gray-700 hover:bg-gray-100"
                   }`}
                 >
-                  {conv.title}
+                  <span className="block truncate">{conv.title}</span>
+                  {conv.useCase && conv.useCase !== "generic" && (
+                    <span className="text-[10px] text-gray-400">
+                      {conv.useCase.replace(/-/g, " ")}
+                    </span>
+                  )}
                 </button>
               </li>
             ))}

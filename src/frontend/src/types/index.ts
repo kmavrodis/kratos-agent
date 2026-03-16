@@ -1,6 +1,7 @@
 export interface Conversation {
   id: string;
   title: string;
+  useCase: string;
   status: "active" | "archived";
   createdAt: string;
   updatedAt: string;
@@ -149,4 +150,13 @@ export interface SkillUpdate {
 export interface SystemPrompt {
   content: string;
   isDefault: boolean;
+}
+
+// ─── Use Cases ───
+
+export interface UseCase {
+  name: string;
+  displayName: string;
+  description: string;
+  skillCount: number;
 }

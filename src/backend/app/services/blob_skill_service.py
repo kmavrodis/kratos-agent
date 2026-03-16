@@ -1,11 +1,12 @@
-"""Blob Storage service for skill persistence.
+"""Blob Storage service for use-case and skill persistence.
 
-Skills are stored as folder trees in Azure Blob Storage:
-  skills/{skill-name}/SKILL.md
-  skills/{skill-name}/scripts/...
+Use-cases are stored as folder trees in Azure Blob Storage:
+  use-cases/{use-case}/SYSTEM_PROMPT.md
+  use-cases/{use-case}/skills/{skill-name}/SKILL.md
+  use-cases/{use-case}/skills/{skill-name}/scripts/...
 
-All metadata (name, description, enabled) lives in the SKILL.md YAML
-frontmatter — no separate metadata file needed.
+All skill metadata (name, description, enabled) lives in the SKILL.md YAML
+frontmatter.  Each use-case has its own system prompt and skill set.
 
 On startup the registry syncs blob → local filesystem so the Copilot SDK
 can read SKILL.md files from disk.  The admin API writes back to blob.
@@ -22,15 +23,15 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
-_SKILLS_PREFIX = "skills/"
+_USE_CASES_PREFIX = "use-cases/"
 
 
 class BlobSkillService:
-    """Manages skill storage in Azure Blob Storage."""
+    """Manages use-case and skill storage in Azure Blob Storage."""
 
-    def __init__(self, settings: Settings, local_skills_dir: str = "/tmp/skills") -> None:  # noqa: S108
+    def __init__(self, settings: Settings, local_base_dir: str = "/tmp/use-cases") -> None:  # noqa: S108
         self.settings = settings
-        self.local_dir = Path(local_skills_dir)
+        self.local_base_dir = Path(local_base_dir)
         self._container_client: ContainerClient | None = None
         self._credential: DefaultAzureCredential | None = None
 
@@ -54,128 +55,185 @@ class BlobSkillService:
     def is_available(self) -> bool:
         return self._container_client is not None
 
-    # ─── Read operations ──────────────────────────────────────────────────
+    def local_dir(self, use_case: str) -> Path:
+        """Return the local directory for a specific use-case."""
+        return self.local_base_dir / use_case
 
-    async def list_skill_names(self) -> list[str]:
-        """Return a list of skill names (top-level folders under skills/)."""
+    # ─── Use-case operations ──────────────────────────────────────────────
+
+    async def list_use_cases(self) -> list[str]:
+        """Return a list of use-case names (top-level folders under use-cases/)."""
         if not self._container_client:
             return []
         names: set[str] = set()
-        async for blob in self._container_client.list_blobs(name_starts_with=_SKILLS_PREFIX):
-            # skills/web-search/SKILL.md → web-search
-            parts = blob.name.removeprefix(_SKILLS_PREFIX).split("/")
+        async for blob in self._container_client.list_blobs(name_starts_with=_USE_CASES_PREFIX):
+            parts = blob.name.removeprefix(_USE_CASES_PREFIX).split("/")
             if parts and parts[0]:
                 names.add(parts[0])
         return sorted(names)
 
-    async def download_skill_file(self, skill_name: str, relative_path: str) -> bytes | None:
-        """Download a single file from a skill folder."""
-        if not self._container_client:
-            return None
-        blob_path = f"{_SKILLS_PREFIX}{skill_name}/{relative_path}"
-        try:
-            blob = self._container_client.get_blob_client(blob_path)
-            stream = await blob.download_blob()
-            return await stream.readall()
-        except Exception:
-            return None
+    async def download_system_prompt(self, use_case: str) -> str | None:
+        """Download the SYSTEM_PROMPT.md for a use-case."""
+        content = await self._download_file(f"{_USE_CASES_PREFIX}{use_case}/SYSTEM_PROMPT.md")
+        return content.decode() if content else None
 
-    async def sync_to_local(self) -> None:
-        """Download all skill folders from blob to local filesystem."""
+    # ─── Skill read operations ────────────────────────────────────────────
+
+    async def list_skill_names(self, use_case: str) -> list[str]:
+        """Return skill names for a specific use-case."""
+        if not self._container_client:
+            return []
+        prefix = f"{_USE_CASES_PREFIX}{use_case}/skills/"
+        names: set[str] = set()
+        async for blob in self._container_client.list_blobs(name_starts_with=prefix):
+            parts = blob.name.removeprefix(prefix).split("/")
+            if parts and parts[0]:
+                names.add(parts[0])
+        return sorted(names)
+
+    async def download_skill_file(self, use_case: str, skill_name: str, relative_path: str) -> bytes | None:
+        """Download a single file from a skill folder."""
+        blob_path = f"{_USE_CASES_PREFIX}{use_case}/skills/{skill_name}/{relative_path}"
+        return await self._download_file(blob_path)
+
+    async def sync_to_local(self, use_case: str) -> None:
+        """Download all files for a use-case from blob to local filesystem."""
         if not self._container_client:
             return
 
-        self.local_dir.mkdir(parents=True, exist_ok=True)
+        prefix = f"{_USE_CASES_PREFIX}{use_case}/"
+        local = self.local_dir(use_case)
+        local.mkdir(parents=True, exist_ok=True)
         count = 0
 
-        async for blob in self._container_client.list_blobs(name_starts_with=_SKILLS_PREFIX):
-            relative = blob.name.removeprefix(_SKILLS_PREFIX)
-            parts = relative.split("/", 1)
-            if len(parts) < 2 or not parts[0]:
+        async for blob in self._container_client.list_blobs(name_starts_with=prefix):
+            relative = blob.name.removeprefix(prefix)
+            if not relative:
                 continue
-            skill_name, file_path = parts[0], parts[1]
 
             blob_client = self._container_client.get_blob_client(blob.name)
             stream = await blob_client.download_blob()
             content = await stream.readall()
 
-            local_path = self.local_dir / skill_name / file_path
+            local_path = local / relative
             local_path.parent.mkdir(parents=True, exist_ok=True)
             local_path.write_bytes(content)
 
-            if file_path == "SKILL.md":
+            if relative.endswith("SKILL.md"):
                 count += 1
 
-        logger.info("Synced %d skills from blob to %s", count, self.local_dir)
+        logger.info("Synced use-case '%s': %d skills to %s", use_case, count, local)
 
     # ─── Write operations ─────────────────────────────────────────────────
 
-    async def upload_skill_file(self, skill_name: str, relative_path: str, content: bytes) -> None:
-        """Upload a single file to a skill folder."""
+    async def upload_file(self, blob_path: str, content: bytes) -> None:
+        """Upload a file to an arbitrary blob path."""
         if not self._container_client:
             return
-        blob_path = f"{_SKILLS_PREFIX}{skill_name}/{relative_path}"
         blob = self._container_client.get_blob_client(blob_path)
         await blob.upload_blob(content, overwrite=True)
 
-    async def upload_skill_folder(self, skill_name: str, local_folder: Path) -> None:
+    async def upload_skill_file(self, use_case: str, skill_name: str, relative_path: str, content: bytes) -> None:
+        """Upload a single file to a skill folder within a use-case."""
+        blob_path = f"{_USE_CASES_PREFIX}{use_case}/skills/{skill_name}/{relative_path}"
+        await self.upload_file(blob_path, content)
+
+    async def upload_skill_folder(self, use_case: str, skill_name: str, local_folder: Path) -> None:
         """Upload an entire local skill folder to blob."""
         if not self._container_client:
             return
         for local_path in local_folder.rglob("*"):
             if local_path.is_file():
                 relative = str(local_path.relative_to(local_folder))
-                await self.upload_skill_file(skill_name, relative, local_path.read_bytes())
-        logger.info("Uploaded skill folder: %s", skill_name)
+                await self.upload_skill_file(use_case, skill_name, relative, local_path.read_bytes())
+        logger.info("Uploaded skill folder: %s/%s", use_case, skill_name)
 
-    async def delete_skill(self, skill_name: str) -> None:
-        """Delete all blobs for a skill."""
+    async def delete_skill(self, use_case: str, skill_name: str) -> None:
+        """Delete all blobs for a skill within a use-case."""
         if not self._container_client:
             return
-        prefix = f"{_SKILLS_PREFIX}{skill_name}/"
+        prefix = f"{_USE_CASES_PREFIX}{use_case}/skills/{skill_name}/"
         async for blob in self._container_client.list_blobs(name_starts_with=prefix):
             blob_client = self._container_client.get_blob_client(blob.name)
             await blob_client.delete_blob()
-        logger.info("Deleted skill from blob: %s", skill_name)
+        logger.info("Deleted skill from blob: %s/%s", use_case, skill_name)
 
-    # ─── Seed from local baked-in skills ──────────────────────────────────
+    # ─── Seed from local baked-in use-cases ───────────────────────────────
 
-    async def seed_from_local(self, skills_dir: str = "skills") -> int:
-        """Upload baked-in skills from the container image to blob (first-run).
+    async def seed_from_local(self, use_cases_dir: str = "use-cases") -> int:
+        """Upload baked-in use-cases from the container image to blob.
 
-        Only uploads skills that don't already exist in blob.
+        Only uploads use-cases/skills that don't already exist in blob.
         Ensures each SKILL.md has an `enabled: true` frontmatter field.
-        Returns the number of skills seeded.
+        Returns the number of use-cases seeded (at least partially).
         """
         if not self._container_client:
             return 0
 
-        existing = set(await self.list_skill_names())
-        local = Path(skills_dir)
+        local = Path(use_cases_dir)
         if not local.exists():
             return 0
 
+        existing_use_cases = set(await self.list_use_cases())
         seeded = 0
-        for skill_dir in sorted(local.iterdir()):
-            if not skill_dir.is_dir():
+
+        for uc_dir in sorted(local.iterdir()):
+            if not uc_dir.is_dir():
                 continue
-            skill_name = skill_dir.name
-            if skill_name in existing:
+            uc_name = uc_dir.name
+
+            # Upload SYSTEM_PROMPT.md if this is a new use-case
+            if uc_name not in existing_use_cases:
+                prompt_file = uc_dir / "SYSTEM_PROMPT.md"
+                if prompt_file.exists():
+                    blob_path = f"{_USE_CASES_PREFIX}{uc_name}/SYSTEM_PROMPT.md"
+                    await self.upload_file(blob_path, prompt_file.read_bytes())
+
+            # Seed skills not yet in blob
+            existing_skills = set(await self.list_skill_names(uc_name))
+            skills_dir = uc_dir / "skills"
+            if not skills_dir.exists():
+                if uc_name not in existing_use_cases:
+                    seeded += 1
                 continue
 
-            # Ensure SKILL.md has enabled field in frontmatter before uploading
-            skill_md = skill_dir / "SKILL.md"
-            if skill_md.exists():
-                content = skill_md.read_text()
-                content = _ensure_enabled_frontmatter(content, skill_name)
-                skill_md.write_text(content)
+            uc_seeded = False
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_name = skill_dir.name
+                if skill_name in existing_skills:
+                    continue
 
-            await self.upload_skill_folder(skill_name, skill_dir)
-            seeded += 1
+                # Ensure SKILL.md has enabled field in frontmatter
+                skill_md = skill_dir / "SKILL.md"
+                if skill_md.exists():
+                    content = skill_md.read_text()
+                    content = _ensure_enabled_frontmatter(content, skill_name)
+                    skill_md.write_text(content)
+
+                await self.upload_skill_folder(uc_name, skill_name, skill_dir)
+                uc_seeded = True
+
+            if uc_seeded or uc_name not in existing_use_cases:
+                seeded += 1
 
         if seeded:
-            logger.info("Seeded %d skills to blob storage", seeded)
+            logger.info("Seeded %d use-cases to blob storage", seeded)
         return seeded
+
+    # ─── Internal helpers ─────────────────────────────────────────────────
+
+    async def _download_file(self, blob_path: str) -> bytes | None:
+        """Download a single blob by path."""
+        if not self._container_client:
+            return None
+        try:
+            blob = self._container_client.get_blob_client(blob_path)
+            stream = await blob.download_blob()
+            return await stream.readall()
+        except Exception:
+            return None
 
     async def close(self) -> None:
         """Clean up resources."""

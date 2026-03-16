@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChatWindow } from "@/components/ChatWindow";
 import { Sidebar } from "@/components/Sidebar";
 import { SettingsModal } from "@/components/SettingsModal";
 import { SkillsAdminPanel } from "@/components/SkillsAdminPanel";
-import { Conversation } from "@/types";
+import { Conversation, UseCase } from "@/types";
+import { listUseCases } from "@/lib/api";
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -13,11 +14,28 @@ export default function Home() {
     useState<Conversation | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
+  const [useCases, setUseCases] = useState<UseCase[]>([]);
+  const [selectedUseCase, setSelectedUseCase] = useState<string>("generic");
+
+  useEffect(() => {
+    listUseCases()
+      .then((ucs) => {
+        setUseCases(ucs);
+        if (ucs.length > 0 && !ucs.find((uc) => uc.name === selectedUseCase)) {
+          setSelectedUseCase(ucs[0].name);
+        }
+      })
+      .catch(() => {
+        // Fallback — API not available yet
+        setUseCases([{ name: "generic", displayName: "Generic Assistant", description: "", skillCount: 0 }]);
+      });
+  }, []);
 
   const handleNewConversation = () => {
     const newConv: Conversation = {
       id: crypto.randomUUID(),
       title: "New Conversation",
+      useCase: selectedUseCase,
       status: "active",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -28,6 +46,7 @@ export default function Home() {
 
   const handleSelectConversation = (conv: Conversation) => {
     setActiveConversation(conv);
+    setSelectedUseCase(conv.useCase || "generic");
   };
 
   return (
@@ -40,13 +59,16 @@ export default function Home() {
         onSelect={handleSelectConversation}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenSkills={() => setSkillsOpen(true)}
+        useCases={useCases}
+        selectedUseCase={selectedUseCase}
+        onSelectUseCase={setSelectedUseCase}
       />
 
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Skills admin panel */}
-      <SkillsAdminPanel open={skillsOpen} onClose={() => setSkillsOpen(false)} />
+      <SkillsAdminPanel open={skillsOpen} onClose={() => setSkillsOpen(false)} useCase={selectedUseCase} />
 
       {/* Main chat area */}
       <main className="flex-1 flex flex-col">

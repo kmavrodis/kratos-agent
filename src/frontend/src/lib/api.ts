@@ -11,12 +11,16 @@ export async function streamAgentChat(
   onEvent: (event: { type: string; data: unknown }) => void,
   onError: (error: Error) => void,
   onDone: () => void,
-  attachments?: Attachment[]
+  attachments?: Attachment[],
+  useCase?: string
 ): Promise<void> {
   try {
     const payload: Record<string, unknown> = { conversationId, message };
     if (attachments && attachments.length > 0) {
       payload.attachments = attachments;
+    }
+    if (useCase) {
+      payload.useCase = useCase;
     }
 
     const response = await fetch(`${API_URL}/api/agent/chat`, {
@@ -77,12 +81,13 @@ export async function streamAgentChat(
  * Create a new conversation.
  */
 export async function createConversation(
-  title: string = "New Conversation"
-): Promise<{ id: string; title: string }> {
+  title: string = "New Conversation",
+  useCase: string = "generic"
+): Promise<{ id: string; title: string; useCase: string }> {
   const response = await fetch(`${API_URL}/api/conversations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, useCase }),
   });
 
   if (!response.ok) {
@@ -121,25 +126,36 @@ export async function listConversations(): Promise<{ conversations: unknown[] }>
   return response.json();
 }
 
+// ─── Use Cases API ───
+
+import type { UseCase } from "@/types";
+
+export async function listUseCases(): Promise<UseCase[]> {
+  const response = await fetch(`${API_URL}/api/use-cases`);
+  if (!response.ok) throw new Error(`Failed to list use-cases: ${response.status}`);
+  const data = await response.json();
+  return data.useCases;
+}
+
 // ─── Skills Admin API ───
 
 import type { Skill, SkillCreate, SkillUpdate } from "@/types";
 
-export async function listSkills(): Promise<Skill[]> {
-  const response = await fetch(`${API_URL}/api/admin/skills`);
+export async function listSkills(useCase: string = "generic"): Promise<Skill[]> {
+  const response = await fetch(`${API_URL}/api/admin/skills?use_case=${encodeURIComponent(useCase)}`);
   if (!response.ok) throw new Error(`Failed to list skills: ${response.status}`);
   const data = await response.json();
   return data.skills;
 }
 
-export async function getSkill(name: string): Promise<Skill> {
-  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}`);
+export async function getSkill(name: string, useCase: string = "generic"): Promise<Skill> {
+  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}?use_case=${encodeURIComponent(useCase)}`);
   if (!response.ok) throw new Error(`Failed to get skill: ${response.status}`);
   return response.json();
 }
 
-export async function createSkill(skill: SkillCreate): Promise<Skill> {
-  const response = await fetch(`${API_URL}/api/admin/skills`, {
+export async function createSkill(skill: SkillCreate, useCase: string = "generic"): Promise<Skill> {
+  const response = await fetch(`${API_URL}/api/admin/skills?use_case=${encodeURIComponent(useCase)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(skill),
@@ -151,8 +167,8 @@ export async function createSkill(skill: SkillCreate): Promise<Skill> {
   return response.json();
 }
 
-export async function updateSkill(name: string, updates: SkillUpdate): Promise<Skill> {
-  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}`, {
+export async function updateSkill(name: string, updates: SkillUpdate, useCase: string = "generic"): Promise<Skill> {
+  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}?use_case=${encodeURIComponent(useCase)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
@@ -164,8 +180,8 @@ export async function updateSkill(name: string, updates: SkillUpdate): Promise<S
   return response.json();
 }
 
-export async function deleteSkill(name: string): Promise<void> {
-  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}`, {
+export async function deleteSkill(name: string, useCase: string = "generic"): Promise<void> {
+  const response = await fetch(`${API_URL}/api/admin/skills/${encodeURIComponent(name)}?use_case=${encodeURIComponent(useCase)}`, {
     method: "DELETE",
   });
   if (!response.ok) {

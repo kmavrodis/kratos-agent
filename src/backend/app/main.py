@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import setup_telemetry
-from app.routers import admin_prompt, admin_skills, agent, conversations, files, health, settings
+from app.routers import admin_prompt, admin_skills, agent, conversations, files, health, settings, use_cases
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
@@ -45,14 +45,31 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await blob_skill_service.initialize()
     application.state.blob_skill_service = blob_skill_service
 
-    # Load skill registry from blob storage (seeds on first run)
-    skill_registry = SkillRegistry()
-    await skill_registry.load(blob_skill_service)
-    application.state.skill_registry = skill_registry
+    # Load all use-case registries from blob storage (seeds on first run)
+    registries: dict[str, SkillRegistry] = {}
+    if blob_skill_service.is_available:
+        # Seed first, then discover use-cases
+        await blob_skill_service.seed_from_local("use-cases")
+        use_case_names = await blob_skill_service.list_use_cases()
+    else:
+        # Local fallback — discover use-cases from local directory
+        from pathlib import Path
+        uc_dir = Path("use-cases")
+        use_case_names = sorted(d.name for d in uc_dir.iterdir() if d.is_dir()) if uc_dir.exists() else ["generic"]
+
+    for uc_name in use_case_names:
+        registry = SkillRegistry()
+        await registry.load(uc_name, blob_skill_service if blob_skill_service.is_available else None)
+        registries[uc_name] = registry
+
+    application.state.registries = registries
+    # Keep backward compat: skill_registry points to "generic"
+    application.state.skill_registry = registries.get("generic", SkillRegistry())
+    logger.info("Loaded %d use-cases: %s", len(registries), list(registries.keys()))
 
     # Initialize Copilot SDK agent (uses DefaultAzureCredential for Azure OpenAI)
     copilot_agent = CopilotAgent(settings)
-    copilot_agent.set_skill_registry(skill_registry)
+    copilot_agent.set_registries(registries)
     copilot_agent.set_cosmos_service(cosmos_service)
 
     # Load system prompt from Cosmos (falls back to default if not set)
@@ -96,4 +113,5 @@ app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
+app.include_router(use_cases.router, prefix="/api/use-cases", tags=["use-cases"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])

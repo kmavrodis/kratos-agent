@@ -16,8 +16,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 # Copy backend application
 COPY src/backend/ .
 
-# Copy baked-in skill definitions (seeded to blob on first run)
-COPY skills/ ./skills/
+# Copy baked-in use-case definitions (seeded to blob on first run)
+COPY use-cases/ ./use-cases/
 
 # Install dependencies
 RUN pip install --no-cache-dir .

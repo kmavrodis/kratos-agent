@@ -25,12 +25,14 @@ class ConversationStatus(str, Enum):
 
 class ConversationCreate(BaseModel):
     title: str = "New Conversation"
+    useCase: str = "generic"
 
 
 class Conversation(BaseModel):
     id: str
     userId: str
     title: str
+    useCase: str = "generic"
     status: ConversationStatus = ConversationStatus.ACTIVE
     createdAt: datetime
     updatedAt: datetime
@@ -86,6 +88,7 @@ Attachment = FileAttachment | DirectoryAttachment | SelectionAttachment
 class AgentRequest(BaseModel):
     conversationId: str
     message: str
+    useCase: str = "generic"
     attachments: list[Attachment] = Field(default_factory=list)
 
 
@@ -204,6 +207,19 @@ class SkillList(BaseModel):
 
 
 # ─── System Prompt Admin ───
+
+class UseCaseInfo(BaseModel):
+    """Use-case metadata as returned by the API."""
+    name: str
+    displayName: str = ""
+    description: str = ""
+    skillCount: int = 0
+
+
+class UseCaseList(BaseModel):
+    """List of available use-cases."""
+    useCases: list[UseCaseInfo]
+
 
 class SystemPromptResponse(BaseModel):
     """System prompt as returned by the admin API."""

@@ -44,6 +44,9 @@ When producing files, always write them to /tmp and reference the path so the us
 
 DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT
 
+# Default use-case when none is specified
+DEFAULT_USE_CASE = "generic"
+
 
 class CopilotAgent:
     """Manages one CopilotClient shared across the app lifetime.
@@ -51,17 +54,27 @@ class CopilotAgent:
     Each conversation gets its own SDK session, preserving multi-turn history
     automatically without manually loading from Cosmos DB on every turn.
     Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
+    Supports multiple use-cases, each with their own skills and system prompt.
     """
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._client: CopilotClient | None = None
-        self._skill_registry: object | None = None
+        self._registries: dict[str, object] = {}  # use_case -> SkillRegistry
         self._cosmos_service: "CosmosService | None" = None
         self._sessions: dict[str, object] = {}
+        self._conversation_use_cases: dict[str, str] = {}  # conv_id -> use_case
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
         # Futures for resolving user input requests from the SDK
         self._user_input_futures: dict[str, asyncio.Future] = {}
+        self._queues: dict[str, asyncio.Queue] = {}
+        self._tool_counters: dict[str, int] = {}
+        self._registered_handlers: set[str] = set()
+        self._credential: ManagedIdentityCredential | None = None
+        self._token_provider = None
+        self._usage: dict[str, dict] = {}
+        self._first_token_time: dict[str, float] = {}
+        self._model_response_start: dict[str, float] = {}
 
     @property
     def system_prompt(self) -> str:
@@ -74,9 +87,9 @@ class CopilotAgent:
         self._sessions.clear()
         logger.info("System prompt updated — all sessions reset")
 
-    def set_skill_registry(self, registry: object) -> None:
-        """Inject the skill registry for dynamic tool/skill resolution."""
-        self._skill_registry = registry
+    def set_registries(self, registries: dict[str, object]) -> None:
+        """Inject the use-case skill registries."""
+        self._registries = registries
         self._queues: dict[str, asyncio.Queue] = {}
         self._tool_counters: dict[str, int] = {}
         self._registered_handlers: set[str] = set()
@@ -85,6 +98,40 @@ class CopilotAgent:
         self._usage: dict[str, dict] = {}
         self._first_token_time: dict[str, float] = {}
         self._model_response_start: dict[str, float] = {}
+
+    def set_skill_registry(self, registry: object) -> None:
+        """Inject a single skill registry (backward compat — uses 'generic')."""
+        self._registries = {DEFAULT_USE_CASE: registry}
+        self._queues: dict[str, asyncio.Queue] = {}
+        self._tool_counters: dict[str, int] = {}
+        self._registered_handlers: set[str] = set()
+        self._credential: ManagedIdentityCredential | None = None
+        self._token_provider = None
+        self._usage: dict[str, dict] = {}
+        self._first_token_time: dict[str, float] = {}
+        self._model_response_start: dict[str, float] = {}
+
+    def set_conversation_use_case(self, conversation_id: str, use_case: str) -> None:
+        """Associate a conversation with a use-case."""
+        self._conversation_use_cases[conversation_id] = use_case
+
+    def _get_registry(self, conversation_id: str) -> object | None:
+        """Get the SkillRegistry for a conversation's use-case."""
+        use_case = self._conversation_use_cases.get(conversation_id, DEFAULT_USE_CASE)
+        return self._registries.get(use_case)
+
+    def _get_system_prompt(self, conversation_id: str) -> str:
+        """Get the system prompt for a conversation's use-case."""
+        registry = self._get_registry(conversation_id)
+        if registry is not None and hasattr(registry, "system_prompt") and registry.system_prompt:
+            # Parse out just the body (skip YAML frontmatter)
+            prompt = registry.system_prompt
+            import re
+            match = re.match(r"^---\s*\n.*?\n---\s*\n?", prompt, re.DOTALL)
+            if match:
+                prompt = prompt[match.end():].strip()
+            return prompt
+        return self._system_prompt
 
     def set_cosmos_service(self, cosmos_service: "CosmosService") -> None:
         """Inject the Cosmos service for session persistence."""
@@ -165,7 +212,7 @@ class CopilotAgent:
         self._user_input_futures.clear()
         logger.info("Config updated — all sessions reset")
 
-    def _build_session_config(self, enabled_tools: list, skill_dirs: list) -> dict:
+    def _build_session_config(self, enabled_tools: list, skill_dirs: list, system_prompt: str) -> dict:
         """Build the shared session config dict used for both create and resume."""
         return {
             "model": self.settings.ai_services_model_deployment,
@@ -174,7 +221,7 @@ class CopilotAgent:
             "skill_directories": skill_dirs,
             "system_message": {
                 "mode": "replace",
-                "content": self._system_prompt,
+                "content": system_prompt,
             },
             "provider": {
                 "type": "azure",
@@ -238,20 +285,17 @@ class CopilotAgent:
             logger.info("Reusing SDK session for conversation=%s", conversation_id)
             return self._sessions[conversation_id]
 
-        # Resolve enabled tools and skill directories from the registry
+        # Resolve enabled tools and skill directories from the use-case registry
+        registry = self._get_registry(conversation_id)
         enabled_tools = ALL_TOOLS
-        skill_dirs = [
-            "./skills/web-search",
-            "./skills/rag-search",
-            "./skills/code-interpreter",
-            "./skills/foundry-agent",
-        ]
-        if self._skill_registry is not None:
-            enabled_names = self._skill_registry.get_enabled_tool_names()
+        skill_dirs = []
+        if registry is not None:
+            enabled_names = registry.get_enabled_tool_names()
             enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
-            skill_dirs = self._skill_registry.get_skill_directories()
+            skill_dirs = registry.get_skill_directories()
 
-        config = self._build_session_config(enabled_tools, skill_dirs)
+        system_prompt = self._get_system_prompt(conversation_id)
+        config = self._build_session_config(enabled_tools, skill_dirs, system_prompt)
 
         # Try to resume an existing SDK session from Cosmos DB
         sdk_session_id = None

@@ -215,7 +215,8 @@ export function ChatWindow({ conversation }: Props) {
         setIsStreaming(false);
         setUserInputPrompt(null);
       },
-      currentAttachments
+      currentAttachments,
+      conversation.useCase
     );
   };
 
@@ -271,9 +272,16 @@ export function ChatWindow({ conversation }: Props) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <header className="border-b border-gray-200 px-6 py-4 bg-white">
-        <h2 className="text-lg font-semibold text-gray-900">
-          {conversation.title}
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {conversation.title}
+          </h2>
+          {conversation.useCase && conversation.useCase !== "generic" && (
+            <span className="text-xs px-2 py-0.5 bg-primary-50 text-primary-700 rounded-full font-medium">
+              {conversation.useCase.replace(/-/g, " ")}
+            </span>
+          )}
+        </div>
         <p className="text-sm text-gray-500">
           Powered by GitHub Copilot SDK &amp; Microsoft Foundry
         </p>

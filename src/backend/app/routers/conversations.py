@@ -29,6 +29,7 @@ async def create_conversation(body: ConversationCreate, request: Request) -> Con
         id=str(uuid.uuid4()),
         userId="default-user",  # Replaced by Entra ID user in production
         title=body.title,
+        useCase=body.useCase,
         status=ConversationStatus.ACTIVE,
         createdAt=now,
         updatedAt=now,

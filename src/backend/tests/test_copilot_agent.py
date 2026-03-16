@@ -35,7 +35,8 @@ async def test_copilot_agent_start_stop(copilot_agent):
     mock_client = AsyncMock()
     mock_credential = AsyncMock()
     with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
-         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=mock_credential), \
+         patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=mock_credential), \
+         patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False), \
          patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
         await copilot_agent.start()
 
@@ -58,7 +59,7 @@ async def test_copilot_agent_run_streams_content(copilot_agent):
     def fake_on(callback):
         # Simulate content delta event
         delta_event = MagicMock()
-        delta_event.type.value = "assistant.message.delta"
+        delta_event.type.value = "assistant.message_delta"
         delta_event.data.delta_content = "Hello, world!"
         callback(delta_event)
 
@@ -71,7 +72,8 @@ async def test_copilot_agent_run_streams_content(copilot_agent):
     mock_session.send = AsyncMock()
 
     with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
-         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False), \
          patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
         await copilot_agent.start()
 
@@ -97,22 +99,23 @@ async def test_copilot_agent_run_streams_tool_events(copilot_agent):
     def fake_on(callback):
         # Tool start event
         start_event = MagicMock()
-        start_event.type.value = "tool.execution.start"
+        start_event.type.value = "tool.execution_start"
         start_event.data.tool_name = "web_search"
         start_event.data.input = '{"query": "test"}'
         callback(start_event)
 
         # Tool end event
         end_event = MagicMock()
-        end_event.type.value = "tool.execution.end"
+        end_event.type.value = "tool.execution_complete"
         end_event.data.tool_name = "web_search"
         end_event.data.output = '{"results": []}'
         end_event.data.duration_ms = 150
+        end_event.data.success = True
         callback(end_event)
 
         # Content
         delta_event = MagicMock()
-        delta_event.type.value = "assistant.message.delta"
+        delta_event.type.value = "assistant.message_delta"
         delta_event.data.delta_content = "Based on the search..."
         callback(delta_event)
 
@@ -125,7 +128,8 @@ async def test_copilot_agent_run_streams_tool_events(copilot_agent):
     mock_session.send = AsyncMock()
 
     with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
-         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False), \
          patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
         await copilot_agent.start()
 
@@ -157,7 +161,7 @@ async def test_copilot_agent_run_handles_error(copilot_agent):
 
     def fake_on(callback):
         error_event = MagicMock()
-        error_event.type.value = "error"
+        error_event.type.value = "session.error"
         error_event.data.message = "Model unavailable"
         callback(error_event)
 
@@ -165,7 +169,8 @@ async def test_copilot_agent_run_handles_error(copilot_agent):
     mock_session.send = AsyncMock()
 
     with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
-         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False), \
          patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
         await copilot_agent.start()
 
@@ -198,7 +203,8 @@ async def test_copilot_agent_session_reuse(copilot_agent):
     mock_session.send = AsyncMock()
 
     with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
-         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False), \
          patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
         await copilot_agent.start()
 
@@ -220,7 +226,8 @@ async def test_copilot_agent_exception_drops_session(copilot_agent):
     mock_client.create_session = AsyncMock(side_effect=Exception("connection failed"))
 
     with patch("app.services.copilot_agent.CopilotClient", return_value=mock_client), \
-         patch("app.services.copilot_agent.DefaultAzureCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent.ManagedIdentityCredential", return_value=AsyncMock()), \
+         patch("app.services.copilot_agent._HAS_CLI_CREDENTIAL", False), \
          patch("app.services.copilot_agent.get_bearer_token_provider", return_value=lambda: "token"):
         await copilot_agent.start()
 

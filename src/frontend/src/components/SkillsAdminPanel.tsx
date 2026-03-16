@@ -9,9 +9,10 @@ type Tab = "skills" | "prompt";
 interface Props {
   open: boolean;
   onClose: () => void;
+  useCase?: string;
 }
 
-export function SkillsAdminPanel({ open, onClose }: Props) {
+export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) {
   const [tab, setTab] = useState<Tab>("skills");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,7 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
     setLoading(true);
     setError("");
     try {
-      const data = await listSkills();
+      const data = await listSkills(useCase);
       setSkills(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load skills");
@@ -65,11 +66,11 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
       loadSkills();
       loadPrompt();
     }
-  }, [open]);
+  }, [open, useCase]);
 
   const handleToggle = async (skill: Skill) => {
     try {
-      const updated = await updateSkill(skill.name, { enabled: !skill.enabled });
+      const updated = await updateSkill(skill.name, { enabled: !skill.enabled }, useCase);
       setSkills((prev) => prev.map((s) => (s.name === updated.name ? updated : s)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update skill");
@@ -85,7 +86,7 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
         description: newDescription,
         enabled: true,
         instructions: newInstructions,
-      });
+      }, useCase);
       setSkills((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       setShowCreate(false);
       setNewName("");
@@ -103,7 +104,7 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
       const updated = await updateSkill(editingSkill.name, {
         description: editingSkill.description,
         instructions: editingSkill.instructions,
-      });
+      }, useCase);
       setSkills((prev) => prev.map((s) => (s.name === updated.name ? updated : s)));
       setEditingSkill(null);
     } catch (err) {
@@ -115,7 +116,7 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
     if (!confirm(`Delete skill "${name}"? This cannot be undone.`)) return;
     setError("");
     try {
-      await deleteSkill(name);
+      await deleteSkill(name, useCase);
       setSkills((prev) => prev.filter((s) => s.name !== name));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete skill");
@@ -156,7 +157,7 @@ export function SkillsAdminPanel({ open, onClose }: Props) {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Admin Panel</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Manage skills and system prompt
+                Manage skills and system prompt &mdash; <span className="font-medium text-gray-700">{useCase.replace(/-/g, " ")}</span>
               </p>
             </div>
             <button
