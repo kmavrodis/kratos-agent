@@ -47,11 +47,17 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
     # Load all use-case registries from blob storage (seeds on first run)
     registries: dict[str, SkillRegistry] = {}
-    if blob_skill_service.is_available:
-        # Seed first, then discover use-cases
-        await blob_skill_service.seed_from_local("use-cases")
-        use_case_names = await blob_skill_service.list_use_cases()
-    else:
+    blob_available = blob_skill_service.is_available
+    if blob_available:
+        try:
+            # Seed first, then discover use-cases
+            await blob_skill_service.seed_from_local("use-cases")
+            use_case_names = await blob_skill_service.list_use_cases()
+        except Exception:
+            logger.warning("Blob storage access failed — falling back to local skills", exc_info=True)
+            blob_available = False
+
+    if not blob_available:
         # Local fallback — discover use-cases from local directory
         from pathlib import Path
         uc_dir = Path("use-cases")
@@ -59,7 +65,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
     for uc_name in use_case_names:
         registry = SkillRegistry()
-        await registry.load(uc_name, blob_skill_service if blob_skill_service.is_available else None)
+        await registry.load(uc_name, blob_skill_service if blob_available else None)
         registries[uc_name] = registry
 
     application.state.registries = registries

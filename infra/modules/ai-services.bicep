@@ -17,7 +17,7 @@ param modelName string = 'gpt-5.2'
 param modelVersion string = '2025-12-11'
 
 @description('Deployment SKU capacity (thousands of tokens per minute)')
-param modelCapacity int = 150
+param modelCapacity int = 1000
 
 resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   name: name

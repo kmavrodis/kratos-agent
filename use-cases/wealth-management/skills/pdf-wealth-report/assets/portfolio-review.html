@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  /* ══════════════════════════════════════════
+     WEALTH MANAGEMENT — REPORT THEME
+     Designed for private banking & advisory
+     ══════════════════════════════════════════ */
+
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  :root {
+    --navy:     #0B1F3A;
+    --gold:     #B8860B;
+    --gold-lt:  #F5ECD7;
+    --slate:    #3C4A5C;
+    --text:     #1E2A3A;
+    --muted:    #6B7B8D;
+    --border:   #D4D8DC;
+    --bg-alt:   #F7F8FA;
+    --green:    #1B6B3A;
+    --green-bg: #EDF6F0;
+    --red:      #8B1A1A;
+    --red-bg:   #FDF0F0;
+    --amber:    #8B6914;
+    --amber-bg: #FDF8EC;
+    --blue-bg:  #EDF2F8;
+  }
+
+  body {
+    font-family: 'Georgia', 'Times New Roman', 'Palatino', serif;
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 10.5pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Content wrapper — provides margins for everything except cover */
+  .content {
+    padding: 0 1.8cm 2cm 1.8cm;
+  }
+
+  /* ── Cover / Header ── */
+  .cover-bar {
+    background: linear-gradient(135deg, var(--navy) 0%, #142d4f 60%, #1a3a5c 100%);
+    color: white;
+    padding: 48px 1.8cm 36px 1.8cm;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover-bar::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(135deg, transparent 0%, rgba(184,134,11,0.08) 100%);
+  }
+  .cover-bar .firm-name {
+    font-family: 'Segoe UI', Calibri, sans-serif;
+    font-size: 9pt;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--gold);
+    margin: 0 0 16px 0;
+    font-weight: 600;
+  }
+  .cover-bar h1 {
+    font-size: 26pt;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    margin: 0 0 6px;
+    color: white;
+    border: none;
+    position: relative;
+  }
+  .cover-bar .subtitle {
+    font-size: 12.5pt;
+    color: rgba(255,255,255,0.75);
+    margin: 0 0 20px 0;
+    font-style: italic;
+  }
+  .cover-divider {
+    width: 60px;
+    height: 2px;
+    background: var(--gold);
+    margin: 0 0 20px 0;
+  }
+  .cover-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 9pt;
+    color: #8899AA;
+    font-family: 'Segoe UI', Calibri, Arial, sans-serif;
+    position: relative;
+  }
+  .cover-meta .confidential {
+    color: var(--gold);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 7.5pt;
+    border: 1px solid rgba(184,134,11,0.4);
+    padding: 3px 10px;
+    border-radius: 2px;
+  }
+
+  /* ── Typography ── */
+  h2 {
+    font-size: 14pt;
+    color: var(--navy);
+    margin-top: 28px;
+    padding-bottom: 5px;
+    border-bottom: 2px solid var(--gold);
+    font-weight: 400;
+    letter-spacing: 0.3px;
+  }
+  h3 {
+    font-size: 11.5pt;
+    color: var(--slate);
+    margin-top: 18px;
+    font-weight: 600;
+  }
+  h4 {
+    font-size: 10.5pt;
+    color: var(--muted);
+    margin-top: 14px;
+    font-weight: 600;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 9.5pt;
+    font-family: 'Segoe UI', Calibri, Arial, sans-serif;
+  }
+  th {
+    background: var(--navy);
+    color: white;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 9pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:nth-child(even) { background: var(--bg-alt); }
+  tr.highlight { background: var(--gold-lt) !important; }
+
+  /* ── Financial data styling ── */
+  .positive { color: var(--green); font-weight: 600; }
+  .negative { color: var(--red); font-weight: 600; }
+  .neutral  { color: var(--muted); }
+  .currency { font-family: 'Segoe UI', Calibri, monospace; font-variant-numeric: tabular-nums; }
+
+  /* ── Callout Boxes ── */
+  .box {
+    padding: 12px 16px;
+    margin: 14px 0;
+    border-radius: 2px;
+    font-size: 10pt;
+    border-left: 4px solid;
+    font-family: 'Segoe UI', Calibri, Arial, sans-serif;
+  }
+  .box-insight    { background: var(--blue-bg);  border-color: var(--navy); }
+  .box-risk       { background: var(--red-bg);   border-color: var(--red); }
+  .box-opportunity{ background: var(--green-bg); border-color: var(--green); }
+  .box-note       { background: var(--amber-bg); border-color: var(--amber); }
+
+  /* ── Risk Indicators ── */
+  .risk-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 2px;
+    font-size: 8pt;
+    font-weight: 700;
+    font-family: 'Segoe UI', Calibri, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .risk-low      { background: var(--green-bg); color: var(--green); }
+  .risk-moderate { background: var(--amber-bg); color: var(--amber); }
+  .risk-high     { background: var(--red-bg);   color: var(--red); }
+
+  /* ── Utilities ── */
+  .page-break { page-break-before: always; }
+  .toc {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    padding: 14px 20px;
+    border-radius: 2px;
+    margin: 20px 0;
+    font-family: 'Segoe UI', Calibri, sans-serif;
+  }
+  .toc a { color: var(--navy); text-decoration: none; }
+  .toc li { margin: 4px 0; font-size: 10.5pt; }
+  code {
+    background: var(--bg-alt);
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 9pt;
+    font-family: 'Consolas', monospace;
+  }
+  .footer {
+    margin-top: 30px;
+    padding-top: 14px;
+    border-top: 2px solid var(--gold);
+    font-size: 8.5pt;
+    color: var(--muted);
+    font-family: 'Segoe UI', Calibri, sans-serif;
+  }
+  .disclaimer {
+    font-size: 7.5pt;
+    color: var(--muted);
+    line-height: 1.4;
+    margin-top: 8px;
+    font-family: 'Segoe UI', Calibri, sans-serif;
+  }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .kpi-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--navy);
+    padding: 12px 14px;
+    border-radius: 0 0 2px 2px;
+    font-family: 'Segoe UI', Calibri, sans-serif;
+  }
+  .kpi-card .label { font-size: 8pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .kpi-card .value { font-size: 16pt; font-weight: 700; color: var(--navy); }
+  .kpi-card .delta { font-size: 9pt; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════
+  TEMPLATE: Wealth Management Report
+  Replace ALL_CAPS placeholders with actual data.
+  Delete this comment block before publishing.
+═══════════════════════════════════════════ -->
+
+<div class="cover-bar">
+  <p class="firm-name">FIRM_NAME</p>
+  <h1>REPORT_TITLE</h1>
+  <p class="subtitle">REPORT_SUBTITLE</p>
+  <div class="cover-divider"></div>
+  <div class="cover-meta">
+    <span>Prepared for <strong style="color:white">CLIENT_NAME</strong>  ·  CLIENT_ID</span>
+    <span>DATE  ·  ADVISOR_NAME, ADVISOR_TITLE</span>
+  </div>
+  <div class="cover-meta">
+    <span class="confidential">Strictly Private &amp; Confidential</span>
+    <span>FIRM_LOCATION</span>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#s1">Portfolio Summary</a></li>
+    <li><a href="#s2">Asset Allocation</a></li>
+    <li><a href="#s3">Performance Review</a></li>
+    <li><a href="#s4">Market Outlook & Positioning</a></li>
+    <li><a href="#s5">Risk Assessment</a></li>
+    <li><a href="#s6">Recommendations</a></li>
+  </ol>
+</div>
+
+<!-- ── 1. Portfolio Summary ── -->
+<h2 id="s1">1. Portfolio Summary</h2>
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="label">Total AuM</div>
+    <div class="value currency">CHF 12.4M</div>
+    <div class="delta positive">▲ +3.2% QoQ</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">YTD Return</div>
+    <div class="value positive">+8.7%</div>
+    <div class="delta neutral">Benchmark: +6.2%</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Risk Profile</div>
+    <div class="value">Balanced</div>
+    <div class="delta"><span class="risk-badge risk-moderate">Moderate</span></div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Annual Income</div>
+    <div class="value currency">CHF 186K</div>
+    <div class="delta neutral">Yield: 1.5%</div>
+  </div>
+</div>
+
+<table>
+  <tr><th>Account</th><th>Type</th><th>Currency</th><th>Value</th><th>Allocation</th></tr>
+  <tr><td>Main Portfolio</td><td>Discretionary</td><td>CHF</td><td class="currency">8,200,000</td><td>66%</td></tr>
+  <tr><td>Fixed Income Mandate</td><td>Advisory</td><td>EUR</td><td class="currency">2,400,000</td><td>19%</td></tr>
+  <tr><td>Private Equity</td><td>PE Fund of Funds</td><td>USD</td><td class="currency">1,200,000</td><td>10%</td></tr>
+  <tr><td>Liquidity Reserve</td><td>Cash & MM</td><td>CHF</td><td class="currency">600,000</td><td>5%</td></tr>
+</table>
+
+<!-- ── 2. Asset Allocation ── -->
+<h2 id="s2">2. Asset Allocation</h2>
+
+<table>
+  <tr><th>Asset Class</th><th>Current</th><th>Target</th><th>Deviation</th><th>Risk Contribution</th></tr>
+  <tr>
+    <td>Equities</td>
+    <td>42%</td><td>40%</td>
+    <td class="positive">+2%</td><td>58%</td>
+  </tr>
+  <tr>
+    <td>Fixed Income</td>
+    <td>28%</td><td>30%</td>
+    <td class="negative">-2%</td><td>15%</td>
+  </tr>
+  <tr>
+    <td>Alternatives</td>
+    <td>15%</td><td>15%</td>
+    <td class="neutral">—</td><td>18%</td>
+  </tr>
+  <tr>
+    <td>Real Estate</td>
+    <td>10%</td><td>10%</td>
+    <td class="neutral">—</td><td>7%</td>
+  </tr>
+  <tr class="highlight">
+    <td>Cash & Equivalents</td>
+    <td>5%</td><td>5%</td>
+    <td class="neutral">—</td><td>2%</td>
+  </tr>
+</table>
+
+<div class="box box-insight">
+  <strong>Allocation Note:</strong> Equity overweight of +2% reflects tactical tilt into European value names. Rebalancing recommended at next quarterly review.
+</div>
+
+<!-- ── 3. Performance Review ── -->
+<h2 id="s3" class="page-break">3. Performance Review</h2>
+
+<table>
+  <tr><th>Period</th><th>Portfolio</th><th>Benchmark</th><th>Alpha</th><th>Sharpe Ratio</th></tr>
+  <tr><td>Q1 2026</td><td class="positive">+3.2%</td><td>+2.1%</td><td class="positive">+1.1%</td><td>1.42</td></tr>
+  <tr><td>YTD 2026</td><td class="positive">+8.7%</td><td>+6.2%</td><td class="positive">+2.5%</td><td>1.38</td></tr>
+  <tr><td>1 Year</td><td class="positive">+11.4%</td><td>+9.8%</td><td class="positive">+1.6%</td><td>1.21</td></tr>
+  <tr><td>3 Year (ann.)</td><td class="positive">+7.2%</td><td>+6.5%</td><td class="positive">+0.7%</td><td>0.98</td></tr>
+  <tr><td>Since Inception (ann.)</td><td class="positive">+6.8%</td><td>+5.9%</td><td class="positive">+0.9%</td><td>0.91</td></tr>
+</table>
+
+<h3>Key Contributors</h3>
+<table>
+  <tr><th>Position</th><th>Sector</th><th>Weight</th><th>Contribution</th></tr>
+  <tr><td>Novartis AG</td><td>Healthcare</td><td>4.2%</td><td class="positive">+0.38%</td></tr>
+  <tr><td>ASML Holding</td><td>Technology</td><td>3.8%</td><td class="positive">+0.52%</td></tr>
+  <tr><td>US Treasury 4.25% 2028</td><td>Fixed Income</td><td>5.1%</td><td class="positive">+0.12%</td></tr>
+</table>
+
+<h3>Key Detractors</h3>
+<table>
+  <tr><th>Position</th><th>Sector</th><th>Weight</th><th>Contribution</th></tr>
+  <tr><td>Nestlé SA</td><td>Consumer Staples</td><td>3.5%</td><td class="negative">-0.21%</td></tr>
+  <tr><td>Emerging Market Bond Fund</td><td>Fixed Income</td><td>2.8%</td><td class="negative">-0.15%</td></tr>
+</table>
+
+<!-- ── 4. Market Outlook ── -->
+<h2 id="s4">4. Market Outlook & Positioning</h2>
+
+<table>
+  <tr><th>Theme</th><th>View</th><th>Conviction</th><th>Action</th></tr>
+  <tr><td>European Equities</td><td class="positive">Overweight</td><td><span class="risk-badge risk-moderate">Medium</span></td><td>Add select value names (financials, industrials)</td></tr>
+  <tr><td>US Large Cap</td><td class="neutral">Neutral</td><td><span class="risk-badge risk-moderate">Medium</span></td><td>Hold; trim mega-cap tech on strength</td></tr>
+  <tr><td>Duration</td><td class="positive">Extend</td><td><span class="risk-badge risk-high">High</span></td><td>Add 5-7yr investment grade; ECB cuts expected</td></tr>
+  <tr><td>CHF Cash</td><td class="negative">Underweight</td><td><span class="risk-badge risk-low">Low</span></td><td>Redeploy into short-duration bonds</td></tr>
+  <tr><td>Gold / Commodities</td><td class="positive">Overweight</td><td><span class="risk-badge risk-moderate">Medium</span></td><td>Maintain 3% strategic allocation</td></tr>
+</table>
+
+<div class="box box-opportunity">
+  <strong>Opportunity:</strong> ECB rate path suggests 2-3 cuts through 2026. European investment-grade duration extension offers attractive risk-adjusted carry.
+</div>
+
+<div class="box box-risk">
+  <strong>Risk:</strong> US tariff escalation and geopolitical uncertainty remain key tail risks. Portfolio stress-tested for a 15% equity drawdown — current structure absorbs within risk tolerance.
+</div>
+
+<!-- ── 5. Risk Assessment ── -->
+<h2 id="s5" class="page-break">5. Risk Assessment</h2>
+
+<table>
+  <tr><th>Risk Metric</th><th>Current</th><th>Limit</th><th>Status</th></tr>
+  <tr><td>Portfolio Volatility (ann.)</td><td>7.8%</td><td>12.0%</td><td><span class="risk-badge risk-low">Within</span></td></tr>
+  <tr><td>VaR (95%, 1m)</td><td class="currency">CHF 248K</td><td>CHF 500K</td><td><span class="risk-badge risk-low">Within</span></td></tr>
+  <tr><td>Max Drawdown (12m)</td><td>-4.2%</td><td>-15.0%</td><td><span class="risk-badge risk-low">Within</span></td></tr>
+  <tr><td>Single Position Limit</td><td>4.8%</td><td>5.0%</td><td><span class="risk-badge risk-moderate">Near Limit</span></td></tr>
+  <tr><td>Currency Exposure (non-CHF)</td><td>38%</td><td>50%</td><td><span class="risk-badge risk-low">Within</span></td></tr>
+  <tr><td>Illiquidity Ratio</td><td>12%</td><td>20%</td><td><span class="risk-badge risk-low">Within</span></td></tr>
+</table>
+
+<div class="box box-note">
+  <strong>Note:</strong> Single-position concentration (ASML at 4.8%) approaching 5% limit. Will rebalance at next quarterly review unless overridden by advisor.
+</div>
+
+<!-- ── 6. Recommendations ── -->
+<h2 id="s6">6. Recommendations</h2>
+
+<table>
+  <tr><th>#</th><th>Action</th><th>Rationale</th><th>Priority</th></tr>
+  <tr><td>1</td><td>Extend fixed income duration to 5-7yr IG</td><td>Capture ECB easing cycle; lock in attractive yields</td><td><span class="risk-badge risk-high">High</span></td></tr>
+  <tr><td>2</td><td>Trim ASML to 4.0% (from 4.8%)</td><td>Single-position limit discipline</td><td><span class="risk-badge risk-moderate">Medium</span></td></tr>
+  <tr><td>3</td><td>Add European financials (2% tactical)</td><td>Valuation discount; beneficiaries of steeper yield curve</td><td><span class="risk-badge risk-moderate">Medium</span></td></tr>
+  <tr><td>4</td><td>Review PE fund liquidity timeline</td><td>Capital call schedule vs cash reserve adequacy</td><td><span class="risk-badge risk-low">Low</span></td></tr>
+  <tr><td>5</td><td>Schedule estate & tax planning review</td><td>Annual Swiss Vermögenssteuer optimization</td><td><span class="risk-badge risk-moderate">Medium</span></td></tr>
+</table>
+
+<div class="box box-opportunity">
+  <strong>Next Review:</strong> Quarterly Investment Committee — Q2 2026. Advisor will present updated macro view and rebalancing proposal.
+</div>
+
+<div class="footer">
+  <p><strong>Prepared by:</strong> ADVISOR_NAME, ADVISOR_TITLE  ·  FIRM_NAME  ·  FIRM_LOCATION</p>
+  <p><strong>Contact:</strong> ADVISOR_EMAIL  ·  ADVISOR_PHONE</p>
+  <p class="disclaimer">
+    This document is for informational purposes only and does not constitute an offer, solicitation, or recommendation to buy or sell any financial instrument. Past performance is not indicative of future results. All investments involve risk, including the possible loss of principal. The information herein is believed to be reliable but is not guaranteed. This report is strictly confidential and intended solely for the named recipient. Reproduction or distribution without prior written consent is prohibited. FIRM_NAME is regulated by FINMA / [REGULATORY_BODY]. Member of [INDUSTRY_ASSOCIATION].
+  </p>
+</div>
+</div>
+
+</body>
+</html>

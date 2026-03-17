@@ -80,6 +80,12 @@ def _resolve_skill_display_name(event_data, fallback: str = "skill") -> str:
 
     return fallback
 
+
+def prettyToolName(name: str) -> str:
+    """Convert tool_name to 'Tool Name' for display."""
+    return " ".join(w.capitalize() for w in name.replace("-", "_").split("_"))
+
+
 SYSTEM_PROMPT = """You are Kratos, an enterprise AI assistant.
 
 You MUST use your available skills (tools) whenever they are relevant to the user's request.
@@ -403,7 +409,7 @@ class CopilotAgent:
             queue: asyncio.Queue = asyncio.Queue()
             self._queues[conversation_id] = queue
             self._tool_counters[conversation_id] = 0
-            self._usage[conversation_id] = {"prompt": 0, "completion": 0, "total": 0}
+            self._usage[conversation_id] = {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0}
             self._first_token_time.pop(conversation_id, None)
             self._model_response_start.pop(conversation_id, None)
 
@@ -484,8 +490,22 @@ class CopilotAgent:
                                 self._tool_counters[cid] = self._tool_counters.get(cid, 0) + 1
                                 _pending_tools.append(tool_name)
                                 logger.info("Tool start conversation=%s tool=%s pending=%s", cid, tool_name, _pending_tools)
+                                # Emit descriptive thought (not just "Calling tool: X")
+                                display = prettyToolName(tool_name)
+                                raw_input = getattr(event.data, "input", None)
+                                detail = ""
+                                if raw_input:
+                                    input_str = str(raw_input)
+                                    # Try to extract a query or key param for context
+                                    for key in ("query", "code", "prompt", "message", "text"):
+                                        import re as _re
+                                        m = _re.search(rf'["\']?{key}["\']?\s*[:=]\s*["\']([^"\']+)["\']', input_str)
+                                        if m:
+                                            snippet = m.group(1)[:80]
+                                            detail = f": {snippet}{'…' if len(m.group(1)) > 80 else ''}"
+                                            break
                                 q.put_nowait(ThoughtEvent(
-                                    content=f"Calling tool: {tool_name}",
+                                    content=f"{display}{detail}",
                                     iteration=0,
                                 ))
                                 q.put_nowait(ToolCallEvent(
@@ -529,7 +549,7 @@ class CopilotAgent:
 
                             elif etype == "session.idle":
                                 tc = self._tool_counters.get(cid, 0)
-                                usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "total": 0})
+                                usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                                 ttft = int(self._first_token_time.get(cid, 0))
                                 model_start = self._model_response_start.get(cid)
                                 model_latency = int((time.monotonic() - model_start) * 1000) if model_start else 0
@@ -550,6 +570,14 @@ class CopilotAgent:
                                     code="SDK_ERROR",
                                 ))
                                 q.put_nowait(None)
+
+                            else:
+                                # Log unhandled events so we can discover new event types
+                                logger.info(
+                                    "Unhandled SDK event type=%s conversation=%s data_attrs=%s",
+                                    etype, cid,
+                                    {a: repr(getattr(event.data, a, None))[:100] for a in dir(event.data) if not a.startswith('_')} if event.data else "no_data",
+                                )
                         except Exception:
                             logger.exception("Error in session event handler conversation=%s", cid)
 

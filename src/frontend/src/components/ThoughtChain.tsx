@@ -215,7 +215,7 @@ export function ThoughtChain({
       )}
 
       {/* Expandable details section */}
-      {(completedOrFailedCalls.length > 0 || (runStats && !isStreaming) || thoughts.length > 0) && (
+      {(completedOrFailedCalls.length > 0 || thoughts.length > 0 || (runStats && !isStreaming)) && (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden text-sm">
           <button
             onClick={() => setShowDetails(!showDetails)}
@@ -229,58 +229,22 @@ export function ThoughtChain({
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
-            <span className="font-medium text-gray-600 text-xs">
-              {isStreaming ? "Executing…" : "Execution details"}
-            </span>
-            <div className="ml-auto flex items-center gap-2">
-              {runStats && !isStreaming && (
-                <span className="text-xs text-gray-400 font-mono">{formatDuration(runStats.totalDurationMs)}</span>
-              )}
-              {runStats && !isStreaming && runStats.totalTokens > 0 && (
-                <span className="text-xs text-gray-400 font-mono">{runStats.totalTokens.toLocaleString()} tok</span>
-              )}
-              {runStats && !isStreaming && runStats.reasoningTokens > 0 && (
-                <span className="text-xs text-amber-500 font-mono">{runStats.reasoningTokens.toLocaleString()} reasoning</span>
-              )}
-              <svg
-                className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showDetails ? "rotate-90" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </div>
+            <span className="font-medium text-gray-600 text-xs">Execution details</span>
+            <svg
+              className={`w-3.5 h-3.5 text-gray-400 ml-auto transition-transform ${showDetails ? "rotate-90" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </button>
 
           {showDetails && (
             <div className="px-4 py-3 space-y-3">
-              {/* Agent reasoning thoughts */}
-              {thoughts.length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Reasoning</div>
-                  {thoughts.map((thought, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
-                      <span className="text-indigo-400 mt-px flex-shrink-0">&rsaquo;</span>
-                      <span>{thought}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Tool call I/O details */}
-              {completedOrFailedCalls.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Tool details</div>
-                  {completedOrFailedCalls.map((tc, i) => (
-                    <ToolDetail key={i} tc={tc} />
-                  ))}
-                </div>
-              )}
-
-              {/* Performance metrics */}
+              {/* Token bar + metrics */}
               {runStats && !isStreaming && (
-                <div className="space-y-3 border-t border-gray-100 pt-3">
+                <div className="space-y-2.5">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <MetricCell label="Total time" value={formatDuration(runStats.totalDurationMs)} icon="clock" />
                     {runStats.timeToFirstTokenMs > 0 && (
@@ -302,6 +266,31 @@ export function ThoughtChain({
                       total={runStats.totalTokens}
                     />
                   )}
+                </div>
+              )}
+
+              {/* Execution flow timeline */}
+              {thoughts.length > 0 && (
+                <div className="space-y-0.5">
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Execution flow</div>
+                  <div className="flex flex-wrap items-center gap-1 text-xs text-gray-500">
+                    {thoughts.map((thought, i) => (
+                      <span key={i} className="inline-flex items-center gap-1">
+                        {i > 0 && <span className="text-gray-300">&rarr;</span>}
+                        <span className="text-gray-600">{thought}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tool call I/O details */}
+              {completedOrFailedCalls.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Tool details</div>
+                  {completedOrFailedCalls.map((tc, i) => (
+                    <ToolDetail key={i} tc={tc} />
+                  ))}
                 </div>
               )}
             </div>

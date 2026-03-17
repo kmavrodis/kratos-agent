@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  /* Inherits same theme as portfolio-review.html — copy the <style> block.
+     This template is for CIO / market outlook reports. */
+
+  @page { margin: 0; size: A4; }
+
+  :root {
+    --navy: #0B1F3A; --gold: #B8860B; --gold-lt: #F5ECD7;
+    --slate: #3C4A5C; --text: #1E2A3A; --muted: #6B7B8D;
+    --border: #D4D8DC; --bg-alt: #F7F8FA;
+    --green: #1B6B3A; --green-bg: #EDF6F0;
+    --red: #8B1A1A; --red-bg: #FDF0F0;
+    --amber: #8B6914; --amber-bg: #FDF8EC;
+    --blue-bg: #EDF2F8;
+  }
+
+  body { font-family: 'Georgia', 'Times New Roman', serif; color: var(--text); line-height: 1.6; font-size: 10.5pt; margin: 0; padding: 0; }
+  .content { padding: 0 1.8cm 2cm 1.8cm; }
+
+  .cover-bar { background: linear-gradient(135deg, var(--navy) 0%, #142d4f 60%, #1a3a5c 100%); color: white; padding: 48px 1.8cm 36px 1.8cm; margin: 0; width: 100%; box-sizing: border-box; position: relative; overflow: hidden; }
+  .cover-bar::before { content: ''; position: absolute; top: 0; right: 0; width: 40%; height: 100%; background: linear-gradient(135deg, transparent 0%, rgba(184,134,11,0.08) 100%); }
+  .cover-bar .firm-name { font-family: 'Segoe UI', Calibri, sans-serif; font-size: 9pt; text-transform: uppercase; letter-spacing: 3px; color: var(--gold); margin: 0 0 16px 0; font-weight: 600; }
+  .cover-bar h1 { font-size: 26pt; font-weight: 400; letter-spacing: 0.5px; margin: 0 0 6px; color: white; border: none; position: relative; }
+  .cover-bar .subtitle { font-size: 12.5pt; color: rgba(255,255,255,0.75); margin: 0 0 20px 0; font-style: italic; }
+  .cover-divider { width: 60px; height: 2px; background: var(--gold); margin: 0 0 20px 0; }
+  .cover-meta { display: flex; justify-content: space-between; margin-top: 10px; font-size: 9pt; color: #8899AA; font-family: 'Segoe UI', Calibri, sans-serif; position: relative; }
+  .cover-meta .confidential { color: var(--gold); font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; font-size: 7.5pt; border: 1px solid rgba(184,134,11,0.4); padding: 3px 10px; border-radius: 2px; }
+
+  h2 { font-size: 14pt; color: var(--navy); margin-top: 28px; padding-bottom: 5px; border-bottom: 2px solid var(--gold); font-weight: 400; }
+  h3 { font-size: 11.5pt; color: var(--slate); margin-top: 18px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 9.5pt; font-family: 'Segoe UI', Calibri, sans-serif; }
+  th { background: var(--navy); color: white; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) { background: var(--bg-alt); }
+  tr.highlight { background: var(--gold-lt) !important; }
+
+  .positive { color: var(--green); font-weight: 600; }
+  .negative { color: var(--red); font-weight: 600; }
+  .neutral  { color: var(--muted); }
+
+  .box { padding: 12px 16px; margin: 14px 0; border-radius: 2px; font-size: 10pt; border-left: 4px solid; font-family: 'Segoe UI', Calibri, sans-serif; }
+  .box-insight    { background: var(--blue-bg);  border-color: var(--navy); }
+  .box-risk       { background: var(--red-bg);   border-color: var(--red); }
+  .box-opportunity{ background: var(--green-bg); border-color: var(--green); }
+  .box-note       { background: var(--amber-bg); border-color: var(--amber); }
+
+  .risk-badge { display: inline-block; padding: 2px 10px; border-radius: 2px; font-size: 8pt; font-weight: 700; font-family: 'Segoe UI', Calibri, sans-serif; text-transform: uppercase; letter-spacing: 0.5px; }
+  .risk-low      { background: var(--green-bg); color: var(--green); }
+  .risk-moderate { background: var(--amber-bg); color: var(--amber); }
+  .risk-high     { background: var(--red-bg);   color: var(--red); }
+
+  .page-break { page-break-before: always; }
+  .footer { margin-top: 30px; padding-top: 14px; border-top: 2px solid var(--gold); font-size: 8.5pt; color: var(--muted); font-family: 'Segoe UI', Calibri, sans-serif; }
+  .disclaimer { font-size: 7.5pt; color: var(--muted); line-height: 1.4; margin-top: 8px; font-family: 'Segoe UI', Calibri, sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="cover-bar">
+  <p class="firm-name">FIRM_NAME</p>
+  <h1>MARKET_OUTLOOK_TITLE</h1>
+  <p class="subtitle">OUTLOOK_SUBTITLE</p>
+  <div class="cover-divider"></div>
+  <div class="cover-meta">
+    <span>CIO Office  ·  FIRM_NAME</span>
+    <span>DATE</span>
+  </div>
+  <div class="cover-meta">
+    <span class="confidential">For Professional Investors Only</span>
+  </div>
+</div>
+
+<div class="content">
+
+<h2>Macro Overview</h2>
+<p>MACRO_OVERVIEW_TEXT</p>
+
+<h2>Asset Class Views</h2>
+<table>
+  <tr><th>Asset Class</th><th>View</th><th>Conviction</th><th>Key Driver</th></tr>
+  <tr><td>ASSET_CLASS</td><td>VIEW</td><td><span class="risk-badge risk-moderate">CONVICTION</span></td><td>DRIVER</td></tr>
+</table>
+
+<h2>Key Risks</h2>
+<div class="box box-risk"><strong>Risk:</strong> RISK_DESCRIPTION</div>
+
+<h2>Opportunities</h2>
+<div class="box box-opportunity"><strong>Opportunity:</strong> OPPORTUNITY_DESCRIPTION</div>
+
+<div class="footer">
+  <p><strong>CIO Office</strong>  ·  FIRM_NAME  ·  FIRM_LOCATION</p>
+  <p class="disclaimer">DISCLAIMER_TEXT</p>
+</div>
+</div>
+
+</body>
+</html>
