@@ -87,14 +87,6 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await copilot_agent.start()
     application.state.copilot_agent = copilot_agent
 
-    # Register agent in Foundry Agent Service (best-effort, non-blocking)
-    try:
-        from app.services.foundry_agent_service import register_foundry_agent
-        tool_names = list(application.state.skill_registry.get_enabled_tool_names())
-        await register_foundry_agent(settings, copilot_agent.system_prompt, tool_names)
-    except Exception:
-        logger.warning("Foundry agent registration failed — agent tab may not show it", exc_info=True)
-
     logger.info("Kratos Agent Service started — environment=%s", settings.environment)
     yield
 
