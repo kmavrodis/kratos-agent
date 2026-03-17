@@ -134,6 +134,7 @@ class CopilotAgent:
         self._usage: dict[str, dict] = {}
         self._first_token_time: dict[str, float] = {}
         self._model_response_start: dict[str, float] = {}
+        self._response_parts: dict[str, list[str]] = {}
 
     @property
     def system_prompt(self) -> str:
@@ -432,7 +433,7 @@ class CopilotAgent:
             self._usage[conversation_id] = {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0}
             self._first_token_time.pop(conversation_id, None)
             self._model_response_start.pop(conversation_id, None)
-            _response_parts: list[str] = []  # accumulate streamed content for gen_ai.output.messages
+            self._response_parts[conversation_id] = []  # reset for this turn
 
             try:
                 session = await self._get_or_create_session(conversation_id)
@@ -469,17 +470,32 @@ class CopilotAgent:
                                 ttfe = (time.monotonic() - self._send_time) * 1000
                                 logger.info("Event received type=%s ttfe=%.0fms conversation=%s", etype, ttfe, cid)
 
-                            if etype == "assistant.message_delta":
+                            if etype in ("assistant.message_delta", "assistant.streaming_delta"):
                                 # Track time-to-first-token
                                 if cid not in self._first_token_time and hasattr(self, "_send_time"):
                                     self._first_token_time[cid] = (time.monotonic() - self._send_time) * 1000
-                                delta = event.data.delta_content or ""
-                                _response_parts.append(delta)
-                                q.put_nowait(ContentEvent(content=delta))
+                                # Try multiple fields — SDK versions use different attribute names
+                                delta = (
+                                    getattr(event.data, "delta_content", None)
+                                    or getattr(event.data, "content", None)
+                                    or getattr(event.data, "text", None)
+                                    or getattr(event.data, "delta", None)
+                                    or ""
+                                )
+                                if delta:
+                                    self._response_parts.setdefault(cid, []).append(delta)
+                                    q.put_nowait(ContentEvent(content=delta))
 
                             elif etype == "assistant.turn_start":
                                 # Model started processing — mark for latency calc
                                 self._model_response_start[cid] = time.monotonic()
+
+                            elif etype == "assistant.message":
+                                # End-of-turn complete message — capture content as fallback
+                                # if streaming deltas didn't carry text
+                                msg_content = getattr(event.data, "content", None) or ""
+                                if msg_content and not self._response_parts.get(cid):
+                                    self._response_parts.setdefault(cid, []).append(msg_content)
 
                             elif etype in ("assistant.usage", "session.usage_info"):
                                 # Capture token usage from the model
@@ -710,7 +726,7 @@ class CopilotAgent:
                         "gen_ai.input.messages",
                         json.dumps([{"role": "user", "parts": [{"type": "text", "content": message[:4000]}]}]),
                     )
-                    full_response = "".join(_response_parts)
+                    full_response = "".join(self._response_parts.get(conversation_id, []))
                     span.set_attribute(
                         "gen_ai.output.messages",
                         json.dumps([{"role": "assistant", "parts": [{"type": "text", "content": full_response[:4000]}], "finish_reason": "stop"}]),
