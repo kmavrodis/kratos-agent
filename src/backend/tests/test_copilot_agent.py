@@ -143,7 +143,7 @@ async def test_copilot_agent_run_streams_tool_events(copilot_agent):
     # ThoughtEvent, ToolCallEvent(started), ToolCallEvent(completed), ContentEvent
     assert len(events) == 4
     assert isinstance(events[0], ThoughtEvent)
-    assert "web_search" in events[0].content
+    assert "Web Search" in events[0].content
     assert isinstance(events[1], ToolCallEvent)
     assert events[1].status == "started"
     assert isinstance(events[2], ToolCallEvent)

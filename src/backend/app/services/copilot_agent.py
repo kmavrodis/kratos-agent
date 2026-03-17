@@ -9,6 +9,7 @@ import asyncio
 from importlib.metadata import version
 import json
 import logging
+import os
 import re
 import time
 import uuid
@@ -23,10 +24,12 @@ try:
     _HAS_CLI_CREDENTIAL = True
 except ImportError:
     _HAS_CLI_CREDENTIAL = False
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 
 from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
+from app.observability import operation_duration_histogram, token_usage_histogram
 from app.services.skill_tools import ALL_TOOLS
 
 if TYPE_CHECKING:
@@ -404,18 +407,45 @@ class CopilotAgent:
     ) -> AsyncGenerator[ThoughtEvent | ToolCallEvent | ContentEvent | ErrorEvent | UserInputRequestEvent, None]:
         """Send a message and stream SDK events as typed SSE events."""
 
-        with tracer.start_as_current_span("copilot_agent.run", attributes={"conversation_id": conversation_id}):
+        _content_recording = os.environ.get(
+            "AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", ""
+        ).lower() == "true" or os.environ.get(
+            "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", ""
+        ).lower() == "true"
+
+        with tracer.start_as_current_span(
+            "invoke_agent kratos-agent",
+            attributes={
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.system": "openai",
+                "gen_ai.provider.name": "azure.ai.openai",
+                "gen_ai.request.model": self.settings.foundry_model_deployment,
+                "gen_ai.agent.name": "kratos-agent",
+                "gen_ai.agent.version": "0.1.0",
+                "gen_ai.conversation.id": conversation_id,
+                "server.address": self.settings.foundry_endpoint,
+            },
+        ) as span:
             queue: asyncio.Queue = asyncio.Queue()
             self._queues[conversation_id] = queue
             self._tool_counters[conversation_id] = 0
             self._usage[conversation_id] = {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0}
             self._first_token_time.pop(conversation_id, None)
             self._model_response_start.pop(conversation_id, None)
+            _response_parts: list[str] = []  # accumulate streamed content for gen_ai.output.messages
 
             try:
                 session = await self._get_or_create_session(conversation_id)
                 logger.info("Sending prompt for conversation=%s message=%r", conversation_id, message)
                 self._send_time = time.monotonic()
+
+                # Capture the current span context so the sync on_event callback
+                # can create child spans nested under this copilot_agent.run span.
+                # Use set_span_in_context to explicitly attach the span to a context object.
+                # (otel_context.get_current() is unreliable across async boundaries.)
+                if not hasattr(self, "_span_contexts"):
+                    self._span_contexts: dict[str, otel_context.Context] = {}
+                self._span_contexts[conversation_id] = trace.set_span_in_context(span)
 
                 # Register the event handler ONCE per session, not per run() call.
                 # The handler routes events to whatever queue is active for that conversation.
@@ -423,6 +453,8 @@ class CopilotAgent:
                     cid = conversation_id  # capture for closure
 
                     _pending_tools: list[str] = []  # track started tools in order for matching
+                    _tool_spans: dict[str, trace.Span] = {}  # active tool span per tool name
+                    _tool_span_stack: list[tuple[str, trace.Span]] = []  # ordered stack for matching
 
                     def on_event(event) -> None:
                         """Translate SDK events into our SSE event types."""
@@ -441,7 +473,9 @@ class CopilotAgent:
                                 # Track time-to-first-token
                                 if cid not in self._first_token_time and hasattr(self, "_send_time"):
                                     self._first_token_time[cid] = (time.monotonic() - self._send_time) * 1000
-                                q.put_nowait(ContentEvent(content=event.data.delta_content or ""))
+                                delta = event.data.delta_content or ""
+                                _response_parts.append(delta)
+                                q.put_nowait(ContentEvent(content=delta))
 
                             elif etype == "assistant.turn_start":
                                 # Model started processing — mark for latency calc
@@ -489,6 +523,25 @@ class CopilotAgent:
                                 self._tool_counters[cid] = self._tool_counters.get(cid, 0) + 1
                                 _pending_tools.append(tool_name)
                                 logger.info("Tool start conversation=%s tool=%s pending=%s", cid, tool_name, _pending_tools)
+
+                                # Create a child span nested under the invoke_agent span
+                                raw_input_str = str(getattr(event.data, "input", "") or "")
+                                tool_call_id = getattr(event.data, "call_id", None) or getattr(event.data, "id", None) or str(uuid.uuid4())[:12]
+                                parent_ctx = self._span_contexts.get(cid)
+                                tool_span = tracer.start_span(
+                                    f"execute_tool {tool_name}",
+                                    context=parent_ctx,
+                                    attributes={
+                                        "gen_ai.system": "openai",
+                                        "gen_ai.operation.name": "execute_tool",
+                                        "gen_ai.tool.name": tool_name,
+                                        "gen_ai.tool.call.id": str(tool_call_id),
+                                        "gen_ai.tool.type": "function",
+                                        "gen_ai.tool.call.arguments": raw_input_str[:2000],
+                                    },
+                                )
+                                _tool_spans[tool_name] = tool_span
+                                _tool_span_stack.append((tool_name, tool_span))
                                 # Emit descriptive thought (not just "Calling tool: X")
                                 display = prettyToolName(tool_name)
                                 raw_input = getattr(event.data, "input", None)
@@ -539,6 +592,26 @@ class CopilotAgent:
                                     "Tool complete conversation=%s tool=%s success=%r duration_ms=%s error=%r",
                                     cid, tool_name, success, duration_ms, error,
                                 )
+
+                                # End the corresponding tool span
+                                tool_span = _tool_spans.pop(tool_name, None)
+                                if tool_span is None and _tool_span_stack:
+                                    # Fallback: end the oldest pending tool span
+                                    _, tool_span = _tool_span_stack.pop(0)
+                                if tool_span is not None:
+                                    # Remove from stack by identity
+                                    _tool_span_stack[:] = [(n, s) for n, s in _tool_span_stack if s is not tool_span]
+                                    output_str = str(getattr(event.data, "output", "") or getattr(event.data, "result", ""))[:2000]
+                                    tool_span.set_attribute("gen_ai.tool.call.result", output_str)
+                                    if error:
+                                        tool_span.set_attribute("error.type", type(error).__name__ if not isinstance(error, str) else "tool_error")
+                                        tool_span.set_status(trace.StatusCode.ERROR, str(error))
+                                    elif success is False:
+                                        tool_span.set_attribute("error.type", "tool_execution_failed")
+                                        tool_span.set_status(trace.StatusCode.ERROR, "Tool execution failed")
+                                    else:
+                                        tool_span.set_status(trace.StatusCode.OK)
+                                    tool_span.end()
                                 q.put_nowait(ToolCallEvent(
                                     skillName=tool_name,
                                     status="completed" if success is not False else "failed",
@@ -547,6 +620,13 @@ class CopilotAgent:
                                 ))
 
                             elif etype == "session.idle":
+                                # End any orphaned tool spans
+                                for _, orphan_span in _tool_span_stack:
+                                    orphan_span.set_status(trace.StatusCode.OK)
+                                    orphan_span.end()
+                                _tool_span_stack.clear()
+                                _tool_spans.clear()
+
                                 tc = self._tool_counters.get(cid, 0)
                                 usage = self._usage.get(cid, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                                 ttft = int(self._first_token_time.get(cid, 0))
@@ -559,6 +639,13 @@ class CopilotAgent:
                                 q.put_nowait(None)  # sentinel — stream is done
 
                             elif etype == "session.error":
+                                # End any orphaned tool spans
+                                for _, orphan_span in _tool_span_stack:
+                                    orphan_span.set_status(trace.StatusCode.ERROR, "Session error")
+                                    orphan_span.end()
+                                _tool_span_stack.clear()
+                                _tool_spans.clear()
+
                                 logger.error(
                                     "Session error conversation=%s message=%s",
                                     cid,
@@ -596,6 +683,38 @@ class CopilotAgent:
                     yield item
 
                 tool_events = self._tool_counters.get(conversation_id, 0)
+                # Enrich the span with usage and tool call counts
+                usage = self._usage.get(conversation_id, {})
+                span.set_attribute("gen_ai.usage.input_tokens", usage.get("prompt", 0))
+                span.set_attribute("gen_ai.usage.output_tokens", usage.get("completion", 0))
+                span.set_attribute("gen_ai.agent.tool_calls", tool_events)
+
+                # Reasoning tokens (non-standard but useful for o-series / GPT-5)
+                reasoning_t = usage.get("reasoning", 0)
+                if reasoning_t:
+                    span.set_attribute("gen_ai.usage.reasoning_tokens", reasoning_t)
+
+                # Time-to-first-token as span attribute
+                ttft = self._first_token_time.get(conversation_id)
+                if ttft:
+                    span.set_attribute("gen_ai.client.time_to_first_token_ms", int(ttft))
+
+                # Input/output/system content (opt-in, respects content recording env var)
+                if _content_recording:
+                    system_prompt = self._get_system_prompt(conversation_id)
+                    span.set_attribute(
+                        "gen_ai.system_instructions",
+                        json.dumps([{"type": "text", "content": system_prompt[:4000]}]),
+                    )
+                    span.set_attribute(
+                        "gen_ai.input.messages",
+                        json.dumps([{"role": "user", "parts": [{"type": "text", "content": message[:4000]}]}]),
+                    )
+                    full_response = "".join(_response_parts)
+                    span.set_attribute(
+                        "gen_ai.output.messages",
+                        json.dumps([{"role": "assistant", "parts": [{"type": "text", "content": full_response[:4000]}], "finish_reason": "stop"}]),
+                    )
                 if tool_events == 0:
                     logger.warning(
                         "No tool events observed for conversation=%s prompt=%r",
@@ -603,10 +722,28 @@ class CopilotAgent:
                         message,
                     )
 
+                # Record GenAI metrics (token usage + operation duration)
+                _metric_attrs = {
+                    "gen_ai.operation.name": "invoke_agent",
+                    "gen_ai.provider.name": "azure.ai.openai",
+                    "gen_ai.request.model": self.settings.foundry_model_deployment,
+                    "server.address": self.settings.foundry_endpoint,
+                }
+                if usage.get("prompt", 0):
+                    token_usage_histogram.record(usage["prompt"], {**_metric_attrs, "gen_ai.token.type": "input"})
+                if usage.get("completion", 0):
+                    token_usage_histogram.record(usage["completion"], {**_metric_attrs, "gen_ai.token.type": "output"})
+                elapsed_s = time.monotonic() - self._send_time
+                operation_duration_histogram.record(elapsed_s, _metric_attrs)
+
             except asyncio.TimeoutError:
+                span.set_attribute("error.type", "timeout")
+                span.set_status(trace.StatusCode.ERROR, "Agent timed out")
                 logger.warning("Agent timed out for conversation=%s", conversation_id)
                 yield ErrorEvent(message="Agent timed out waiting for response", code="TIMEOUT")
             except Exception as e:
+                span.set_attribute("error.type", type(e).__name__)
+                span.set_status(trace.StatusCode.ERROR, str(e))
                 logger.exception("CopilotAgent failed for conversation=%s", conversation_id)
                 yield ErrorEvent(message=str(e), code="AGENT_ERROR")
                 # Drop the broken session so next turn gets a fresh one

@@ -187,6 +187,7 @@ module agentService './modules/agent-service.bicep' = {
     keyVaultUri: keyVault.outputs.uri
     foundryEndpoint: aiFoundry.outputs.endpoint
     foundryModelDeployment: aiFoundry.outputs.modelDeploymentName
+    foundryProjectName: aiFoundry.outputs.projectName
     bingSearchEndpoint: bingSearch.outputs.endpoint
     blobStorageEndpoint: blobStorage.outputs.endpoint
   }

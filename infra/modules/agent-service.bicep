@@ -34,6 +34,9 @@ param foundryModelDeployment string
 @description('Bing Search endpoint')
 param bingSearchEndpoint string
 
+@description('Foundry project name')
+param foundryProjectName string
+
 @description('Azure Blob Storage endpoint for skills')
 param blobStorageEndpoint string
 
@@ -82,9 +85,12 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'FOUNDRY_ENDPOINT', value: foundryEndpoint }
             { name: 'FOUNDRY_MODEL_DEPLOYMENT', value: foundryModelDeployment }
+            { name: 'FOUNDRY_PROJECT_NAME', value: foundryProjectName }
             { name: 'BING_SEARCH_ENDPOINT', value: bingSearchEndpoint }
             { name: 'BLOB_STORAGE_ENDPOINT', value: blobStorageEndpoint }
             { name: 'OTEL_SERVICE_NAME', value: 'kratos-agent-service' }
+            { name: 'AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED', value: 'true' }
+            { name: 'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT', value: 'true' }
           ]
         }
       ]

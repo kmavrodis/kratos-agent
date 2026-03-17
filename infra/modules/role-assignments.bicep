@@ -28,6 +28,8 @@ var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var searchIndexDataReader = '1407120a-92aa-4202-b7e9-c0e197c71c8f'
 var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+var azureAIDeveloper = '64702f94-c441-49e6-a78b-ef80e0188fee'
+var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
 // ─── References ───
@@ -110,6 +112,17 @@ resource agentAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01
   }
 }
 
+// ─── Agent Service → Foundry Agent Service (agents/write) ───
+resource agentCogServicesUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiServices.id, agentServicePrincipalId, cognitiveServicesUser)
+  scope: aiServices
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUser)
+    principalId: agentServicePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ─── Agent Service → Blob Storage (Skills) ───
 resource agentStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, agentServicePrincipalId, storageBlobDataContributor)
@@ -149,6 +162,17 @@ resource userAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
   scope: aiServices
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUser)
+    principalId: principalId
+    principalType: 'User'
+  }
+}
+
+// ─── Deploying User → Foundry Agent Service (for local dev) ───
+resource userCogServicesUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
+  name: guid(aiServices.id, principalId, cognitiveServicesUser)
+  scope: aiServices
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUser)
     principalId: principalId
     principalType: 'User'
   }
