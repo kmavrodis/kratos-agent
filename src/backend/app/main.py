@@ -73,7 +73,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     application.state.skill_registry = registries.get("generic", SkillRegistry())
     logger.info("Loaded %d use-cases: %s", len(registries), list(registries.keys()))
 
-    # Initialize Copilot SDK agent (uses DefaultAzureCredential for Azure OpenAI)
+    # Initialize Copilot SDK agent (uses DefaultAzureCredential for Microsoft Foundry)
     copilot_agent = CopilotAgent(settings)
     copilot_agent.set_registries(registries)
     copilot_agent.set_cosmos_service(cosmos_service)

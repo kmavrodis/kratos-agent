@@ -16,9 +16,9 @@ async def get_settings(request: Request) -> AIServiceStatus:
     """Return current AI service config status."""
     agent = request.app.state.copilot_agent
     return AIServiceStatus(
-        configured=bool(agent.settings.ai_services_endpoint),
-        aiServicesEndpoint=agent.settings.ai_services_endpoint,
-        aiServicesModelDeployment=agent.settings.ai_services_model_deployment,
+        configured=bool(agent.settings.foundry_endpoint),
+        foundryEndpoint=agent.settings.foundry_endpoint,
+        foundryModelDeployment=agent.settings.foundry_model_deployment,
     )
 
 
@@ -27,12 +27,12 @@ async def update_settings(body: AIServiceSettings, request: Request) -> AIServic
     """Update the AI service configuration. Resets all active sessions."""
     agent = request.app.state.copilot_agent
     await agent.update_config(
-        ai_services_endpoint=body.aiServicesEndpoint,
-        ai_services_model_deployment=body.aiServicesModelDeployment,
+        foundry_endpoint=body.foundryEndpoint,
+        foundry_model_deployment=body.foundryModelDeployment,
     )
     logger.info("AI service settings updated via API")
     return AIServiceStatus(
-        configured=bool(agent.settings.ai_services_endpoint),
-        aiServicesEndpoint=agent.settings.ai_services_endpoint,
-        aiServicesModelDeployment=agent.settings.ai_services_model_deployment,
+        configured=bool(agent.settings.foundry_endpoint),
+        foundryEndpoint=agent.settings.foundry_endpoint,
+        foundryModelDeployment=agent.settings.foundry_model_deployment,
     )

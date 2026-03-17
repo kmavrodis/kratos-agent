@@ -165,15 +165,15 @@ class UserInputResponseRequest(BaseModel):
 
 class AIServiceSettings(BaseModel):
     """AI service configuration submitted by the user."""
-    aiServicesEndpoint: str = Field(default="", description="Azure AI Services endpoint URL")
-    aiServicesModelDeployment: str = Field(default="gpt-52", description="Model deployment name")
+    foundryEndpoint: str = Field(default="", description="Microsoft Foundry endpoint URL")
+    foundryModelDeployment: str = Field(default="gpt-52", description="Model deployment name")
 
 
 class AIServiceStatus(BaseModel):
     """Current AI service config status."""
     configured: bool = False
-    aiServicesEndpoint: str = ""
-    aiServicesModelDeployment: str = ""
+    foundryEndpoint: str = ""
+    foundryModelDeployment: str = ""
     code: str = "INTERNAL_ERROR"
 
 

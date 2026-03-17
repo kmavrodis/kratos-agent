@@ -2,7 +2,7 @@
 
 Replaces agent_loop.py. Uses CopilotClient to manage sessions per conversation,
 and translates SDK events to the existing SSE event schema.
-Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
+Uses DefaultAzureCredential for keyless auth to Microsoft Foundry.
 """
 
 import asyncio
@@ -109,7 +109,7 @@ class CopilotAgent:
 
     Each conversation gets its own SDK session, preserving multi-turn history
     automatically without manually loading from Cosmos DB on every turn.
-    Uses DefaultAzureCredential for keyless auth to Azure OpenAI.
+    Uses DefaultAzureCredential for keyless auth to Microsoft Foundry.
     Supports multiple use-cases, each with their own skills and system prompt.
     """
 
@@ -244,15 +244,14 @@ class CopilotAgent:
 
     async def update_config(
         self,
-        ai_services_endpoint: str,
-        ai_services_model_deployment: str,
+        foundry_endpoint: str,
+        foundry_model_deployment: str,
     ) -> None:
         """Update config and drop all sessions so they recreate with new settings."""
-        if ai_services_endpoint:
-            self.settings.ai_services_endpoint = ai_services_endpoint
-        if ai_services_model_deployment:
-            self.settings.ai_services_model_deployment = ai_services_model_deployment
-            self.settings.ai_services_model_deployment = ai_services_model_deployment
+        if foundry_endpoint:
+            self.settings.foundry_endpoint = foundry_endpoint
+        if foundry_model_deployment:
+            self.settings.foundry_model_deployment = foundry_model_deployment
 
         # Drop all existing sessions so they get recreated with the new config
         for session in self._sessions.values():
@@ -270,7 +269,7 @@ class CopilotAgent:
     def _build_session_config(self, enabled_tools: list, skill_dirs: list, system_prompt: str) -> dict:
         """Build the shared session config dict used for both create and resume."""
         return {
-            "model": self.settings.ai_services_model_deployment,
+            "model": self.settings.foundry_model_deployment,
             "streaming": True,
             "tools": enabled_tools,
             "skill_directories": skill_dirs,
@@ -280,7 +279,7 @@ class CopilotAgent:
             },
             "provider": {
                 "type": "azure",
-                "base_url": f"{self.settings.ai_services_endpoint.rstrip('/')}/openai/deployments/{self.settings.ai_services_model_deployment}",
+                "base_url": f"{self.settings.foundry_endpoint.rstrip('/')}/openai/deployments/{self.settings.foundry_model_deployment}",
                 "token_provider": self._token_provider,
                 "wire_api": "completions",
                 "azure": {
@@ -390,7 +389,7 @@ class CopilotAgent:
                 "Created SDK session=%s for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
                 getattr(session, "session_id", "?"),
                 conversation_id,
-                self.settings.ai_services_model_deployment,
+                self.settings.foundry_model_deployment,
                 ",".join(tool.name for tool in enabled_tools),
                 elapsed_ms,
             )

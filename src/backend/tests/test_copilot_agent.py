@@ -12,8 +12,8 @@ from app.services.copilot_agent import CopilotAgent
 @pytest.fixture
 def settings():
     return Settings(
-        ai_services_endpoint="https://test.openai.azure.com",
-        ai_services_model_deployment="gpt-52",
+        foundry_endpoint="https://test.services.ai.azure.com",
+        foundry_model_deployment="gpt-52",
     )
 
 

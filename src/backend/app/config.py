@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     ai_search_endpoint: str = ""
     key_vault_uri: str = ""
 
-    # Azure AI Services (deployed by Bicep)
-    ai_services_endpoint: str = ""
-    ai_services_model_deployment: str = "gpt-52"
+    # Microsoft Foundry (deployed by Bicep)
+    foundry_endpoint: str = ""
+    foundry_model_deployment: str = "gpt-52"
 
     # Azure Blob Storage for skills
     blob_storage_endpoint: str = ""

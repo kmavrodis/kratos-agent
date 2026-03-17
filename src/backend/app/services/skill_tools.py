@@ -197,16 +197,16 @@ class FoundryAgentParams(BaseModel):
 async def foundry_agent(params: FoundryAgentParams) -> dict:
     """Delegate a task to a Microsoft Foundry specialized sub-agent."""
     with tracer.start_as_current_span("skill.foundry_agent"):
-        ai_services_endpoint = os.environ.get("AI_SERVICES_ENDPOINT", "")
-        if not ai_services_endpoint:
-            return {"error": "AI_SERVICES_ENDPOINT not configured"}
+        foundry_endpoint = os.environ.get("FOUNDRY_ENDPOINT", "")
+        if not foundry_endpoint:
+            return {"error": "FOUNDRY_ENDPOINT not configured"}
 
         credential = _get_credential()
         token = await credential.get_token("https://cognitiveservices.azure.com/.default")
 
         client = _get_http_client()
         response = await client.post(
-            f"{ai_services_endpoint}/agents/{params.agent_name}/run",
+            f"{foundry_endpoint}/agents/{params.agent_name}/run",
             headers={"Authorization": f"Bearer {token.token}"},
             json={"task": params.task},
         )

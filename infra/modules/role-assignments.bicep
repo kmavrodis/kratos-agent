@@ -7,7 +7,7 @@ param cosmosDbAccountName string
 @description('AI Search service name')
 param aiSearchName string
 
-@description('AI Services (OpenAI) account name')
+@description('Microsoft Foundry resource name')
 param aiServicesName string
 
 @description('Key Vault name')
@@ -99,7 +99,7 @@ resource agentAcrRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-// ─── Agent Service → AI Services (OpenAI) ───
+// ─── Agent Service → Microsoft Foundry ───
 resource agentAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(aiServices.id, agentServicePrincipalId, cognitiveServicesOpenAIUser)
   scope: aiServices
@@ -143,7 +143,7 @@ resource userKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   }
 }
 
-// ─── Deploying User → AI Services (for local dev) ───
+// ─── Deploying User → Microsoft Foundry (for local dev) ───
 resource userAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
   name: guid(aiServices.id, principalId, cognitiveServicesOpenAIUser)
   scope: aiServices

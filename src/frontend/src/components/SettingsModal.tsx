@@ -6,8 +6,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface AIServiceStatus {
   configured: boolean;
-  aiServicesEndpoint: string;
-  aiServicesModelDeployment: string;
+  foundryEndpoint: string;
+  foundryModelDeployment: string;
 }
 
 interface Props {
@@ -29,8 +29,8 @@ export function SettingsModal({ open, onClose }: Props) {
       .then((res) => res.json())
       .then((data: AIServiceStatus) => {
         setStatus(data);
-        setEndpoint(data.aiServicesEndpoint || "");
-        setModel(data.aiServicesModelDeployment || "gpt-52");
+        setEndpoint(data.foundryEndpoint || "");
+        setModel(data.foundryModelDeployment || "gpt-52");
       })
       .catch(() => {
         setStatus(null);
@@ -45,8 +45,8 @@ export function SettingsModal({ open, onClose }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          aiServicesEndpoint: endpoint,
-          aiServicesModelDeployment: model,
+          foundryEndpoint: endpoint,
+          foundryModelDeployment: model,
         }),
       });
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
@@ -83,7 +83,7 @@ export function SettingsModal({ open, onClose }: Props) {
         {/* Body */}
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-gray-500">
-            View and update the Azure OpenAI endpoint and model deployment. Authentication uses Managed Identity — no API keys needed.
+            View and update the Microsoft Foundry endpoint and model deployment. Authentication uses Managed Identity — no API keys needed.
           </p>
 
           {/* Status indicator */}
@@ -100,16 +100,16 @@ export function SettingsModal({ open, onClose }: Props) {
             </div>
           )}
 
-          {/* AI Services Endpoint */}
+          {/* Foundry Endpoint */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              AI Services Endpoint
+              Foundry Endpoint
             </label>
             <input
               type="url"
               value={endpoint}
               onChange={(e) => setEndpoint(e.target.value)}
-              placeholder="https://your-resource.openai.azure.com"
+              placeholder="https://your-resource.services.ai.azure.com"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>

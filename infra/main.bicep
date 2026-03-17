@@ -114,9 +114,9 @@ module aiSearch './modules/ai-search.bicep' = {
   }
 }
 
-// ─── AI Services (OpenAI) ───
-module aiServices './modules/ai-services.bicep' = {
-  name: 'ai-services'
+// ─── Microsoft Foundry ───
+module aiFoundry './modules/ai-services.bicep' = {
+  name: 'ai-foundry'
   scope: rg
   params: {
     name: !empty(aiServicesName) ? aiServicesName : '${abbrs.cognitiveServicesAccounts}${resourceToken}'
@@ -185,8 +185,8 @@ module agentService './modules/agent-service.bicep' = {
     cosmosDbEndpoint: cosmosDb.outputs.endpoint
     aiSearchEndpoint: aiSearch.outputs.endpoint
     keyVaultUri: keyVault.outputs.uri
-    aiServicesEndpoint: aiServices.outputs.endpoint
-    aiServicesModelDeployment: aiServices.outputs.modelDeploymentName
+    foundryEndpoint: aiFoundry.outputs.endpoint
+    foundryModelDeployment: aiFoundry.outputs.modelDeploymentName
     bingSearchEndpoint: bingSearch.outputs.endpoint
     blobStorageEndpoint: blobStorage.outputs.endpoint
   }
@@ -211,7 +211,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     agentServicePrincipalId: agentService.outputs.principalId
     cosmosDbAccountName: cosmosDb.outputs.name
     aiSearchName: aiSearch.outputs.name
-    aiServicesName: aiServices.outputs.name
+    aiServicesName: aiFoundry.outputs.name
     keyVaultName: keyVault.outputs.name
     containerRegistryName: containerRegistry.outputs.name
     storageAccountName: blobStorage.outputs.name
@@ -230,6 +230,6 @@ output AZURE_KEY_VAULT_URI string = keyVault.outputs.uri
 output AZURE_APP_INSIGHTS_CONNECTION_STRING string = appInsights.outputs.connectionString
 output AZURE_STATIC_WEB_APP_URL string = staticWebApp.outputs.url
 output AGENT_SERVICE_URL string = agentService.outputs.url
-output AI_SERVICES_ENDPOINT string = aiServices.outputs.endpoint
-output AI_SERVICES_MODEL_DEPLOYMENT string = aiServices.outputs.modelDeploymentName
+output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
+output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
