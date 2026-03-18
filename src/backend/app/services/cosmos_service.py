@@ -172,3 +172,22 @@ class CosmosService:
             )
         except Exception:
             pass
+
+    async def delete_all_session_mappings(self) -> None:
+        """Delete all stored SDK session mappings (called on prompt/config resets)."""
+        if not self._sessions_container:
+            return
+        try:
+            items = self._sessions_container.query_items(
+                query="SELECT c.id, c.conversationId FROM c",
+                enable_cross_partition_query=True,
+            )
+            async for item in items:
+                try:
+                    await self._sessions_container.delete_item(
+                        item=item["id"], partition_key=item["conversationId"]
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            logger.warning("Failed to purge all session mappings from Cosmos", exc_info=True)

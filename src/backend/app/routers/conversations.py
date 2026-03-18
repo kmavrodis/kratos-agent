@@ -10,6 +10,7 @@ from app.models import (
     ConversationCreate,
     ConversationList,
     ConversationStatus,
+    ConversationUpdate,
     Message,
 )
 
@@ -61,6 +62,20 @@ async def get_messages(conversation_id: str, request: Request) -> list[Message]:
     """Get all messages for a conversation."""
     cosmos = _get_cosmos(request)
     return await cosmos.list_messages(conversation_id)
+
+
+@router.patch("/{conversation_id}", response_model=Conversation)
+async def update_conversation(conversation_id: str, body: ConversationUpdate, request: Request) -> Conversation:
+    """Update a conversation's mutable fields (currently: title)."""
+    cosmos = _get_cosmos(request)
+    conversation = await cosmos.get_conversation(conversation_id, "default-user")
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if body.title is not None:
+        conversation.title = body.title
+    conversation.updatedAt = datetime.now(timezone.utc)
+    await cosmos.upsert_conversation(conversation)
+    return conversation
 
 
 @router.delete("/{conversation_id}", status_code=204)

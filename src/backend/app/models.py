@@ -28,6 +28,10 @@ class ConversationCreate(BaseModel):
     useCase: str = "generic"
 
 
+class ConversationUpdate(BaseModel):
+    title: str | None = None
+
+
 class Conversation(BaseModel):
     id: str
     userId: str

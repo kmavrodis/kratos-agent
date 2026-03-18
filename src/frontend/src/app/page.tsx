@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { SettingsModal } from "@/components/SettingsModal";
 import { SkillsAdminPanel } from "@/components/SkillsAdminPanel";
 import { Conversation, UseCase } from "@/types";
-import { listUseCases } from "@/lib/api";
+import { listUseCases, listConversations, createConversation, deleteConversation } from "@/lib/api";
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -18,6 +18,7 @@ export default function Home() {
   const [selectedUseCase, setSelectedUseCase] = useState<string>("generic");
 
   useEffect(() => {
+    // Load use-cases
     listUseCases()
       .then((ucs) => {
         setUseCases(ucs);
@@ -26,22 +27,69 @@ export default function Home() {
         }
       })
       .catch(() => {
-        // Fallback — API not available yet
         setUseCases([{ name: "generic", displayName: "Generic Assistant", description: "", skillCount: 0 }]);
+      });
+
+    // Load existing conversations from Cosmos so the sidebar persists across reloads
+    listConversations()
+      .then((data) => {
+        const convs = (data.conversations as Conversation[]) || [];
+        setConversations(convs);
+      })
+      .catch(() => {
+        // Non-fatal — sidebar will just be empty on this load
       });
   }, []);
 
-  const handleNewConversation = () => {
-    const newConv: Conversation = {
-      id: crypto.randomUUID(),
+  const handleNewConversation = async () => {
+    // Optimistically show the conversation immediately
+    const tempId = crypto.randomUUID();
+    const optimistic: Conversation = {
+      id: tempId,
       title: "New Conversation",
       useCase: selectedUseCase,
       status: "active",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setConversations((prev) => [newConv, ...prev]);
-    setActiveConversation(newConv);
+    setConversations((prev) => [optimistic, ...prev]);
+    setActiveConversation(optimistic);
+
+    // Persist to Cosmos and replace the optimistic entry with the server one
+    try {
+      const saved = await createConversation("New Conversation", selectedUseCase) as Conversation;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === tempId ? { ...optimistic, id: saved.id } : c))
+      );
+      setActiveConversation((prev) =>
+        prev?.id === tempId ? { ...optimistic, id: saved.id } : prev
+      );
+    } catch {
+      // Keep the optimistic entry — messages will still work, just won't survive a reload
+    }
+  };
+
+  const handleDeleteConversation = async (conv: Conversation) => {
+    // Optimistically remove from UI
+    setConversations((prev) => prev.filter((c) => c.id !== conv.id));
+    if (activeConversation?.id === conv.id) {
+      setActiveConversation(null);
+    }
+    try {
+      await deleteConversation(conv.id);
+    } catch {
+      // Restore on failure
+      setConversations((prev) => [conv, ...prev]);
+    }
+  };
+
+  const handleTitleChange = (conversationId: string, title: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, title } : c))
+    );
+    setActiveConversation((prev) =>
+      prev?.id === conversationId ? { ...prev, title } : prev
+    );
   };
 
   const handleSelectConversation = (conv: Conversation) => {
@@ -57,6 +105,7 @@ export default function Home() {
         activeId={activeConversation?.id ?? null}
         onNew={handleNewConversation}
         onSelect={handleSelectConversation}
+        onDelete={handleDeleteConversation}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenSkills={() => setSkillsOpen(true)}
         useCases={useCases}
@@ -73,7 +122,7 @@ export default function Home() {
       {/* Main chat area */}
       <main className="flex-1 flex flex-col">
         {activeConversation ? (
-          <ChatWindow conversation={activeConversation} />
+          <ChatWindow conversation={activeConversation} onTitleChange={handleTitleChange} />
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-md">

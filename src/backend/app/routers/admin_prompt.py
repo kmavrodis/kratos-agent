@@ -36,7 +36,7 @@ async def update_system_prompt(body: SystemPromptUpdate, request: Request) -> Sy
         "content": body.content,
     })
 
-    copilot_agent.system_prompt = body.content
+    await copilot_agent.update_system_prompt(body.content)
     logger.info("System prompt updated via admin API (%d chars)", len(body.content))
     return SystemPromptResponse(content=body.content, isDefault=False)
 
@@ -49,5 +49,5 @@ async def reset_system_prompt(request: Request) -> None:
 
     await cosmos.delete_setting(SETTING_ID)
 
-    copilot_agent.system_prompt = DEFAULT_SYSTEM_PROMPT
+    await copilot_agent.update_system_prompt(DEFAULT_SYSTEM_PROMPT)
     logger.info("System prompt reset to default")

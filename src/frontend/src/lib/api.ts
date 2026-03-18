@@ -116,12 +116,56 @@ export async function respondToUserInput(
 }
 
 /**
+ * Update a conversation's title.
+ */
+export async function updateConversation(
+  conversationId: string,
+  updates: { title?: string }
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/conversations/${encodeURIComponent(conversationId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to update conversation: ${response.status}`);
+  }
+}
+
+/**
+ * Delete a conversation.
+ */
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/conversations/${encodeURIComponent(conversationId)}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to delete conversation: ${response.status}`);
+  }
+}
+
+/**
  * List all conversations.
  */
 export async function listConversations(): Promise<{ conversations: unknown[] }> {
   const response = await fetch(`${API_URL}/api/conversations`);
   if (!response.ok) {
     throw new Error(`Failed to list conversations: ${response.status}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get messages for a conversation.
+ */
+export async function getConversationMessages(conversationId: string): Promise<unknown[]> {
+  const response = await fetch(`${API_URL}/api/conversations/${encodeURIComponent(conversationId)}/messages`);
+  if (!response.ok) {
+    throw new Error(`Failed to get messages: ${response.status}`);
   }
   return response.json();
 }

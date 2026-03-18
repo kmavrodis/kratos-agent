@@ -143,8 +143,15 @@ class CopilotAgent:
     @system_prompt.setter
     def system_prompt(self, value: str) -> None:
         self._system_prompt = value
-        # Clear sessions so new chats pick up the updated prompt
+        # Clear sessions so new chats pick up the updated prompt.
+        # Sessions are not explicitly disconnected here (async not possible in a property setter);
+        # use update_system_prompt() in async contexts for a full disconnect + Cosmos cleanup.
         self._sessions.clear()
+        # Must also clear registered handlers — without this, new sessions created after the
+        # reset would skip session.on(on_event) registration (the handler guard checks this set),
+        # causing the event queue to never receive events and every request to time out.
+        self._registered_handlers.clear()
+        self._queues.clear()
         logger.info("System prompt updated — all sessions reset")
 
     def set_registries(self, registries: dict[str, object]) -> None:
@@ -195,6 +202,26 @@ class CopilotAgent:
     def set_cosmos_service(self, cosmos_service: "CosmosService") -> None:
         """Inject the Cosmos service for session persistence."""
         self._cosmos_service = cosmos_service
+
+    async def update_system_prompt(self, value: str) -> None:
+        """Update the system prompt, disconnect all active sessions, and purge Cosmos mappings.
+
+        Prefer this over the property setter in async contexts (e.g. admin API handlers) so
+        that existing SDK sessions are properly disconnected and stale Cosmos session mappings
+        are removed, preventing resume attempts for sessions that used the old prompt.
+        """
+        for session in self._sessions.values():
+            try:
+                await session.disconnect()
+            except Exception:
+                pass
+        self._system_prompt = value
+        self._sessions.clear()
+        self._registered_handlers.clear()
+        self._queues.clear()
+        if self._cosmos_service:
+            await self._cosmos_service.delete_all_session_mappings()
+        logger.info("System prompt updated (async) — all sessions disconnected and Cosmos mappings purged")
 
     async def start(self) -> None:
         """Initialize the Copilot CLI client. Called once on app startup.
@@ -268,6 +295,10 @@ class CopilotAgent:
         self._queues.clear()
         self._tool_counters.clear()
         self._user_input_futures.clear()
+        # Purge stale Cosmos session mappings so the next request doesn't attempt (and fail)
+        # to resume disconnected sessions, which would log spurious warnings.
+        if self._cosmos_service:
+            await self._cosmos_service.delete_all_session_mappings()
         logger.info("Config updated — all sessions reset")
 
     def _build_session_config(self, enabled_tools: list, skill_dirs: list, system_prompt: str) -> dict:

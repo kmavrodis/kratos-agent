@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Conversation, ChatMessage, ToolCallInfo, RunStats, Attachment } from "@/types";
-import { streamAgentChat, respondToUserInput } from "@/lib/api";
+import { streamAgentChat, respondToUserInput, getConversationMessages, updateConversation } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
 import { ThoughtChain } from "./ThoughtChain";
 
@@ -15,9 +15,10 @@ interface UserInputPrompt {
 
 interface Props {
   conversation: Conversation;
+  onTitleChange?: (conversationId: string, title: string) => void;
 }
 
-export function ChatWindow({ conversation }: Props) {
+export function ChatWindow({ conversation, onTitleChange }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -33,15 +34,46 @@ export function ChatWindow({ conversation }: Props) {
   const thoughtsRef = useRef<string[]>([]);
   const toolCallsRef = useRef<ToolCallInfo[]>([]);
   const runStatsRef = useRef<RunStats | null>(null);
+  const titleUpdatedRef = useRef<Set<string>>(new Set()); // track which conversations have been titled
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thoughts, activeToolCalls, runStats]);
 
+  // Load message history when switching to an existing conversation
+  useEffect(() => {
+    setMessages([]);
+    setThoughts([]);
+    setActiveToolCalls([]);
+    setRunStats(null);
+    setMessageStats({});
+    getConversationMessages(conversation.id)
+      .then((msgs) => {
+        const loaded = (msgs as ChatMessage[]).filter(
+          (m) => m.role === "user" || m.role === "assistant"
+        );
+        if (loaded.length > 0) {
+          setMessages(loaded);
+        }
+      })
+      .catch(() => {
+        // Non-fatal — new conversation or backend unreachable
+      });
+  }, [conversation.id]);
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
+
+    // Auto-title on the first message of a conversation
+    const isFirstMessage = messages.length === 0;
+    if (isFirstMessage && !titleUpdatedRef.current.has(conversation.id)) {
+      titleUpdatedRef.current.add(conversation.id);
+      const title = trimmed.slice(0, 60) + (trimmed.length > 60 ? "…" : "");
+      onTitleChange?.(conversation.id, title);
+      updateConversation(conversation.id, { title }).catch(() => {/* non-fatal */});
+    }
 
     // Add user message
     const userMsg: ChatMessage = {
