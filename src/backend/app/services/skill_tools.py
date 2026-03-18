@@ -24,7 +24,6 @@ tracer = trace.get_tracer(__name__)
 
 _credential: DefaultAzureCredential | None = None
 _http_client: httpx.AsyncClient | None = None
-_bing_api_key: str | None = None  # cached after first Key Vault fetch
 
 
 def _get_credential() -> DefaultAzureCredential:
@@ -37,30 +36,8 @@ def _get_credential() -> DefaultAzureCredential:
 def _get_http_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        _http_client = httpx.AsyncClient(timeout=15.0)
+        _http_client = httpx.AsyncClient(timeout=30.0)
     return _http_client
-
-
-async def _get_bing_api_key() -> str:
-    """Return the cached Bing API key, fetching from Key Vault on first call."""
-    global _bing_api_key
-    if _bing_api_key is not None:
-        return _bing_api_key
-
-    key_vault_uri = os.environ.get("KEY_VAULT_URI", "")
-    if key_vault_uri:
-        from azure.keyvault.secrets.aio import SecretClient as KVSecretClient
-
-        credential = _get_credential()
-        async with KVSecretClient(key_vault_uri, credential) as kv:
-            secret = await kv.get_secret("bing-search-api-key")
-            _bing_api_key = secret.value
-            logger.info("Fetched Bing API key from Key Vault (cached for future calls)")
-            return _bing_api_key
-
-    # Fallback to env var
-    _bing_api_key = os.environ.get("BING_SEARCH_API_KEY", "")
-    return _bing_api_key
 
 
 # ─── Web Search ──────────────────────────────────────────────────────────────
@@ -72,53 +49,76 @@ class WebSearchParams(BaseModel):
 
 @define_tool(description="Real-time internet search for current information and market data")
 async def web_search(params: WebSearchParams) -> dict:
-    """Search the internet for up-to-date information using Bing Search API."""
+    """Search the internet using Foundry web_search_preview tool."""
     with tracer.start_as_current_span("skill.web_search"):
         t0 = time.monotonic()
         query = params.query
-        endpoint = os.environ.get("BING_SEARCH_ENDPOINT", "https://api.bing.microsoft.com")
-        search_url = endpoint.rstrip("/") + "/v7.0/search"
-        logger.info("web_search called: query=%r search_url=%s", query, search_url)
+        logger.info("web_search called: query=%r", query)
 
         if not query:
             return {"error": "Missing required search query for web_search"}
 
-        try:
-            api_key = await _get_bing_api_key()
-        except Exception as e:
-            logger.error("Failed to fetch Bing API key: %s", e)
-            return {"error": f"Failed to fetch Bing API key: {e}"}
+        foundry_endpoint = os.environ.get("FOUNDRY_ENDPOINT", "")
+        model_deployment = os.environ.get("FOUNDRY_MODEL_DEPLOYMENT", "")
+        if not foundry_endpoint or not model_deployment:
+            return {"error": "FOUNDRY_ENDPOINT or FOUNDRY_MODEL_DEPLOYMENT not configured"}
 
-        if not api_key:
-            return {"error": "Bing Search API key not available"}
+        # Build the Responses API URL from the Foundry endpoint
+        # FOUNDRY_ENDPOINT is like https://<account>.cognitiveservices.azure.com/
+        # We need https://<account>.services.ai.azure.com/openai/responses
+        account_name = foundry_endpoint.rstrip("/").split("//")[1].split(".")[0]
+        responses_url = f"https://{account_name}.services.ai.azure.com/openai/responses?api-version=2025-03-01-preview"
+
+        try:
+            credential = _get_credential()
+            token = await credential.get_token("https://cognitiveservices.azure.com/.default")
+        except Exception as e:
+            logger.error("Failed to get auth token for web search: %s", e)
+            return {"error": f"Authentication failed: {e}"}
 
         t1 = time.monotonic()
         try:
             client = _get_http_client()
-            response = await client.get(
-                search_url,
-                params={"q": query, "count": 5, "mkt": "en-US"},
-                headers={"Ocp-Apim-Subscription-Key": api_key},
+            response = await client.post(
+                responses_url,
+                headers={
+                    "Authorization": f"Bearer {token.token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model_deployment,
+                    "input": f"Search the web for: {query}. Return only factual search results with sources.",
+                    "tools": [{"type": "web_search_preview"}],
+                    "tool_choice": {"type": "web_search_preview"},
+                },
             )
             response.raise_for_status()
             data = response.json()
         except Exception as e:
-            logger.error("Bing Search API call failed: %s", e)
-            return {"error": f"Bing Search API call failed: {e}"}
+            logger.error("Foundry web search call failed: %s", e)
+            return {"error": f"Web search call failed: {e}"}
 
-        results = []
-        for page in data.get("webPages", {}).get("value", [])[:5]:
-            results.append({
-                "title": page.get("name", ""),
-                "url": page.get("url", ""),
-                "snippet": page.get("snippet", ""),
-            })
+        # Extract text and citations from the Responses API output
+        text = ""
+        citations = []
+        for item in data.get("output", []):
+            if item.get("type") == "message":
+                for content in item.get("content", []):
+                    if content.get("type") == "output_text":
+                        text = content.get("text", "")
+                        for ann in content.get("annotations", []):
+                            if ann.get("type") == "url_citation":
+                                citations.append({
+                                    "title": ann.get("title", ""),
+                                    "url": ann.get("url", ""),
+                                })
+
         logger.info(
-            "web_search returned %d results for query=%s keyvault_ms=%.0f bing_ms=%.0f",
-            len(results), query,
+            "web_search returned %d citations for query=%s auth_ms=%.0f search_ms=%.0f",
+            len(citations), query,
             (t1 - t0) * 1000, (time.monotonic() - t1) * 1000,
         )
-        return {"results": results, "query": query}
+        return {"text": text, "citations": citations, "query": query}
 
 
 # ─── RAG Search ──────────────────────────────────────────────────────────────
