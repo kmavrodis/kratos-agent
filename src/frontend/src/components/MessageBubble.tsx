@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ChatMessage } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -64,8 +65,9 @@ export function MessageBubble({ message }: Props) {
         {isUser ? (
           <p className="text-sm whitespace-pre-wrap">{message.content}</p>
         ) : (
-          <div className="text-sm prose prose-sm max-w-none prose-p:my-1 prose-li:my-0">
+          <div className="text-sm prose prose-sm max-w-none prose-p:my-1 prose-li:my-0 prose-table:my-2 prose-th:px-3 prose-th:py-1.5 prose-td:px-3 prose-td:py-1.5 prose-th:text-left prose-th:bg-gray-200 prose-th:font-semibold prose-table:border-collapse prose-table:w-full">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 a: ({ href, children }) => {
                   const isDownload = href?.startsWith(DL_PREFIX);
