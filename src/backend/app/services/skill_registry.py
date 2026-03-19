@@ -188,6 +188,46 @@ class SkillRegistry:
         """Return tool function names for enabled skills."""
         return {s.tool_name or s.name.replace("-", "_") for s in self.get_enabled_skills()}
 
+    def list_skill_files(self, name: str) -> list[dict[str, str]]:
+        """List non-SKILL.md files in a skill's local directory."""
+        skill = self.skills.get(name)
+        if not skill or not skill.local_path:
+            return []
+        skill_dir = Path(skill.local_path)
+        if not skill_dir.exists():
+            return []
+        files = []
+        for f in sorted(skill_dir.rglob("*")):
+            if f.is_file() and f.name != "SKILL.md":
+                relative = str(f.relative_to(skill_dir))
+                files.append({"path": relative, "name": f.name})
+        return files
+
+    async def upsert_skill_file(self, skill_name: str, file_path: str, content: bytes) -> None:
+        """Upload or update a file in a skill folder (local + blob)."""
+        skill = self.skills.get(skill_name)
+        if not skill:
+            return
+        if skill.local_path:
+            local_file = Path(skill.local_path) / file_path
+            local_file.parent.mkdir(parents=True, exist_ok=True)
+            local_file.write_bytes(content)
+        if self._blob_service and self._blob_service.is_available:
+            await self._blob_service.upload_skill_file(self.use_case, skill_name, file_path, content)
+
+    async def remove_skill_file(self, skill_name: str, file_path: str) -> bool:
+        """Delete a file from a skill folder (local + blob)."""
+        skill = self.skills.get(skill_name)
+        if not skill:
+            return False
+        if skill.local_path:
+            local_file = Path(skill.local_path) / file_path
+            if local_file.is_file():
+                local_file.unlink()
+        if self._blob_service and self._blob_service.is_available:
+            await self._blob_service.delete_skill_file(self.use_case, skill_name, file_path)
+        return True
+
     # ─── Admin operations ─────────────────────────────────────────────────
 
     async def update_skill(self, name: str, updates: dict) -> SkillMetadata | None:

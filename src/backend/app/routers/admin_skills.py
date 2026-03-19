@@ -1,10 +1,11 @@
 """Admin API for managing skills — CRUD operations backed by Blob Storage."""
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.models import SkillCreate, SkillList, SkillResponse, SkillUpdate
+from app.models import SkillCreate, SkillFile, SkillFileList, SkillFileUpsert, SkillList, SkillResponse, SkillUpdate
 from app.services.skill_registry import SkillMetadata, SkillRegistry
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,16 @@ def _reset_sessions(request: Request) -> None:
         logger.info("Cleared SDK sessions after skill change")
 
 
+def _count_skill_files(skill: SkillMetadata) -> int:
+    """Count non-SKILL.md files in a skill's local directory."""
+    if not skill.local_path:
+        return 0
+    skill_dir = Path(skill.local_path)
+    if not skill_dir.exists():
+        return 0
+    return sum(1 for f in skill_dir.rglob("*") if f.is_file() and f.name != "SKILL.md")
+
+
 def _to_response(skill: SkillMetadata) -> SkillResponse:
     return SkillResponse(
         name=skill.name,
@@ -39,6 +50,7 @@ def _to_response(skill: SkillMetadata) -> SkillResponse:
         enabled=skill.enabled,
         instructions=skill.instructions,
         toolName=skill.tool_name or skill.name.replace("-", "_"),
+        fileCount=_count_skill_files(skill),
     )
 
 
@@ -110,3 +122,69 @@ async def delete_skill(skill_name: str, request: Request, use_case: str = Query(
 
     _reset_sessions(request)
     logger.info("Admin deleted skill: %s", skill_name)
+
+
+# ─── Skill file management ────────────────────────────────────────────────────
+
+def _validate_file_path(file_path: str) -> None:
+    """Reject paths with directory traversal or absolute components."""
+    parts = Path(file_path).parts
+    if any(p in ("..", "/", "\\") for p in parts) or file_path.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+
+@router.get("/{skill_name}/files", response_model=SkillFileList)
+async def list_skill_files(skill_name: str, request: Request, use_case: str = Query("generic")) -> SkillFileList:
+    """List all non-SKILL.md files for a skill, including their content."""
+    registry = _get_registry(request, use_case)
+    skill = registry.get_skill(skill_name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+
+    raw_files = registry.list_skill_files(skill_name)
+    result: list[SkillFile] = []
+    skill_dir = Path(skill.local_path) if skill.local_path else None
+    for entry in raw_files:
+        content = ""
+        if skill_dir:
+            f = skill_dir / entry["path"]
+            try:
+                content = f.read_text(errors="replace")
+            except Exception:
+                content = ""
+        result.append(SkillFile(path=entry["path"], name=entry["name"], content=content))
+    return SkillFileList(files=result)
+
+
+@router.put("/{skill_name}/files/{file_path:path}", status_code=204)
+async def upsert_skill_file(
+    skill_name: str,
+    file_path: str,
+    body: SkillFileUpsert,
+    request: Request,
+    use_case: str = Query("generic"),
+) -> None:
+    """Upload or update a file within a skill folder."""
+    _validate_file_path(file_path)
+    registry = _get_registry(request, use_case)
+    skill = registry.get_skill(skill_name)
+    if not skill:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+    await registry.upsert_skill_file(skill_name, file_path, body.content.encode())
+    logger.info("Admin upserted file: %s/%s/%s", use_case, skill_name, file_path)
+
+
+@router.delete("/{skill_name}/files/{file_path:path}", status_code=204)
+async def delete_skill_file(
+    skill_name: str,
+    file_path: str,
+    request: Request,
+    use_case: str = Query("generic"),
+) -> None:
+    """Delete a file from a skill folder."""
+    _validate_file_path(file_path)
+    registry = _get_registry(request, use_case)
+    if not registry.get_skill(skill_name):
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+    await registry.remove_skill_file(skill_name, file_path)
+    logger.info("Admin deleted file: %s/%s/%s", use_case, skill_name, file_path)

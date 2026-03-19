@@ -234,6 +234,53 @@ export async function deleteSkill(name: string, useCase: string = "generic"): Pr
   }
 }
 
+// ─── Skill Files API ───
+
+import type { SkillFile } from "@/types";
+
+export async function listSkillFiles(skillName: string, useCase: string = "generic"): Promise<{ files: SkillFile[] }> {
+  const response = await fetch(
+    `${API_URL}/api/admin/skills/${encodeURIComponent(skillName)}/files?use_case=${encodeURIComponent(useCase)}`
+  );
+  if (!response.ok) throw new Error(`Failed to list skill files: ${response.status}`);
+  return response.json();
+}
+
+export async function upsertSkillFile(
+  skillName: string,
+  filePath: string,
+  content: string,
+  useCase: string = "generic"
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/admin/skills/${encodeURIComponent(skillName)}/files/${filePath}?use_case=${encodeURIComponent(useCase)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to upload file: ${response.status}`);
+  }
+}
+
+export async function deleteSkillFile(
+  skillName: string,
+  filePath: string,
+  useCase: string = "generic"
+): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/admin/skills/${encodeURIComponent(skillName)}/files/${filePath}?use_case=${encodeURIComponent(useCase)}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to delete file: ${response.status}`);
+  }
+}
+
 // ─── System Prompt Admin API ───
 
 import type { SystemPrompt } from "@/types";

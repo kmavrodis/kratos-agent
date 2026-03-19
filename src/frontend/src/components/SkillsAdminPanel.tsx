@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt } from "@/lib/api";
-import type { Skill } from "@/types";
+import { useState, useEffect, useRef } from "react";
+import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile } from "@/lib/api";
+import type { Skill, SkillFile } from "@/types";
 
 type Tab = "skills" | "prompt";
 
@@ -31,6 +31,14 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
   const [promptIsDefault, setPromptIsDefault] = useState(true);
   const [promptDirty, setPromptDirty] = useState(false);
   const [promptLoading, setPromptLoading] = useState(false);
+
+  // Skill files state
+  const [skillFiles, setSkillFiles] = useState<SkillFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [uploadPath, setUploadPath] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadSkills = async () => {
     setLoading(true);
@@ -143,6 +151,78 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
       await loadPrompt();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reset system prompt");
+    }
+  };
+
+  // ─── File management ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (editingSkill) {
+      setSkillFiles([]);
+      setExpandedFile(null);
+      setShowUploadForm(false);
+      setUploadPath("");
+      setFilesLoading(true);
+      listSkillFiles(editingSkill.name, useCase)
+        .then((d) => setSkillFiles(d.files))
+        .catch(() => setSkillFiles([]))
+        .finally(() => setFilesLoading(false));
+    } else {
+      setSkillFiles([]);
+      setExpandedFile(null);
+    }
+  }, [editingSkill?.name]);
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!editingSkill || !e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    setError("");
+    try {
+      const content = await file.text();
+      // Build final path: strip trailing slash from prefix, join with filename
+      const prefix = uploadPath.trim().replace(/\/+$/, "");
+      const filePath = prefix ? `${prefix}/${file.name}` : file.name;
+      await upsertSkillFile(editingSkill.name, filePath, content, useCase);
+      const existing = skillFiles.findIndex((f) => f.path === filePath);
+      const updated: SkillFile = { path: filePath, name: file.name, content };
+      setSkillFiles((prev) =>
+        existing >= 0
+          ? prev.map((f) => (f.path === filePath ? updated : f))
+          : [...prev, updated]
+      );
+      // Refresh skill list so fileCount badge updates
+      setSkills((prev) =>
+        prev.map((s) =>
+          s.name === editingSkill.name
+            ? { ...s, fileCount: (s.fileCount ?? 0) + (existing >= 0 ? 0 : 1) }
+            : s
+        )
+      );
+      setShowUploadForm(false);
+      setUploadPath("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload file");
+    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDeleteFile = async (filePath: string) => {
+    if (!editingSkill) return;
+    if (!confirm(`Delete file "${filePath}"? This cannot be undone.`)) return;
+    setError("");
+    try {
+      await deleteSkillFile(editingSkill.name, filePath, useCase);
+      setSkillFiles((prev) => prev.filter((f) => f.path !== filePath));
+      if (expandedFile === filePath) setExpandedFile(null);
+      setSkills((prev) =>
+        prev.map((s) =>
+          s.name === editingSkill.name
+            ? { ...s, fileCount: Math.max(0, (s.fileCount ?? 0) - 1) }
+            : s
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete file");
     }
   };
 
@@ -309,6 +389,107 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                 />
               </div>
 
+              {/* Files & Scripts section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Scripts &amp; Files
+                    {skillFiles.length > 0 && (
+                      <span className="ml-1.5 text-xs font-normal text-gray-400">({skillFiles.length})</span>
+                    )}
+                  </label>
+                  {!showUploadForm && (
+                    <button
+                      type="button"
+                      onClick={() => setShowUploadForm(true)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-primary-200"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Upload
+                    </button>
+                  )}
+                </div>
+                {showUploadForm && (
+                  <div className="flex items-center gap-2 mb-3 p-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="flex-1 flex items-center gap-1.5">
+                      <span className="text-xs text-gray-400 font-mono flex-shrink-0">path:</span>
+                      <input
+                        type="text"
+                        value={uploadPath}
+                        onChange={(e) => setUploadPath(e.target.value)}
+                        placeholder="scripts/"
+                        className="flex-1 px-2 py-1 text-xs font-mono border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 min-w-0"
+                        onKeyDown={(e) => e.key === "Escape" && (setShowUploadForm(false), setUploadPath(""))}
+                      />
+                    </div>
+                    <label className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-primary-600 hover:bg-primary-700 rounded-lg cursor-pointer transition-colors flex-shrink-0">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      Choose file
+                      <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadFile} />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => { setShowUploadForm(false); setUploadPath(""); }}
+                      className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+                {filesLoading ? (
+                  <div className="flex items-center gap-2 py-3 text-xs text-gray-400">
+                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-gray-400" />
+                    Loading files…
+                  </div>
+                ) : skillFiles.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4 border border-dashed border-gray-200 rounded-lg">
+                    No files yet. Upload scripts or other supporting files for this skill.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {skillFiles.map((file) => (
+                      <div key={file.path} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div
+                          className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors select-none"
+                          onClick={() => setExpandedFile(expandedFile === file.path ? null : file.path)}
+                        >
+                          <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-xs font-mono text-gray-700 flex-1 truncate">{file.path}</span>
+                          <svg
+                            className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${expandedFile === file.path ? "rotate-180" : ""}`}
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.path); }}
+                            className="p-0.5 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
+                            title="Delete file"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                        {expandedFile === file.path && (
+                          <pre className="text-xs font-mono p-3 bg-gray-900 text-gray-100 overflow-x-auto max-h-52 overflow-y-auto whitespace-pre leading-relaxed">
+                            {file.content || "(binary or empty file)"}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setEditingSkill(null)}
@@ -428,6 +609,14 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                           <span className="text-xs text-gray-400 font-mono">
                             {skill.toolName}
                           </span>
+                          {(skill.fileCount ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-0.5 text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              {skill.fileCount}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-gray-500 truncate">
                           {skill.description}

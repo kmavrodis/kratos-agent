@@ -158,6 +158,17 @@ class BlobSkillService:
             await blob_client.delete_blob()
         logger.info("Deleted skill from blob: %s/%s", use_case, skill_name)
 
+    async def delete_skill_file(self, use_case: str, skill_name: str, file_path: str) -> None:
+        """Delete a single file from a skill folder in blob storage."""
+        if not self._container_client:
+            return
+        blob_path = f"{_USE_CASES_PREFIX}{use_case}/skills/{skill_name}/{file_path}"
+        try:
+            blob = self._container_client.get_blob_client(blob_path)
+            await blob.delete_blob()
+        except Exception:
+            pass  # Already deleted or doesn't exist
+
     # ─── Seed from local baked-in use-cases ───────────────────────────────
 
     async def seed_from_local(self, use_cases_dir: str = "use-cases") -> int:

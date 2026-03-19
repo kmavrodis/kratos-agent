@@ -183,6 +183,21 @@ class AIServiceStatus(BaseModel):
 
 # ─── Skills Admin ───
 
+class SkillFile(BaseModel):
+    """A file belonging to a skill (non-SKILL.md)."""
+    path: str   # relative path from skill root, e.g. "scripts/run.py"
+    name: str   # basename
+    content: str = ""
+
+
+class SkillFileList(BaseModel):
+    files: list[SkillFile]
+
+
+class SkillFileUpsert(BaseModel):
+    content: str = ""
+
+
 class SkillResponse(BaseModel):
     """Skill as returned by the admin API."""
     name: str
@@ -190,6 +205,7 @@ class SkillResponse(BaseModel):
     enabled: bool = True
     instructions: str = ""
     toolName: str = ""
+    fileCount: int = 0
 
 
 class SkillCreate(BaseModel):

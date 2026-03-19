@@ -127,12 +127,19 @@ export type AgentEvent =
 
 // ─── Skills Admin ───
 
+export interface SkillFile {
+  path: string;
+  name: string;
+  content: string;
+}
+
 export interface Skill {
   name: string;
   description: string;
   enabled: boolean;
   instructions: string;
   toolName: string;
+  fileCount?: number;
 }
 
 export interface SkillCreate {
