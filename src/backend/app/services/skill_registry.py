@@ -117,8 +117,11 @@ class SkillRegistry:
             if mcp_path.exists():
                 try:
                     self.mcp_servers = json.loads(mcp_path.read_text())
+                    logger.info("Loaded MCP servers (blob) for '%s': %s", use_case, list(self.mcp_servers.keys()))
                 except json.JSONDecodeError:
                     logger.warning("Invalid .mcp.json for use-case '%s'", use_case)
+            else:
+                logger.info("No .mcp.json found at %s (blob path)", mcp_path)
 
             # Load skills
             for skill_name in await blob_service.list_skill_names(use_case):
@@ -152,8 +155,11 @@ class SkillRegistry:
         if mcp_path.exists():
             try:
                 self.mcp_servers = json.loads(mcp_path.read_text())
+                logger.info("Loaded MCP servers for '%s': %s", use_case, list(self.mcp_servers.keys()))
             except json.JSONDecodeError:
                 logger.warning("Invalid .mcp.json for use-case '%s'", use_case)
+        else:
+            logger.info("No .mcp.json found at %s", mcp_path)
 
         # Load skills
         skills_dir = uc_dir / "skills"

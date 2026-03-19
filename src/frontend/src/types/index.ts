@@ -183,7 +183,7 @@ export interface MCPLocalServer {
 }
 
 export interface MCPRemoteServer {
-  type: "remote";
+  type: "http" | "sse";
   url: string;
   tools?: string[];
   headers?: Record<string, string>;

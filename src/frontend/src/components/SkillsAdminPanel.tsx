@@ -33,11 +33,23 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
   const [promptLoading, setPromptLoading] = useState(false);
 
   // MCP servers state
-  const [mcpContent, setMcpContent] = useState("{}");
-  const [mcpDraft, setMcpDraft] = useState("{}");
-  const [mcpDirty, setMcpDirty] = useState(false);
+  const [mcpServers, setMcpServers] = useState<Record<string, MCPConfig["servers"][string]>>({});
   const [mcpLoading, setMcpLoading] = useState(false);
   const [mcpError, setMcpError] = useState("");
+  const [editingMcp, setEditingMcp] = useState<{ name: string; config: MCPConfig["servers"][string] } | null>(null);
+  const [showMcpCreate, setShowMcpCreate] = useState(false);
+
+  // MCP create/edit form state
+  const [mcpName, setMcpName] = useState("");
+  const [mcpType, setMcpType] = useState<"local" | "http" | "sse">("local");
+  const [mcpCommand, setMcpCommand] = useState("");
+  const [mcpArgs, setMcpArgs] = useState("");
+  const [mcpUrl, setMcpUrl] = useState("");
+  const [mcpTools, setMcpTools] = useState("*");
+  const [mcpEnv, setMcpEnv] = useState("");
+  const [mcpCwd, setMcpCwd] = useState("");
+  const [mcpHeaders, setMcpHeaders] = useState("");
+  const [mcpTimeout, setMcpTimeout] = useState("");
 
   // Skill files state
   const [skillFiles, setSkillFiles] = useState<SkillFile[]>([]);
@@ -81,14 +93,90 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
     setMcpError("");
     try {
       const data = await getMCPConfig(useCase);
-      const formatted = JSON.stringify(data.servers, null, 2);
-      setMcpContent(formatted);
-      setMcpDraft(formatted);
-      setMcpDirty(false);
+      setMcpServers(data.servers);
     } catch (err) {
       setMcpError(err instanceof Error ? err.message : "Failed to load MCP config");
     } finally {
       setMcpLoading(false);
+    }
+  };
+
+  const resetMcpForm = () => {
+    setMcpName(""); setMcpType("local"); setMcpCommand(""); setMcpArgs(""); setMcpUrl("");
+    setMcpTools("*"); setMcpEnv(""); setMcpCwd(""); setMcpHeaders(""); setMcpTimeout("");
+  };
+
+  const populateMcpForm = (name: string, cfg: MCPConfig["servers"][string]) => {
+    setMcpName(name);
+    // Backward compat: old configs may have type "remote" — map to "http"
+    const t = cfg.type === ("remote" as string) ? "http" : cfg.type;
+    setMcpType(t as "local" | "http" | "sse");
+    setMcpTools((cfg.tools ?? ["*"]).join(", "));
+    if (cfg.type === "local") {
+      setMcpCommand(cfg.command);
+      setMcpArgs((cfg.args ?? []).join(", "));
+      setMcpEnv(cfg.env ? Object.entries(cfg.env).map(([k,v]) => `${k}=${v}`).join("\n") : "");
+      setMcpCwd(cfg.cwd ?? "");
+      setMcpUrl(""); setMcpHeaders(""); setMcpTimeout("");
+    } else {
+      setMcpUrl(cfg.url);
+      setMcpHeaders(cfg.headers ? Object.entries(cfg.headers).map(([k,v]) => `${k}: ${v}`).join("\n") : "");
+      setMcpTimeout(cfg.timeout != null ? String(cfg.timeout) : "");
+      setMcpCommand(""); setMcpArgs(""); setMcpEnv(""); setMcpCwd("");
+    }
+  };
+
+  const buildMcpConfig = (): MCPConfig["servers"][string] => {
+    const tools = mcpTools.split(",").map(t => t.trim()).filter(Boolean);
+    if (mcpType === "local") {
+      const env: Record<string, string> = {};
+      mcpEnv.split("\n").forEach(line => { const [k, ...v] = line.split("="); if (k?.trim()) env[k.trim()] = v.join("=").trim(); });
+      return {
+        type: "local" as const, command: mcpCommand,
+        args: mcpArgs ? mcpArgs.split(",").map(a => a.trim()).filter(Boolean) : [],
+        tools,
+        ...(Object.keys(env).length ? { env } : {}),
+        ...(mcpCwd.trim() ? { cwd: mcpCwd.trim() } : {}),
+      };
+    } else {
+      const headers: Record<string, string> = {};
+      mcpHeaders.split("\n").forEach(line => { const idx = line.indexOf(":"); if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim(); });
+      return {
+        type: mcpType as "http" | "sse", url: mcpUrl, tools,
+        ...(Object.keys(headers).length ? { headers } : {}),
+        ...(mcpTimeout.trim() ? { timeout: Number(mcpTimeout) } : {}),
+      };
+    }
+  };
+
+  const handleSaveMcpServer = async () => {
+    setMcpError("");
+    const name = mcpName.trim();
+    if (!name) { setMcpError("Server name is required."); return; }
+    if (mcpType === "local" && !mcpCommand.trim()) { setMcpError("Command is required for local servers."); return; }
+    if ((mcpType === "http" || mcpType === "sse") && !mcpUrl.trim()) { setMcpError("URL is required for remote servers."); return; }
+    const updated = { ...mcpServers, [name]: buildMcpConfig() };
+    try {
+      const data = await updateMCPConfig(useCase, updated);
+      setMcpServers(data.servers);
+      setEditingMcp(null);
+      setShowMcpCreate(false);
+      resetMcpForm();
+    } catch (err) {
+      setMcpError(err instanceof Error ? err.message : "Failed to save MCP server");
+    }
+  };
+
+  const handleDeleteMcp = async (name: string) => {
+    if (!confirm(`Delete MCP server "${name}"? This cannot be undone.`)) return;
+    setMcpError("");
+    const updated = { ...mcpServers };
+    delete updated[name];
+    try {
+      const data = await updateMCPConfig(useCase, updated);
+      setMcpServers(data.servers);
+    } catch (err) {
+      setMcpError(err instanceof Error ? err.message : "Failed to delete MCP server");
     }
   };
 
@@ -178,26 +266,6 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
     }
   };
 
-  const handleSaveMCP = async () => {
-    setMcpError("");
-    let parsed: MCPConfig["servers"];
-    try {
-      parsed = JSON.parse(mcpDraft) as MCPConfig["servers"];
-    } catch {
-      setMcpError("Invalid JSON — please fix syntax errors before saving.");
-      return;
-    }
-    try {
-      const data = await updateMCPConfig(useCase, parsed);
-      const formatted = JSON.stringify(data.servers, null, 2);
-      setMcpContent(formatted);
-      setMcpDraft(formatted);
-      setMcpDirty(false);
-    } catch (err) {
-      setMcpError(err instanceof Error ? err.message : "Failed to save MCP config");
-    }
-  };
-
   // ─── File management ───────────────────────────────────────────────────
 
   useEffect(() => {
@@ -279,9 +347,9 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
         <div className="px-6 pt-4 pb-0 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Admin Panel</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Agent Manager</h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                Manage skills and system prompt &mdash; <span className="font-medium text-gray-700">{useCase.replace(/-/g, " ")}</span>
+                Manage skills, MCP servers, and system prompt &mdash; <span className="font-medium text-gray-700">{useCase.replace(/-/g, " ")}</span>
               </p>
             </div>
             <button
@@ -342,60 +410,160 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
               </div>
-            ) : (
+            ) : editingMcp ? (
+              /* ── MCP Edit view ── */
               <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <button onClick={() => { setEditingMcp(null); resetMcpForm(); }} className="text-sm text-gray-500 hover:text-gray-700">&larr; Back</button>
+                  <h3 className="font-medium text-gray-900">Editing: {editingMcp.name}</h3>
+                </div>
+                {mcpError && <div className="px-3 py-2 bg-red-50 text-red-700 text-sm rounded-lg">{mcpError}</div>}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    MCP servers config for <span className="font-mono text-gray-900">.mcp.json</span>
-                  </label>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Each key is a server name. Use <span className="font-mono">type: &quot;local&quot;</span> for stdio (command-line) servers or{" "}
-                    <span className="font-mono">type: &quot;remote&quot;</span> for HTTP/SSE servers. Changes take effect on the next new conversation.
-                  </p>
-                  {mcpError && (
-                    <div className="mb-3 px-3 py-2 bg-red-50 text-red-700 text-sm rounded-lg">{mcpError}</div>
-                  )}
-                  <textarea
-                    value={mcpDraft}
-                    onChange={(e) => {
-                      setMcpDraft(e.target.value);
-                      setMcpDirty(e.target.value !== mcpContent);
-                      setMcpError("");
-                    }}
-                    rows={16}
-                    spellCheck={false}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select value={mcpType} onChange={(e) => setMcpType(e.target.value as "local" | "http" | "sse")} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                    <option value="local">Local (stdio)</option>
+                    <option value="http">Remote (HTTP)</option>
+                    <option value="sse">Remote (SSE)</option>
+                  </select>
                 </div>
-                <details className="text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg p-3">
-                  <summary className="cursor-pointer font-medium text-gray-600 select-none">Example: faker-mcp-server (local stdio)</summary>
-                  <pre className="mt-2 text-gray-600 font-mono whitespace-pre-wrap">{
-`{
-  "faker": {
-    "type": "local",
-    "command": "faker-mcp-server",
-    "args": [],
-    "tools": ["*"]
-  }
-}`
-                  }</pre>
-                </details>
+                {mcpType === "local" ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Command <span className="text-red-400">*</span></label>
+                      <input type="text" value={mcpCommand} onChange={(e) => setMcpCommand(e.target.value)} placeholder="faker-mcp-server" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Arguments <span className="text-gray-400 text-xs font-normal">(comma-separated)</span></label>
+                      <input type="text" value={mcpArgs} onChange={(e) => setMcpArgs(e.target.value)} placeholder="--port, 3000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Environment Variables <span className="text-gray-400 text-xs font-normal">(KEY=VALUE per line)</span></label>
+                      <textarea value={mcpEnv} onChange={(e) => setMcpEnv(e.target.value)} rows={3} placeholder={"API_KEY=abc123\nDEBUG=true"} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Working Directory</label>
+                      <input type="text" value={mcpCwd} onChange={(e) => setMcpCwd(e.target.value)} placeholder="/path/to/dir" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">URL <span className="text-red-400">*</span></label>
+                      <input type="text" value={mcpUrl} onChange={(e) => setMcpUrl(e.target.value)} placeholder="https://mcp.example.com/sse" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Headers <span className="text-gray-400 text-xs font-normal">(Key: Value per line)</span></label>
+                      <textarea value={mcpHeaders} onChange={(e) => setMcpHeaders(e.target.value)} rows={3} placeholder={"Authorization: Bearer token123\nX-Custom: value"} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Timeout <span className="text-gray-400 text-xs font-normal">(seconds)</span></label>
+                      <input type="number" value={mcpTimeout} onChange={(e) => setMcpTimeout(e.target.value)} placeholder="30" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                  </>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tools <span className="text-gray-400 text-xs font-normal">(comma-separated, * = all)</span></label>
+                  <input type="text" value={mcpTools} onChange={(e) => setMcpTools(e.target.value)} placeholder="*" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                </div>
                 <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => { setMcpDraft(mcpContent); setMcpDirty(false); setMcpError(""); }}
-                    disabled={!mcpDirty}
-                    className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Discard
-                  </button>
-                  <button
-                    onClick={handleSaveMCP}
-                    disabled={!mcpDirty}
-                    className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Save Config
-                  </button>
+                  <button onClick={() => { setEditingMcp(null); resetMcpForm(); }} className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+                  <button onClick={handleSaveMcpServer} className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors">Save Changes</button>
                 </div>
+              </div>
+            ) : showMcpCreate ? (
+              /* ── MCP Create view ── */
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <button onClick={() => { setShowMcpCreate(false); resetMcpForm(); }} className="text-sm text-gray-500 hover:text-gray-700">&larr; Back</button>
+                  <h3 className="font-medium text-gray-900">Add MCP Server</h3>
+                </div>
+                {mcpError && <div className="px-3 py-2 bg-red-50 text-red-700 text-sm rounded-lg">{mcpError}</div>}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Server Name <span className="text-red-400">*</span></label>
+                  <input type="text" value={mcpName} onChange={(e) => setMcpName(e.target.value)} placeholder="my-mcp-server" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select value={mcpType} onChange={(e) => setMcpType(e.target.value as "local" | "http" | "sse")} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                    <option value="local">Local (stdio)</option>
+                    <option value="http">Remote (HTTP)</option>
+                    <option value="sse">Remote (SSE)</option>
+                  </select>
+                </div>
+                {mcpType === "local" ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Command <span className="text-red-400">*</span></label>
+                      <input type="text" value={mcpCommand} onChange={(e) => setMcpCommand(e.target.value)} placeholder="faker-mcp-server" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Arguments <span className="text-gray-400 text-xs font-normal">(comma-separated)</span></label>
+                      <input type="text" value={mcpArgs} onChange={(e) => setMcpArgs(e.target.value)} placeholder="--port, 3000" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Environment Variables <span className="text-gray-400 text-xs font-normal">(KEY=VALUE per line)</span></label>
+                      <textarea value={mcpEnv} onChange={(e) => setMcpEnv(e.target.value)} rows={3} placeholder={"API_KEY=abc123\nDEBUG=true"} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Working Directory</label>
+                      <input type="text" value={mcpCwd} onChange={(e) => setMcpCwd(e.target.value)} placeholder="/path/to/dir" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">URL <span className="text-red-400">*</span></label>
+                      <input type="text" value={mcpUrl} onChange={(e) => setMcpUrl(e.target.value)} placeholder="https://mcp.example.com/sse" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Headers <span className="text-gray-400 text-xs font-normal">(Key: Value per line)</span></label>
+                      <textarea value={mcpHeaders} onChange={(e) => setMcpHeaders(e.target.value)} rows={3} placeholder={"Authorization: Bearer token123\nX-Custom: value"} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Timeout <span className="text-gray-400 text-xs font-normal">(seconds)</span></label>
+                      <input type="number" value={mcpTimeout} onChange={(e) => setMcpTimeout(e.target.value)} placeholder="30" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                    </div>
+                  </>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tools <span className="text-gray-400 text-xs font-normal">(comma-separated, * = all)</span></label>
+                  <input type="text" value={mcpTools} onChange={(e) => setMcpTools(e.target.value)} placeholder="*" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => { setShowMcpCreate(false); resetMcpForm(); }} className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
+                  <button onClick={handleSaveMcpServer} disabled={!mcpName.trim()} className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50">Add Server</button>
+                </div>
+              </div>
+            ) : (
+              /* ── MCP server list ── */
+              <div className="space-y-3">
+                {Object.keys(mcpServers).length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-8">No MCP servers configured yet</p>
+                ) : (
+                  Object.entries(mcpServers).map(([name, cfg]) => (
+                    <div key={name} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          cfg.type === "local" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"
+                        }`}>{cfg.type}</span>
+                        <div className="min-w-0">
+                          <span className="font-medium text-sm text-gray-900">{name}</span>
+                          <p className="text-xs text-gray-500 truncate font-mono">
+                            {cfg.type === "local" ? cfg.command : cfg.url}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 ml-3">
+                        <button onClick={() => { populateMcpForm(name, cfg); setEditingMcp({ name, config: cfg }); }} className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors" title="Edit">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        </button>
+                        <button onClick={() => handleDeleteMcp(name)} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )
           ) : tab === "prompt" ? (
@@ -767,7 +935,7 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
           )}
         </div>
 
-        {/* Footer — only show when on skills list view */}
+        {/* Footer — show when on skills or MCP list view */}
         {tab === "skills" && !editingSkill && !showCreate && (
           <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
             <button
@@ -778,6 +946,25 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Add Skill
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        )}
+        {tab === "mcp" && !editingMcp && !showMcpCreate && (
+          <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
+            <button
+              onClick={() => { resetMcpForm(); setShowMcpCreate(true); }}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Server
             </button>
             <button
               onClick={onClose}

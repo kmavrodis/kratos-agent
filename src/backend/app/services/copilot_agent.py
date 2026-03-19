@@ -407,6 +407,12 @@ class CopilotAgent:
             skill_dirs = registry.get_skill_directories()
             mcp_servers = getattr(registry, "mcp_servers", {})
 
+        logger.info(
+            "Session config for conversation=%s: mcp_servers=%s skill_dirs=%d tools=%d",
+            conversation_id, list(mcp_servers.keys()) if mcp_servers else "none",
+            len(skill_dirs), len(enabled_tools),
+        )
+
         system_prompt = self._get_system_prompt(conversation_id)
         config = self._build_session_config(enabled_tools, skill_dirs, system_prompt, mcp_servers)
 
