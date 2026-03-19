@@ -313,3 +313,26 @@ export async function resetSystemPrompt(): Promise<void> {
     throw new Error(err.detail || `Failed to reset system prompt: ${response.status}`);
   }
 }
+
+// ─── MCP Servers Admin API ───
+
+import type { MCPConfig } from "@/types";
+
+export async function getMCPConfig(useCase: string): Promise<MCPConfig> {
+  const response = await fetch(`${API_URL}/api/admin/mcp-servers?use_case=${encodeURIComponent(useCase)}`);
+  if (!response.ok) throw new Error(`Failed to get MCP config: ${response.status}`);
+  return response.json();
+}
+
+export async function updateMCPConfig(useCase: string, servers: MCPConfig["servers"]): Promise<MCPConfig> {
+  const response = await fetch(`${API_URL}/api/admin/mcp-servers?use_case=${encodeURIComponent(useCase)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ servers }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to update MCP config: ${response.status}`);
+  }
+  return response.json();
+}

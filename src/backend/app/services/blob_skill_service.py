@@ -29,7 +29,7 @@ _USE_CASES_PREFIX = "use-cases/"
 class BlobSkillService:
     """Manages use-case and skill storage in Azure Blob Storage."""
 
-    def __init__(self, settings: Settings, local_base_dir: str = "/tmp/use-cases") -> None:  # noqa: S108
+    def __init__(self, settings: Settings, local_base_dir: str = "use-cases") -> None:
         self.settings = settings
         self.local_base_dir = Path(local_base_dir)
         self._container_client: ContainerClient | None = None
@@ -169,6 +169,11 @@ class BlobSkillService:
         except Exception:
             pass  # Already deleted or doesn't exist
 
+    async def upload_mcp_config(self, use_case: str, content: bytes) -> None:
+        """Upload the .mcp.json config for a use-case."""
+        blob_path = f"{_USE_CASES_PREFIX}{use_case}/.mcp.json"
+        await self.upload_file(blob_path, content)
+
     # ─── Seed from local baked-in use-cases ───────────────────────────────
 
     async def seed_from_local(self, use_cases_dir: str = "use-cases") -> int:
@@ -199,6 +204,13 @@ class BlobSkillService:
                 if prompt_file.exists():
                     blob_path = f"{_USE_CASES_PREFIX}{uc_name}/SYSTEM_PROMPT.md"
                     await self.upload_file(blob_path, prompt_file.read_bytes())
+
+            # Upload .mcp.json if present locally and not yet in blob
+            mcp_file = uc_dir / ".mcp.json"
+            if mcp_file.exists():
+                existing_mcp = await self._download_file(f"{_USE_CASES_PREFIX}{uc_name}/.mcp.json")
+                if existing_mcp is None:
+                    await self.upload_mcp_config(uc_name, mcp_file.read_bytes())
 
             # Seed skills not yet in blob
             existing_skills = set(await self.list_skill_names(uc_name))

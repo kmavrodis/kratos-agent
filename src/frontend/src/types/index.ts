@@ -170,3 +170,28 @@ export interface UseCase {
   description: string;
   skillCount: number;
 }
+
+// ─── MCP Servers Admin ───
+
+export interface MCPLocalServer {
+  type: "local";
+  command: string;
+  args?: string[];
+  tools?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+}
+
+export interface MCPRemoteServer {
+  type: "remote";
+  url: string;
+  tools?: string[];
+  headers?: Record<string, string>;
+  timeout?: number;
+}
+
+export type MCPServerConfig = MCPLocalServer | MCPRemoteServer;
+
+export interface MCPConfig {
+  servers: Record<string, MCPServerConfig>;
+}

@@ -252,3 +252,15 @@ class SystemPromptResponse(BaseModel):
 class SystemPromptUpdate(BaseModel):
     """Payload for updating the system prompt."""
     content: str = Field(..., min_length=1, max_length=50000)
+
+
+# ─── MCP Servers Admin ───
+
+class MCPConfigResponse(BaseModel):
+    """MCP servers config as returned by the admin API."""
+    servers: dict
+
+
+class MCPConfigUpdate(BaseModel):
+    """Payload for updating the MCP servers config."""
+    servers: dict

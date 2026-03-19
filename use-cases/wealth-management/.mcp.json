@@ -1,0 +1,8 @@
+{
+  "faker": {
+    "type": "local",
+    "command": "faker-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  }
+}

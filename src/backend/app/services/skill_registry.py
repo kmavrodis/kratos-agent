@@ -13,6 +13,7 @@ system prompt.  On startup, the service loads all use-cases from blob
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -90,6 +91,7 @@ class SkillRegistry:
     use_case: str = "generic"
     system_prompt: str = ""
     skills: dict[str, SkillMetadata] = field(default_factory=dict)
+    mcp_servers: dict = field(default_factory=dict)
     _blob_service: BlobSkillService | None = field(default=None, repr=False)
 
     async def load(self, use_case: str, blob_service: BlobSkillService | None = None) -> None:
@@ -109,6 +111,14 @@ class SkillRegistry:
             prompt_path = local_dir / "SYSTEM_PROMPT.md"
             if prompt_path.exists():
                 self.system_prompt = prompt_path.read_text()
+
+            # Load MCP servers config
+            mcp_path = local_dir / ".mcp.json"
+            if mcp_path.exists():
+                try:
+                    self.mcp_servers = json.loads(mcp_path.read_text())
+                except json.JSONDecodeError:
+                    logger.warning("Invalid .mcp.json for use-case '%s'", use_case)
 
             # Load skills
             for skill_name in await blob_service.list_skill_names(use_case):
@@ -136,6 +146,14 @@ class SkillRegistry:
         prompt_path = uc_dir / "SYSTEM_PROMPT.md"
         if prompt_path.exists():
             self.system_prompt = prompt_path.read_text()
+
+        # Load MCP servers config
+        mcp_path = uc_dir / ".mcp.json"
+        if mcp_path.exists():
+            try:
+                self.mcp_servers = json.loads(mcp_path.read_text())
+            except json.JSONDecodeError:
+                logger.warning("Invalid .mcp.json for use-case '%s'", use_case)
 
         # Load skills
         skills_dir = uc_dir / "skills"
@@ -321,3 +339,23 @@ class SkillRegistry:
 
         logger.info("Removed skill: %s", name)
         return True
+
+    async def update_mcp_servers(self, servers: dict) -> None:
+        """Persist the MCP servers config as .mcp.json (local + blob)."""
+        self.mcp_servers = servers
+        content = json.dumps(servers, indent=2).encode()
+
+        # Write to local filesystem so in-process sessions can reload
+        if self._blob_service and self._blob_service.is_available:
+            local_path = self._blob_service.local_dir(self.use_case) / ".mcp.json"
+        else:
+            local_path = Path("use-cases") / self.use_case / ".mcp.json"
+
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(content)
+
+        # Upload to blob so it persists across restarts
+        if self._blob_service and self._blob_service.is_available:
+            await self._blob_service.upload_mcp_config(self.use_case, content)
+
+        logger.info("MCP servers config updated for use-case '%s': %d servers", self.use_case, len(servers))

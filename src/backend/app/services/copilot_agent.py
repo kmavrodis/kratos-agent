@@ -223,6 +223,25 @@ class CopilotAgent:
             await self._cosmos_service.delete_all_session_mappings()
         logger.info("System prompt updated (async) — all sessions disconnected and Cosmos mappings purged")
 
+    async def reset_sessions_for_use_case(self, use_case: str) -> None:
+        """Disconnect and drop all sessions belonging to a specific use-case.
+
+        Called after MCP config changes so the next request rebuilds with the new config.
+        """
+        conv_ids = [cid for cid, uc in self._conversation_use_cases.items() if uc == use_case]
+        for cid in conv_ids:
+            session = self._sessions.pop(cid, None)
+            if session:
+                try:
+                    await session.disconnect()
+                except Exception:
+                    pass
+            self._registered_handlers.discard(cid)
+            self._queues.pop(cid, None)
+            if self._cosmos_service:
+                await self._cosmos_service.delete_session_mapping(cid)
+        logger.info("Reset %d sessions for use-case '%s'", len(conv_ids), use_case)
+
     async def start(self) -> None:
         """Initialize the Copilot CLI client. Called once on app startup.
 
@@ -301,9 +320,9 @@ class CopilotAgent:
             await self._cosmos_service.delete_all_session_mappings()
         logger.info("Config updated — all sessions reset")
 
-    def _build_session_config(self, enabled_tools: list, skill_dirs: list, system_prompt: str) -> dict:
+    def _build_session_config(self, enabled_tools: list, skill_dirs: list, system_prompt: str, mcp_servers: dict | None = None) -> dict:
         """Build the shared session config dict used for both create and resume."""
-        return {
+        config = {
             "model": self.settings.foundry_model_deployment,
             "streaming": True,
             "tools": enabled_tools,
@@ -324,6 +343,9 @@ class CopilotAgent:
             "on_permission_request": lambda req, ctx: PermissionRequestResult(kind="approved"),
             "on_user_input_request": self._handle_user_input_request,
         }
+        if mcp_servers:
+            config["mcp_servers"] = mcp_servers
+        return config
 
     async def _handle_user_input_request(self, request: dict, context: dict) -> dict:
         """Called by the SDK when the agent uses ask_user. Pushes an event to the SSE
@@ -378,13 +400,15 @@ class CopilotAgent:
         registry = self._get_registry(conversation_id)
         enabled_tools = ALL_TOOLS
         skill_dirs = []
+        mcp_servers: dict = {}
         if registry is not None:
             enabled_names = registry.get_enabled_tool_names()
             enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
             skill_dirs = registry.get_skill_directories()
+            mcp_servers = getattr(registry, "mcp_servers", {})
 
         system_prompt = self._get_system_prompt(conversation_id)
-        config = self._build_session_config(enabled_tools, skill_dirs, system_prompt)
+        config = self._build_session_config(enabled_tools, skill_dirs, system_prompt, mcp_servers)
 
         # Try to resume an existing SDK session from Cosmos DB
         sdk_session_id = None

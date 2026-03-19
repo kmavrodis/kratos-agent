@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile } from "@/lib/api";
-import type { Skill, SkillFile } from "@/types";
+import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig } from "@/lib/api";
+import type { MCPConfig, Skill, SkillFile } from "@/types";
 
-type Tab = "skills" | "prompt";
+type Tab = "skills" | "prompt" | "mcp";
 
 interface Props {
   open: boolean;
@@ -31,6 +31,13 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
   const [promptIsDefault, setPromptIsDefault] = useState(true);
   const [promptDirty, setPromptDirty] = useState(false);
   const [promptLoading, setPromptLoading] = useState(false);
+
+  // MCP servers state
+  const [mcpContent, setMcpContent] = useState("{}");
+  const [mcpDraft, setMcpDraft] = useState("{}");
+  const [mcpDirty, setMcpDirty] = useState(false);
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [mcpError, setMcpError] = useState("");
 
   // Skill files state
   const [skillFiles, setSkillFiles] = useState<SkillFile[]>([]);
@@ -69,10 +76,27 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
     }
   };
 
+  const loadMCPConfig = async () => {
+    setMcpLoading(true);
+    setMcpError("");
+    try {
+      const data = await getMCPConfig(useCase);
+      const formatted = JSON.stringify(data.servers, null, 2);
+      setMcpContent(formatted);
+      setMcpDraft(formatted);
+      setMcpDirty(false);
+    } catch (err) {
+      setMcpError(err instanceof Error ? err.message : "Failed to load MCP config");
+    } finally {
+      setMcpLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (open) {
       loadSkills();
       loadPrompt();
+      loadMCPConfig();
     }
   }, [open, useCase]);
 
@@ -151,6 +175,26 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
       await loadPrompt();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reset system prompt");
+    }
+  };
+
+  const handleSaveMCP = async () => {
+    setMcpError("");
+    let parsed: MCPConfig["servers"];
+    try {
+      parsed = JSON.parse(mcpDraft) as MCPConfig["servers"];
+    } catch {
+      setMcpError("Invalid JSON — please fix syntax errors before saving.");
+      return;
+    }
+    try {
+      const data = await updateMCPConfig(useCase, parsed);
+      const formatted = JSON.stringify(data.servers, null, 2);
+      setMcpContent(formatted);
+      setMcpDraft(formatted);
+      setMcpDirty(false);
+    } catch (err) {
+      setMcpError(err instanceof Error ? err.message : "Failed to save MCP config");
     }
   };
 
@@ -270,6 +314,16 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
             >
               System Prompt
             </button>
+            <button
+              onClick={() => setTab("mcp")}
+              className={`pb-2 text-sm font-medium border-b-2 transition-colors ${
+                tab === "mcp"
+                  ? "border-primary-600 text-primary-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              MCP Servers
+            </button>
           </div>
         </div>
 
@@ -282,7 +336,69 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {tab === "prompt" ? (
+          {tab === "mcp" ? (
+            /* ── MCP Servers tab ── */
+            mcpLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    MCP servers config for <span className="font-mono text-gray-900">.mcp.json</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Each key is a server name. Use <span className="font-mono">type: &quot;local&quot;</span> for stdio (command-line) servers or{" "}
+                    <span className="font-mono">type: &quot;remote&quot;</span> for HTTP/SSE servers. Changes take effect on the next new conversation.
+                  </p>
+                  {mcpError && (
+                    <div className="mb-3 px-3 py-2 bg-red-50 text-red-700 text-sm rounded-lg">{mcpError}</div>
+                  )}
+                  <textarea
+                    value={mcpDraft}
+                    onChange={(e) => {
+                      setMcpDraft(e.target.value);
+                      setMcpDirty(e.target.value !== mcpContent);
+                      setMcpError("");
+                    }}
+                    rows={16}
+                    spellCheck={false}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+                <details className="text-xs text-gray-500 border border-dashed border-gray-200 rounded-lg p-3">
+                  <summary className="cursor-pointer font-medium text-gray-600 select-none">Example: faker-mcp-server (local stdio)</summary>
+                  <pre className="mt-2 text-gray-600 font-mono whitespace-pre-wrap">{
+`{
+  "faker": {
+    "type": "local",
+    "command": "faker-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  }
+}`
+                  }</pre>
+                </details>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => { setMcpDraft(mcpContent); setMcpDirty(false); setMcpError(""); }}
+                    disabled={!mcpDirty}
+                    className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={handleSaveMCP}
+                    disabled={!mcpDirty}
+                    className="px-4 py-2 text-sm text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Save Config
+                  </button>
+                </div>
+              </div>
+            )
+          ) : tab === "prompt" ? (
             /* ── System Prompt tab ── */
             promptLoading ? (
               <div className="flex items-center justify-center py-12">

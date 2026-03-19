@@ -2,16 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including Node.js 20 (required for Copilot CLI and MCP servers)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Node.js (required for Copilot CLI)
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y --no-install-recommends nodejs && \
-    npm install -g @github/copilot && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    nodejs \
+    npm \
+    && npm install -g @github/copilot faker-mcp-server \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy backend application
 COPY src/backend/ .
