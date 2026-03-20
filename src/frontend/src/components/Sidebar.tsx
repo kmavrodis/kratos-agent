@@ -1,6 +1,22 @@
 "use client";
 
 import { Conversation, UseCase } from "@/types";
+import { useTheme } from "./ThemeProvider";
+
+function timeAgo(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diff = Math.max(0, now - then);
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 interface Props {
   conversations: Conversation[];
@@ -16,97 +32,114 @@ interface Props {
 }
 
 export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, onOpenSettings, onOpenSkills, useCases, selectedUseCase, onSelectUseCase }: Props) {
+  const { theme, toggleTheme } = useTheme();
   return (
-    <aside className="w-72 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
+    <aside className="w-[280px] bg-navy-900 flex flex-col h-full border-r border-white/[0.06]">
       {/* Logo / brand */}
-      <div className="px-4 py-5 border-b border-gray-200">
+      <div className="px-5 py-5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">K</span>
+          <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20">
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+            </svg>
           </div>
           <div>
-            <h1 className="font-semibold text-gray-900 text-sm">
+            <h1 className="font-semibold text-white text-sm tracking-tight">
               Kratos Agent
             </h1>
-            <p className="text-xs text-gray-500">AI Solution Accelerator</p>
+            <p className="text-[11px] text-slate-500">AI Solution Accelerator</p>
           </div>
         </div>
       </div>
 
-      {/* Use-case selector */}
-      {useCases.length > 1 && (
-        <div className="px-3 py-3 border-b border-gray-200">
-          <label className="block text-xs font-medium text-gray-500 mb-1.5 px-1">
-            Agent Persona
-          </label>
-          <select
-            value={selectedUseCase}
-            onChange={(e) => onSelectUseCase(e.target.value)}
-            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          >
-            {useCases.map((uc) => (
-              <option key={uc.name} value={uc.name}>
-                {uc.displayName} ({uc.skillCount} skills)
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
       {/* New conversation button */}
-      <div className="px-3 py-3">
+      <div className="px-3 pb-2">
         <button
           onClick={onNew}
-          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-300 bg-white/[0.05] border border-white/[0.08] rounded-xl hover:bg-white/[0.08] hover:border-white/[0.12] transition-all duration-150"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 4v16m8-8H4"
-            />
+          <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
           New conversation
         </button>
       </div>
 
+      {/* Use-case selector */}
+      {useCases.length > 1 && (
+        <div className="px-3 py-2">
+          <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-1">
+            Agent Persona
+          </label>
+          <div className="relative">
+            <select
+              value={selectedUseCase}
+              onChange={(e) => onSelectUseCase(e.target.value)}
+              className="w-full text-sm text-slate-300 bg-white/[0.05] border border-white/[0.08] rounded-lg pl-3 pr-9 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary-500/50 focus:border-primary-500/50 appearance-none cursor-pointer hover:bg-white/[0.08] hover:border-white/[0.12] transition-all"
+            >
+              {useCases.map((uc) => (
+                <option key={uc.name} value={uc.name} className="bg-navy-900">
+                  {uc.displayName} ({uc.skillCount} skills)
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5">
+              <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Divider */}
+      <div className="mx-4 my-1 border-t border-white/[0.06]" />
+
       {/* Conversation list */}
-      <nav className="flex-1 overflow-y-auto px-3 py-1">
+      <nav className="flex-1 overflow-y-auto dark-scrollbar px-2 py-1">
         {conversations.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-8">
-            No conversations yet
-          </p>
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <div className="w-10 h-10 rounded-xl bg-white/[0.04] flex items-center justify-center mb-3">
+              <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
+              </svg>
+            </div>
+            <p className="text-xs text-slate-600 text-center">No conversations yet</p>
+          </div>
         ) : (
-          <ul className="space-y-1">
+          <ul className="space-y-0.5">
             {conversations.map((conv) => (
-              <li key={conv.id}>
-                <div className={`group flex items-center rounded-lg transition-colors ${
-                  activeId === conv.id ? "bg-primary-50" : "hover:bg-gray-100"
+              <li key={conv.id} className="animate-slide-in-left">
+                <div className={`group flex items-center rounded-lg transition-all duration-150 ${
+                  activeId === conv.id
+                    ? "bg-white/[0.1]"
+                    : "hover:bg-white/[0.04]"
                 }`}>
                   <button
                     onClick={() => onSelect(conv)}
-                    className={`flex-1 min-w-0 text-left px-3 py-2 text-sm ${
-                      activeId === conv.id
-                        ? "text-primary-700 font-medium"
-                        : "text-gray-700"
-                    }`}
+                    className="flex-1 min-w-0 text-left px-3 py-2.5"
                   >
-                    <span className="block truncate">{conv.title}</span>
-                    {conv.useCase && (
-                      <span className="text-[10px] text-gray-400">
-                        {conv.useCase.replace(/-/g, " ")}
+                    <span className={`block truncate text-sm ${
+                      activeId === conv.id
+                        ? "text-white font-medium"
+                        : "text-slate-400"
+                    }`}>
+                      {conv.title}
+                    </span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {conv.useCase && conv.useCase !== "generic" && (
+                        <span className="text-[10px] text-slate-600">
+                          {conv.useCase.replace(/-/g, " ")}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-slate-700 tabular-nums">
+                        {timeAgo(conv.updatedAt || conv.createdAt)}
                       </span>
-                    )}
+                    </div>
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(conv); }}
-                    className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1.5 mr-1 text-gray-400 hover:text-red-500 rounded transition-all"
+                    className="opacity-0 group-hover:opacity-100 flex-shrink-0 p-1.5 mr-1.5 text-slate-600 hover:text-red-400 rounded-md transition-all"
                     title="Delete conversation"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -121,27 +154,47 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
       </nav>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-gray-200 space-y-1">
+      <div className="px-2 py-3 border-t border-white/[0.06] space-y-0.5">
         <button
           onClick={onOpenSkills}
-          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] rounded-lg transition-all duration-150"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+          <svg className="w-4 h-4 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
           Agent Manager
         </button>
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] rounded-lg transition-all duration-150"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
           </svg>
           BYOK Settings
         </button>
-        <p className="text-xs text-gray-400 mt-2 px-3">Copilot SDK + Microsoft Foundry + MCP</p>
+        <div className="pt-2 px-3 flex items-center justify-between">
+          <p className="text-[10px] text-slate-700 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-slow"></span>
+            Copilot SDK + Foundry + MCP
+          </p>
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-white/[0.06] transition-all"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
     </aside>
   );
