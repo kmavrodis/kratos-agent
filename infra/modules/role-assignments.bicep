@@ -13,9 +13,6 @@ param aiServicesName string
 @description('Key Vault name')
 param keyVaultName string
 
-@description('Container Registry name')
-param containerRegistryName string
-
 @description('Storage Account name for skills blob storage')
 param storageAccountName string
 
@@ -26,7 +23,6 @@ param principalId string = ''
 var cosmosDbDataContributor = '00000000-0000-0000-0000-000000000002'
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var searchIndexDataReader = '1407120a-92aa-4202-b7e9-c0e197c71c8f'
-var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var azureAIDeveloper = '64702f94-c441-49e6-a78b-ef80e0188fee'
 var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'
@@ -47,10 +43,6 @@ resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' existing = {
 
 resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
   name: aiServicesName
-}
-
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
-  name: replace(containerRegistryName, '-', '')
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
@@ -90,16 +82,8 @@ resource agentSearchRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   }
 }
 
-// ─── Agent Service → Container Registry ───
-resource agentAcrRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, agentServicePrincipalId, acrPull)
-  scope: containerRegistry
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
-    principalId: agentServicePrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
+// NOTE: AcrPull is assigned via a User-Assigned Managed Identity in agent-service.bicep
+// to avoid the chicken-and-egg problem with the Container App's registry config.
 
 // ─── Agent Service → Microsoft Foundry ───
 resource agentAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

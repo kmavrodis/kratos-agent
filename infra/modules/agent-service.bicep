@@ -40,12 +40,46 @@ param foundryProjectName string
 @description('Azure Blob Storage endpoint for skills')
 param blobStorageEndpoint string
 
+// ─── ACR pull identity ───
+// A User-Assigned Managed Identity is created for ACR access so that the
+// AcrPull role assignment exists BEFORE the Container App tries to validate
+// the registry config.  The System-Assigned identity is still used for all
+// other service-to-service RBAC (Cosmos, Key Vault, AI Search, etc.).
+
+var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+var acrName = replace(containerRegistryName, '-', '')
+
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: acrName
+}
+
+resource acrPullIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${name}-acr-pull'
+  location: location
+  tags: tags
+}
+
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, acrPullIdentity.id, acrPullRoleId)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
+    principalId: acrPullIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ─── Container App ───
 resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
   name: name
   location: location
   tags: union(tags, { 'azd-service-name': 'agent-service' })
+  dependsOn: [acrPullRole]
   identity: {
-    type: 'SystemAssigned'
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${acrPullIdentity.id}': {}
+    }
   }
   properties: {
     managedEnvironmentId: containerAppsEnvId
@@ -53,8 +87,8 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
       activeRevisionsMode: 'Single'
       registries: [
         {
-          server: '${replace(containerRegistryName, '-', '')}.azurecr.io'
-          identity: 'system'
+          server: '${acrName}.azurecr.io'
+          identity: acrPullIdentity.id
         }
       ]
       ingress: {

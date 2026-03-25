@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiUrl } from "@/lib/config";
 
 interface AIServiceStatus {
   configured: boolean;
@@ -25,7 +25,7 @@ export function SettingsModal({ open, onClose }: Props) {
   // Load current settings on open
   useEffect(() => {
     if (!open) return;
-    fetch(`${API_URL}/api/settings`)
+    fetch(`${getApiUrl()}/api/settings`)
       .then((res) => res.json())
       .then((data: AIServiceStatus) => {
         setStatus(data);
@@ -41,7 +41,7 @@ export function SettingsModal({ open, onClose }: Props) {
     setSaving(true);
     setMessage("");
     try {
-      const res = await fetch(`${API_URL}/api/settings`, {
+      const res = await fetch(`${getApiUrl()}/api/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

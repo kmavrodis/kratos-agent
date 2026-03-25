@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Microsoft Foundry (deployed by Bicep)
     foundry_endpoint: str = ""
-    foundry_model_deployment: str = "gpt-52"
+    foundry_model_deployment: str = "gpt-51"
     foundry_project_name: str = ""
 
     # Azure Blob Storage for skills

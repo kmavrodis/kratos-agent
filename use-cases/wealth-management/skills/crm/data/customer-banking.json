@@ -1,0 +1,399 @@
+[
+  {
+    "id": "123456",
+    "clientID": "123456",
+    "status": "active",
+    "firstName": "Pete",
+    "lastName": "Mitchell",
+    "fullName": "Pete Mitchell",
+    "dateOfBirth": "1980-01-01",
+    "nationality": "American",
+    "contactDetails": {
+      "email": "pete.mit@example.com",
+      "phone": "123-456-7890"
+    },
+    "address": {
+      "street": "123 Main St",
+      "city": "New York",
+      "state": "NY",
+      "postalCode": "12345",
+      "country": "USA"
+    },
+    "financialInformation": {
+      "sourceOfWealth": "Investments",
+      "netIncome": "150000",
+      "annualIncome": "200000",
+      "assets": {
+        "realEstate": "500000",
+        "investments": "300000",
+        "cash": "100000"
+      }
+    },
+    "investmentProfile": {
+      "riskProfile": "Aggressive",
+      "investmentObjectives": "Growth",
+      "investmentHorizon": "Long-term"
+    },
+    "pep_status": false,
+    "documents_provided": [],
+    "name_screening_result": "None",
+    "portfolio": {
+      "strategy": "The portfolio focus on assets with higher growth potential, such as stocks in emerging industries or innovative companies. By emphasizing growth, investors accept greater risk but also seek higher returns.",
+      "riskProfile": "Growth",
+      "performanceYTD": "12.3%",
+      "performanceSinceInception": "22.3%",
+      "inceptionDate": "12/07/2015",
+      "positions": [
+        {
+          "ticker": "MSFT",
+          "companyName": "Microsoft Corp",
+          "sector": "Technology",
+          "industry": "Software",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "350",
+          "units": "200"
+        },
+        {
+          "ticker": "NVDA",
+          "companyName": "NVIDIA Corp",
+          "sector": "Technology",
+          "industry": "Semiconductors",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "150",
+          "units": "150"
+        },
+        {
+          "ticker": "AAPL",
+          "companyName": "Apple Inc",
+          "sector": "Technology",
+          "industry": "Consumer Electronics",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "90",
+          "units": "100"
+        },
+        {
+          "ticker": "AMZN",
+          "companyName": "Amazon.com Inc",
+          "sector": "Consumer Discretionary",
+          "industry": "Internet & Direct Marketing Retail",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "150",
+          "units": "180"
+        },
+        {
+          "ticker": "GOOGL",
+          "companyName": "Alphabet Inc",
+          "sector": "Communication Services",
+          "industry": "Interactive Media & Services",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "125",
+          "units": "50"
+        },
+        {
+          "ticker": "META",
+          "companyName": "Facebook Inc / Meta",
+          "sector": "Communication Services",
+          "industry": "Interactive Media & Services",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "100",
+          "units": "50"
+        },
+        {
+          "ticker": "JNJ",
+          "companyName": "Johnson & Johnson",
+          "sector": "Health Care",
+          "industry": "Pharmaceuticals",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "100",
+          "units": "40"
+        },
+        {
+          "ticker": "V",
+          "companyName": "Visa Inc",
+          "sector": "Financials",
+          "industry": "IT Services",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "78",
+          "units": "50"
+        }
+      ]
+    }
+  },
+  {
+    "id": "234567",
+    "clientID": "234567",
+    "status": "active",
+    "firstName": "Bradley",
+    "lastName": "Bradshaw",
+    "fullName": "Bradley Bradshaw",
+    "dateOfBirth": "1985-06-15",
+    "nationality": "American",
+    "contactDetails": {
+      "email": "bradley.bradshaw@example.com",
+      "phone": "234-567-8901"
+    },
+    "address": {
+      "street": "456 Oak Avenue",
+      "city": "San Diego",
+      "state": "CA",
+      "postalCode": "92101",
+      "country": "USA"
+    },
+    "financialInformation": {
+      "sourceOfWealth": "Employment",
+      "netIncome": "120000",
+      "annualIncome": "160000",
+      "assets": {
+        "realEstate": "350000",
+        "investments": "200000",
+        "cash": "75000"
+      }
+    },
+    "investmentProfile": {
+      "riskProfile": "Moderate",
+      "investmentObjectives": "Balanced Growth",
+      "investmentHorizon": "Medium-term"
+    },
+    "pep_status": false,
+    "documents_provided": [],
+    "name_screening_result": "None",
+    "portfolio": {
+      "strategy": "A balanced portfolio that combines growth-oriented equities with stable dividend-paying stocks and fixed-income instruments. The goal is to achieve steady capital appreciation while managing downside risk through diversification.",
+      "riskProfile": "Balanced",
+      "performanceYTD": "8.7%",
+      "performanceSinceInception": "15.2%",
+      "inceptionDate": "03/15/2018",
+      "positions": [
+        {
+          "ticker": "MSFT",
+          "companyName": "Microsoft Corp",
+          "sector": "Technology",
+          "industry": "Software",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "280",
+          "units": "100"
+        },
+        {
+          "ticker": "AAPL",
+          "companyName": "Apple Inc",
+          "sector": "Technology",
+          "industry": "Consumer Electronics",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "130",
+          "units": "80"
+        },
+        {
+          "ticker": "PG",
+          "companyName": "Procter & Gamble Co",
+          "sector": "Consumer Staples",
+          "industry": "Household Products",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "140",
+          "units": "60"
+        },
+        {
+          "ticker": "KO",
+          "companyName": "Coca-Cola Co",
+          "sector": "Consumer Staples",
+          "industry": "Beverages",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "55",
+          "units": "120"
+        },
+        {
+          "ticker": "JPM",
+          "companyName": "JPMorgan Chase & Co",
+          "sector": "Financials",
+          "industry": "Banking",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "150",
+          "units": "70"
+        },
+        {
+          "ticker": "BND",
+          "companyName": "Vanguard Total Bond Market ETF",
+          "sector": "Fixed Income",
+          "industry": "Bond Fund",
+          "currency": "USD",
+          "assetClass": "Fixed Income",
+          "type": "ETF",
+          "average_cost": "72",
+          "units": "200"
+        },
+        {
+          "ticker": "VIG",
+          "companyName": "Vanguard Dividend Appreciation ETF",
+          "sector": "Multi-Sector",
+          "industry": "Dividend Growth",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "ETF",
+          "average_cost": "160",
+          "units": "50"
+        }
+      ]
+    }
+  },
+  {
+    "id": "345678",
+    "clientID": "345678",
+    "status": "active",
+    "firstName": "John",
+    "lastName": "Kazansky",
+    "fullName": "John Kazansky",
+    "dateOfBirth": "1975-11-22",
+    "nationality": "American",
+    "contactDetails": {
+      "email": "john.kazansky@example.com",
+      "phone": "345-678-9012"
+    },
+    "address": {
+      "street": "789 Elm Street",
+      "city": "Virginia Beach",
+      "state": "VA",
+      "postalCode": "23451",
+      "country": "USA"
+    },
+    "financialInformation": {
+      "sourceOfWealth": "Business Ownership",
+      "netIncome": "250000",
+      "annualIncome": "350000",
+      "assets": {
+        "realEstate": "1200000",
+        "investments": "800000",
+        "cash": "200000"
+      }
+    },
+    "investmentProfile": {
+      "riskProfile": "Conservative",
+      "investmentObjectives": "Income & Preservation",
+      "investmentHorizon": "Long-term"
+    },
+    "pep_status": false,
+    "documents_provided": [],
+    "name_screening_result": "None",
+    "portfolio": {
+      "strategy": "A conservative portfolio focused on capital preservation and income generation. Emphasis on blue-chip dividend stocks, investment-grade bonds, and real estate investment trusts to provide steady income streams with minimal volatility.",
+      "riskProfile": "Conservative",
+      "performanceYTD": "5.4%",
+      "performanceSinceInception": "9.8%",
+      "inceptionDate": "08/20/2012",
+      "positions": [
+        {
+          "ticker": "JNJ",
+          "companyName": "Johnson & Johnson",
+          "sector": "Health Care",
+          "industry": "Pharmaceuticals",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "155",
+          "units": "120"
+        },
+        {
+          "ticker": "PEP",
+          "companyName": "PepsiCo Inc",
+          "sector": "Consumer Staples",
+          "industry": "Beverages",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "170",
+          "units": "80"
+        },
+        {
+          "ticker": "T",
+          "companyName": "AT&T Inc",
+          "sector": "Communication Services",
+          "industry": "Telecommunications",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "18",
+          "units": "300"
+        },
+        {
+          "ticker": "O",
+          "companyName": "Realty Income Corp",
+          "sector": "Real Estate",
+          "industry": "REIT",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "55",
+          "units": "150"
+        },
+        {
+          "ticker": "VZ",
+          "companyName": "Verizon Communications Inc",
+          "sector": "Communication Services",
+          "industry": "Telecommunications",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "38",
+          "units": "200"
+        },
+        {
+          "ticker": "AGG",
+          "companyName": "iShares Core U.S. Aggregate Bond ETF",
+          "sector": "Fixed Income",
+          "industry": "Bond Fund",
+          "currency": "USD",
+          "assetClass": "Fixed Income",
+          "type": "ETF",
+          "average_cost": "98",
+          "units": "250"
+        },
+        {
+          "ticker": "SCHD",
+          "companyName": "Schwab U.S. Dividend Equity ETF",
+          "sector": "Multi-Sector",
+          "industry": "Dividend Income",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "ETF",
+          "average_cost": "72",
+          "units": "180"
+        },
+        {
+          "ticker": "XOM",
+          "companyName": "Exxon Mobil Corp",
+          "sector": "Energy",
+          "industry": "Oil & Gas",
+          "currency": "USD",
+          "assetClass": "Equity",
+          "type": "Common Stock",
+          "average_cost": "95",
+          "units": "100"
+        }
+      ]
+    }
+  }
+]

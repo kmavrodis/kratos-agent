@@ -4,10 +4,12 @@ Each function here corresponds to one skill in skills.yaml.
 The SDK calls these when the agent decides to invoke a skill.
 """
 
+import json
 import logging
 import os
 import subprocess
 import time
+from pathlib import Path
 
 import httpx
 
@@ -126,6 +128,7 @@ async def web_search(params: WebSearchParams) -> dict:
 
 class RAGSearchParams(BaseModel):
     query: str = Field(description="The query to search in the knowledge base")
+    index_name: str = Field(default="", description="The Azure AI Search index name to query. Each use case has its own index (e.g. 'wm-knowledge-base' for wealth management, 'insurance-knowledge-base' for insurance).")
     top: int = Field(default=5, description="Number of results to return")
 
 
@@ -137,18 +140,28 @@ async def rag_search(params: RAGSearchParams) -> dict:
         if not ai_search_endpoint:
             return {"error": "AI_SEARCH_ENDPOINT not configured"}
 
+        index_name = params.index_name.strip() if params.index_name else os.environ.get("AI_SEARCH_INDEX", "")
+        if not index_name:
+            return {"error": "index_name must be provided (e.g. 'wm-knowledge-base')"}
         credential = _get_credential()
         async with SearchClient(
             endpoint=ai_search_endpoint,
-            index_name="knowledge-base",
+            index_name=index_name,
             credential=credential,
         ) as client:
-            results = await client.search(params.query, top=params.top)
+            results = await client.search(
+                search_text=params.query,
+                top=params.top,
+                query_type="semantic",
+                semantic_configuration_name="default",
+            )
             docs = []
             async for result in results:
                 docs.append({
-                    "content": result.get("content", ""),
+                    "content": str(result.get("content", ""))[:500],
                     "title": result.get("title", ""),
+                    "source": result.get("source", ""),
+                    "page": result.get("page_number", ""),
                     "score": result.get("@search.score", 0),
                 })
             return {"results": docs, "query": params.query}
@@ -213,10 +226,131 @@ async def foundry_agent(params: FoundryAgentParams) -> dict:
         return response.json()
 
 
+# ─── CRM — Client Relationship Management ────────────────────────────────────
+
+# Lazy-loaded CRM data
+_crm_clients: list[dict] | None = None
+
+
+def _load_crm_clients() -> list[dict]:
+    """Load CRM client data from JSON, searching multiple candidate paths."""
+    global _crm_clients
+    if _crm_clients is not None:
+        return _crm_clients
+
+    candidates = [
+        Path("use-cases/wealth-management/skills/crm/data/customer-banking.json"),
+        Path(__file__).resolve().parent.parent.parent.parent / "use-cases" / "wealth-management" / "skills" / "crm" / "data" / "customer-banking.json",
+    ]
+    for p in candidates:
+        if p.exists():
+            _crm_clients = json.loads(p.read_text(encoding="utf-8"))
+            logger.info("CRM data loaded from %s (%d clients)", p, len(_crm_clients))
+            return _crm_clients
+
+    logger.warning("CRM data file not found in any candidate path: %s", [str(p) for p in candidates])
+    _crm_clients = []
+    return _crm_clients
+
+
+def _sanitize_crm_client(client: dict) -> dict:
+    """Return client dict with portfolio summary (without full positions list)."""
+    result = {}
+    for key in (
+        "clientID", "status", "fullName", "firstName", "lastName",
+        "dateOfBirth", "nationality", "contactDetails", "address",
+        "financialInformation", "investmentProfile", "pep_status",
+        "documents_provided", "name_screening_result",
+    ):
+        if key in client:
+            result[key] = client[key]
+    if "portfolio" in client:
+        p = client["portfolio"]
+        result["portfolio"] = {
+            "strategy": p.get("strategy", ""),
+            "riskProfile": p.get("riskProfile", ""),
+            "performanceYTD": p.get("performanceYTD", ""),
+            "performanceSinceInception": p.get("performanceSinceInception", ""),
+            "inceptionDate": p.get("inceptionDate", ""),
+            "positionCount": len(p.get("positions", [])),
+        }
+    return result
+
+
+class CRMParams(BaseModel):
+    action: str = Field(
+        description=(
+            "Action to perform: "
+            "'search_name' (search client by name), "
+            "'search_id' (lookup client by ID), "
+            "'portfolio' (get full portfolio by client ID), "
+            "'list' (list all clients)"
+        )
+    )
+    query: str = Field(
+        default="",
+        description="Client full name for search_name, or client ID for search_id/portfolio. Leave empty for list.",
+    )
+
+
+@define_tool(description="Search and retrieve wealth-management client profiles, financial data, and portfolio holdings from the CRM system")
+async def crm(params: CRMParams) -> dict:
+    """CRM lookup for client profiles, financial data, and portfolios."""
+    with tracer.start_as_current_span("skill.crm"):
+        clients = _load_crm_clients()
+        action = params.action.strip().lower()
+        query = params.query.strip()
+
+        if action == "list":
+            summaries = [
+                {"clientID": c.get("clientID"), "fullName": c.get("fullName"),
+                 "status": c.get("status"), "riskProfile": c.get("investmentProfile", {}).get("riskProfile", "")}
+                for c in clients
+            ]
+            return {"status": "success", "count": len(summaries), "clients": summaries}
+
+        if action == "search_name":
+            if not query:
+                return {"status": "error", "message": "query (client name) is required for search_name"}
+            q = query.lower()
+            matches = [
+                _sanitize_crm_client(c) for c in clients
+                if q in c.get("fullName", "").lower()
+                or q in c.get("firstName", "").lower()
+                or q in c.get("lastName", "").lower()
+            ]
+            if not matches:
+                return {"status": "not_found", "message": f"No clients found matching '{query}'"}
+            return {"status": "success", "count": len(matches), "clients": matches}
+
+        if action == "search_id":
+            if not query:
+                return {"status": "error", "message": "query (client ID) is required for search_id"}
+            for c in clients:
+                if c.get("clientID") == query or c.get("id") == query:
+                    return {"status": "success", "client": _sanitize_crm_client(c)}
+            return {"status": "not_found", "message": f"No client found with ID '{query}'"}
+
+        if action == "portfolio":
+            if not query:
+                return {"status": "error", "message": "query (client ID) is required for portfolio"}
+            for c in clients:
+                if c.get("clientID") == query or c.get("id") == query:
+                    return {
+                        "status": "success",
+                        "clientID": c.get("clientID"),
+                        "fullName": c.get("fullName"),
+                        "portfolio": c.get("portfolio", {}),
+                    }
+            return {"status": "not_found", "message": f"No client found with ID '{query}'"}
+
+        return {"status": "error", "message": f"Unknown action '{action}'. Use: search_name, search_id, portfolio, list"}
+
+
 # ─── Tool registry ────────────────────────────────────────────────────────────
 
 # All tools to register with every SDK session
-ALL_TOOLS = [web_search, rag_search, code_interpreter, foundry_agent]
+ALL_TOOLS = [web_search, rag_search, code_interpreter, foundry_agent, crm]
 
 # Map from tool function name → tool object (used by CopilotAgent to filter by enabled skills)
 TOOL_MAP = {tool.name: tool for tool in ALL_TOOLS}

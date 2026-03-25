@@ -7,6 +7,7 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { SkillsAdminPanel } from "@/components/SkillsAdminPanel";
 import { Conversation, UseCase, Skill } from "@/types";
 import { listUseCases, listConversations, createConversation, deleteConversation, listSkills } from "@/lib/api";
+import { loadRuntimeConfig } from "@/lib/config";
 
 export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -19,6 +20,8 @@ export default function Home() {
   const [skills, setSkills] = useState<Skill[]>([]);
 
   useEffect(() => {
+    // Load runtime config (resolves API URL from /config.json if present)
+    loadRuntimeConfig().then(() => {
     // Load use-cases
     listUseCases()
       .then((ucs) => {
@@ -40,6 +43,7 @@ export default function Home() {
       .catch(() => {
         // Non-fatal — sidebar will just be empty on this load
       });
+    }); // end loadRuntimeConfig
   }, []);
 
   // Fetch skills whenever the selected use-case changes

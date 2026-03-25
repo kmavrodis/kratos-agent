@@ -4,10 +4,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMessage } from "@/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiUrl } from "@/lib/config";
 
 /** Marker prefix so we can identify our download links in the rendered markdown. */
-const DL_PREFIX = `${API_URL}/api/files/download/`;
+const DL_PREFIX = `${getApiUrl()}/api/files/download/`;
 
 /**
  * Detect absolute file paths (e.g. /tmp/foo.pdf) in agent responses and rewrite

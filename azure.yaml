@@ -16,6 +16,14 @@ services:
     language: js
     host: staticwebapp
     dist: out
+    hooks:
+      predeploy:
+        shell: sh
+        run: |
+          if [ -n "${AGENT_SERVICE_URL}" ]; then
+            echo "{\"apiUrl\":\"${AGENT_SERVICE_URL}\"}" > out/config.json
+            echo "Injected config.json with apiUrl=${AGENT_SERVICE_URL}"
+          fi
 
 hooks:
   preprovision:
