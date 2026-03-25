@@ -236,6 +236,7 @@ class UseCaseInfo(BaseModel):
     displayName: str = ""
     description: str = ""
     skillCount: int = 0
+    sampleQuestions: list[str] = Field(default_factory=list)
 
 
 class UseCaseList(BaseModel):

@@ -169,6 +169,7 @@ export interface UseCase {
   displayName: string;
   description: string;
   skillCount: number;
+  sampleQuestions: string[];
 }
 
 // ─── MCP Servers Admin ───

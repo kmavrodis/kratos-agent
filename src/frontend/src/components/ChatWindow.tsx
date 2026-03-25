@@ -16,9 +16,10 @@ interface UserInputPrompt {
 interface Props {
   conversation: Conversation;
   onTitleChange?: (conversationId: string, title: string) => void;
+  initialMessage?: string;
 }
 
-export function ChatWindow({ conversation, onTitleChange }: Props) {
+export function ChatWindow({ conversation, onTitleChange, initialMessage }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -62,8 +63,8 @@ export function ChatWindow({ conversation, onTitleChange }: Props) {
       });
   }, [conversation.id]);
 
-  const handleSend = async () => {
-    const trimmed = input.trim();
+  const handleSend = async (messageOverride?: string) => {
+    const trimmed = (messageOverride ?? input).trim();
     if (!trimmed || isStreaming) return;
 
     // Auto-title on the first message of a conversation
@@ -252,6 +253,18 @@ export function ChatWindow({ conversation, onTitleChange }: Props) {
       conversation.useCase
     );
   };
+
+  // Auto-send initial message (e.g. from sample question click)
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  const initialMessageSentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (initialMessage && initialMessageSentRef.current !== `${conversation.id}:${initialMessage}`) {
+      initialMessageSentRef.current = `${conversation.id}:${initialMessage}`;
+      const timer = setTimeout(() => handleSendRef.current(initialMessage), 150);
+      return () => clearTimeout(timer);
+    }
+  }, [conversation.id, initialMessage]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -469,7 +482,7 @@ export function ChatWindow({ conversation, onTitleChange }: Props) {
               }}
             />
             <button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={isStreaming || !input.trim()}
               className="p-2 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm hover:shadow-md disabled:shadow-none"
             >
