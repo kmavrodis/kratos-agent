@@ -204,7 +204,7 @@ def _generate_embeddings(texts: list[str], credential: DefaultAzureCredential) -
     if not EMBEDDING_DEPLOYMENT:
         return None
 
-    foundry_endpoint = os.environ.get("FOUNDRY_ENDPOINT", "https://oai-okovh7knql6fm.services.ai.azure.com/api/projects/oai-okovh7knql6fm-proj")
+    foundry_endpoint = os.environ.get("FOUNDRY_ENDPOINT", "")
     if not foundry_endpoint:
         logger.warning("FOUNDRY_ENDPOINT not set — skipping embedding generation")
         return None
