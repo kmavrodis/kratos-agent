@@ -136,9 +136,9 @@ class RAGSearchParams(BaseModel):
 async def rag_search(params: RAGSearchParams) -> dict:
     """Search the Azure AI Search knowledge base."""
     with tracer.start_as_current_span("skill.rag_search"):
-        ai_search_endpoint = os.environ.get("AI_SEARCH_ENDPOINT", "")
+        ai_search_endpoint = os.environ.get("AZURE_AI_SEARCH_ENDPOINT", "")
         if not ai_search_endpoint:
-            return {"error": "AI_SEARCH_ENDPOINT not configured"}
+            return {"error": "AZURE_AI_SEARCH_ENDPOINT not configured"}
 
         index_name = params.index_name.strip() if params.index_name else os.environ.get("AI_SEARCH_INDEX", "")
         if not index_name:

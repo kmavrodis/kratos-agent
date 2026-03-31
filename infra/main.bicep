@@ -26,6 +26,13 @@ param staticWebAppName string = ''
 param agentServiceName string = ''
 param vnetName string = ''
 param storageAccountName string = ''
+param aiGatewayName string = ''
+
+@description('Publisher email for the AI Gateway (APIM)')
+param apimPublisherEmail string = 'admin@${environmentName}.com'
+
+@description('Path prefix for the agent API on the gateway (set during Foundry portal registration)')
+param agentApiPath string = 'kratos-agent'
 
 // ─── Resource Naming ───
 var abbrs = loadJsonContent('./abbreviations.json')
@@ -193,6 +200,20 @@ module agentService './modules/agent-service.bicep' = {
   }
 }
 
+// ─── AI Gateway (API Management) ───
+module aiGateway './modules/ai-gateway.bicep' = {
+  name: 'ai-gateway'
+  scope: rg
+  params: {
+    name: !empty(aiGatewayName) ? aiGatewayName : '${abbrs.cognitiveServicesAccounts}${resourceToken}-gateway'
+    location: location
+    tags: tags
+    publisherEmail: apimPublisherEmail
+    appInsightsId: appInsights.outputs.id
+    appInsightsInstrumentationKey: appInsights.outputs.instrumentationKey
+  }
+}
+
 // ─── Static Web App ───
 module staticWebApp './modules/static-web-app.bicep' = {
   name: 'static-web-app'
@@ -229,7 +250,9 @@ output AZURE_AI_SEARCH_ENDPOINT string = aiSearch.outputs.endpoint
 output AZURE_KEY_VAULT_URI string = keyVault.outputs.uri
 output AZURE_APP_INSIGHTS_CONNECTION_STRING string = appInsights.outputs.connectionString
 output AZURE_STATIC_WEB_APP_URL string = staticWebApp.outputs.url
-output AGENT_SERVICE_URL string = agentService.outputs.url
+output AGENT_SERVICE_DIRECT_URL string = agentService.outputs.url
+output AGENT_SERVICE_URL string = '${aiGateway.outputs.gatewayUrl}/${agentApiPath}'
+output AI_GATEWAY_URL string = aiGateway.outputs.gatewayUrl
 output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
 output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint

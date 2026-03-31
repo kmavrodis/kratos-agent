@@ -17,9 +17,13 @@ User
 Static Web Apps ── Chat UI (Next.js)
  │  REST / SSE
  ▼
+API Management ── AI Gateway (BasicV2)
+ │  Foundry Traces + AppInsights logger
+ ▼
 Azure Container Apps ── Agent Service (Python)
  ├── FastAPI + SSE Streaming
  ├── Copilot SDK / Agentic Loop
+ ├── OpenTelemetry (GenAI semantic conventions)
  └── Skill Router / MCP Protocol
          │         │         │
         MCP       API       SDK
@@ -63,13 +67,31 @@ azd up
 ```
 
 `azd up` will:
-1. Provision all Azure infrastructure via Bicep
+1. Provision all Azure infrastructure via Bicep (including the AI Gateway / APIM)
 2. Build the Docker container image
 3. Push to Azure Container Registry
 4. Deploy agent service to Container Apps
-5. Deploy frontend to Static Web Apps
+5. Deploy frontend to Static Web Apps (configured to route through the AI Gateway)
 6. Configure all Managed Identity connections
 7. Output the public URL
+
+### Register the Agent in Microsoft Foundry (Manual Step)
+
+After `azd up` completes, you must register the agent in the **Foundry portal** so that Foundry recognizes it and populates the Traces tab:
+
+1. Open [Microsoft Foundry](https://ai.azure.com) and navigate to your project
+2. Go to **Operate** → **Agents**
+3. Click **+ Register agent** (Custom Agent)
+4. Fill in:
+   - **Name**: `kratos-agent` (or your preferred display name)
+   - **Gateway**: Select the APIM gateway provisioned by Bicep (e.g. `oai-xxx-gateway`)
+   - **Backend URL**: The Container App URL (visible in the `AGENT_SERVICE_DIRECT_URL` output from `azd`)
+   - **API path**: `kratos-agent` (must match the `agentApiPath` Bicep parameter)
+5. Complete the wizard — Foundry will create an API on the gateway pointing to your Container App
+
+This is the **only manual step**. It cannot be automated via Bicep because the Foundry Control Plane creates internal metadata that links the APIM API to the agent tracing pipeline.
+
+> **Tip:** Run `azd env get-values | grep AGENT_SERVICE` to see both the direct Container App URL and the gateway URL.
 
 ### Local Development
 
@@ -101,6 +123,7 @@ kratos-agent/
 │       ├── network.bicep       # VNet + subnets
 │       ├── cosmos-db.bicep     # Serverless Cosmos DB
 │       ├── ai-search.bicep     # AI Search (Basic)
+│       ├── ai-gateway.bicep    # API Management (AI Gateway + AppInsights diagnostic)
 │       ├── key-vault.bicep     # Key Vault + private endpoint
 │       ├── container-registry.bicep
 │       ├── container-apps-env.bicep
@@ -215,9 +238,31 @@ No changes to core agent code required.
 
 - **OpenTelemetry** instrumentation across the entire request path
 - **Azure Application Insights** for traces, metrics, and logs
+- **Microsoft Foundry Traces** — end-to-end agent trace visibility in the Foundry portal
 - Logged events: user messages, agentic loop iterations, skill invocations, LLM calls, context compaction, errors
 - Per-skill metrics: call count, latency, error rate
 - Token consumption tracking per model
+
+### Foundry Tracing
+
+All frontend traffic flows through the **AI Gateway (APIM)**, which feeds request telemetry to Application Insights. The Foundry Traces tab reads from AppInsights to display agent execution traces.
+
+The backend emits OpenTelemetry spans following the [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/):
+
+| Span | Attributes |
+|------|------------|
+| `create_agent` | `gen_ai.agent.id`, `gen_ai.agent.name`, `gen_ai.agent.version` |
+| `invoke_agent` | `gen_ai.conversation.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.agent.tool_calls`, `gen_ai.client.time_to_first_token_ms` |
+
+The APIM gateway is configured with an **Application Insights logger** and **diagnostic** at 100% sampling, which is required for Foundry Traces to work.
+
+### AI Gateway (API Management)
+
+The AI Gateway is provisioned by Bicep (`infra/modules/ai-gateway.bicep`) with:
+- **BasicV2 SKU** for AI workloads
+- **AppInsights logger** connected to the project's Application Insights instance
+- **`applicationinsights` diagnostic** with 100% fixed sampling
+- The frontend's `config.json` is injected at deploy time with the gateway URL, so all user traffic routes through APIM
 
 ---
 
@@ -242,13 +287,14 @@ Push to `main` triggers the full pipeline:
 |---------|-------------|
 | Container Apps (consumption) | $0 – $50 |
 | Static Web Apps (free) | $0 |
+| API Management (BasicV2) | ~$175 |
 | Cosmos DB (serverless) | $5 – $25 |
 | AI Search (basic) | ~$75 |
 | Key Vault | ~$1 |
 | Container Registry (basic) | ~$5 |
 | Application Insights | $5 – $20 |
 | Foundry Models (per-token) | Variable |
-| **Total baseline** | **~$90 – $175/month** |
+| **Total baseline** | **~$265 – $350/month** |
 
 ---
 

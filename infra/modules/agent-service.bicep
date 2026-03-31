@@ -115,7 +115,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
           env: [
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
             { name: 'COSMOS_DB_ENDPOINT', value: cosmosDbEndpoint }
-            { name: 'AI_SEARCH_ENDPOINT', value: aiSearchEndpoint }
+            { name: 'AZURE_AI_SEARCH_ENDPOINT', value: aiSearchEndpoint }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'FOUNDRY_ENDPOINT', value: foundryEndpoint }
             { name: 'FOUNDRY_MODEL_DEPLOYMENT', value: foundryModelDeployment }

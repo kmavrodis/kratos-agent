@@ -269,6 +269,28 @@ class CopilotAgent:
 
         self._client = CopilotClient()
         await self._client.start()
+
+        # Emit a create_agent span so Foundry Traces tab can discover this agent.
+        # Foundry looks for plural gen_ai.agents.id / gen_ai.agents.name;
+        # OTel spec uses singular gen_ai.agent.id — emit both.
+        with tracer.start_as_current_span(
+            "create_agent kratos-agent",
+            kind=trace.SpanKind.CLIENT,
+            attributes={
+                "gen_ai.operation.name": "create_agent",
+                "gen_ai.system": "openai",
+                "gen_ai.provider.name": "azure.ai.openai",
+                "gen_ai.request.model": self.settings.foundry_model_deployment,
+                "gen_ai.agent.id": "kratos-agent",
+                "gen_ai.agent.name": "kratos-agent",
+                "gen_ai.agents.id": "kratos-agent",
+                "gen_ai.agents.name": "kratos-agent",
+                "gen_ai.agent.version": "0.1.0",
+                "server.address": self.settings.foundry_endpoint,
+            },
+        ):
+            pass
+
         logger.info(
             "CopilotClient started (Managed Identity auth, sdk_version=%s)",
             version("github-copilot-sdk"),
@@ -482,7 +504,10 @@ class CopilotAgent:
                 "gen_ai.system": "openai",
                 "gen_ai.provider.name": "azure.ai.openai",
                 "gen_ai.request.model": self.settings.foundry_model_deployment,
+                "gen_ai.agent.id": "kratos-agent",
                 "gen_ai.agent.name": "kratos-agent",
+                "gen_ai.agents.id": "kratos-agent",
+                "gen_ai.agents.name": "kratos-agent",
                 "gen_ai.agent.version": "0.1.0",
                 "gen_ai.conversation.id": conversation_id,
                 "server.address": self.settings.foundry_endpoint,

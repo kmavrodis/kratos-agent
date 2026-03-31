@@ -38,9 +38,10 @@ logger = logging.getLogger(__name__)
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 # Folder where PDFs to ingest are located — override via env var
-# Default resolves to <repo-root>/use-cases/wealth-management/sample-data
+# Default resolves to <repo-root>/use-cases/insurance/sample-data
+#CHANGE the folder name to ingest sample-data accordingly   
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-PDF_INGEST_FOLDER = os.environ.get("PDF_INGEST_FOLDER", str(_REPO_ROOT / "use-cases" / "wealth-management" / "sample-data"))
+PDF_INGEST_FOLDER = os.environ.get("PDF_INGEST_FOLDER", str(_REPO_ROOT / "use-cases" / "insurance" / "sample-data"))
 
 # Embedding model deployment name on Foundry/OpenAI (set to empty to skip vectors)
 EMBEDDING_DEPLOYMENT = os.environ.get("EMBEDDING_DEPLOYMENT", "text-embedding-ada-002")
@@ -57,9 +58,9 @@ UPLOAD_BATCH_SIZE = int(os.environ.get("AI_SEARCH_UPLOAD_BATCH_SIZE", "50"))
 
 
 def _get_ai_search_endpoint() -> str:
-    endpoint = os.environ.get("AI_SEARCH_ENDPOINT", "")
+    endpoint = os.environ.get("AZURE_AI_SEARCH_ENDPOINT", "")
     if not endpoint:
-        raise ValueError("AI_SEARCH_ENDPOINT environment variable is not set")
+        raise ValueError("AZURE_AI_SEARCH_ENDPOINT environment variable is not set")
     return endpoint
 
 
@@ -372,8 +373,38 @@ def delete_index(index_name: str) -> dict:
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 
+
+def _load_azd_env() -> None:
+    """Load environment variables from the active azd environment."""
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["azd", "env", "get-values"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if proc.returncode != 0:
+            logger.warning("azd env get-values failed (rc=%s) — skipping", proc.returncode)
+            return
+    except FileNotFoundError:
+        logger.debug("azd CLI not found — skipping env loading")
+        return
+
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        value = value.strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
 if __name__ == "__main__":
     import argparse
+
+    _load_azd_env()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s — %(message)s")
 

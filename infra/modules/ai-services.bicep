@@ -11,16 +11,16 @@ param tags object = {}
 param projectName string = '${name}-proj'
 
 @description('Name of the GPT model deployment')
-param modelDeploymentName string = 'gpt-51'
+param modelDeploymentName string = 'gpt-54mini'
 
 @description('Model name to deploy')
-param modelName string = 'gpt-5.1'
+param modelName string = 'gpt-5.4-mini'
 
 @description('Model version')
-param modelVersion string = '2025-11-13'
+param modelVersion string = '2026-03-17'
 
 @description('Deployment SKU capacity (thousands of tokens per minute)')
-param modelCapacity int = 1000
+param modelCapacity int = 350
 
 resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: name

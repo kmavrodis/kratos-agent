@@ -13,12 +13,12 @@ class Settings(BaseSettings):
 
     # Azure service endpoints (set by Bicep / azd)
     cosmos_db_endpoint: str = ""
-    ai_search_endpoint: str = ""
+    azure_ai_search_endpoint: str = ""
     key_vault_uri: str = ""
 
     # Microsoft Foundry (deployed by Bicep)
     foundry_endpoint: str = ""
-    foundry_model_deployment: str = "gpt-51"
+    foundry_model_deployment: str = "gpt-54mini"
     foundry_project_name: str = ""
 
     # Azure Blob Storage for skills

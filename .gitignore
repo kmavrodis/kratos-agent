@@ -60,3 +60,4 @@ secrets/
 .playwright-mcp/
 
 .github/
+tests/

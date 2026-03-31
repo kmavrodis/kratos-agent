@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.observability import setup_telemetry
+from app.observability import instrument_fastapi_app, setup_telemetry
 from app.routers import admin_mcp, admin_prompt, admin_skills, agent, conversations, files, health, settings, use_cases
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import CopilotAgent
@@ -32,7 +32,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: initialize services on startup, cleanup on shutdown."""
     settings = get_settings()
 
-    # Setup OpenTelemetry
+    # Setup OpenTelemetry (traces, metrics, logs/events exporters)
     setup_telemetry(settings)
 
     # Initialize Cosmos DB service
@@ -102,6 +102,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Instrument FastAPI BEFORE first request (middleware must be added before stack is built).
+# Uses global ProxyTracerProvider; real provider is set by setup_telemetry() in the lifespan.
+instrument_fastapi_app(app)
 
 # CORS — configured for Static Web App frontend
 app.add_middleware(

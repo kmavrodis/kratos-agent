@@ -23,6 +23,7 @@ param principalId string = ''
 var cosmosDbDataContributor = '00000000-0000-0000-0000-000000000002'
 var keyVaultSecretsUser = '4633458b-17de-408a-b874-0445c86b69e6'
 var searchIndexDataReader = '1407120a-92aa-4202-b7e9-c0e197c71c8f'
+var searchIndexDataContributor = '8ece5a2c-969e-4d31-920e-3836493b24e9'
 var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var azureAIDeveloper = '64702f94-c441-49e6-a78b-ef80e0188fee'
 var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'
@@ -71,12 +72,23 @@ resource agentKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
-// ─── Agent Service → AI Search ───
+// ─── Agent Service → AI Search (Reader) ───
 resource agentSearchRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(aiSearch.id, agentServicePrincipalId, searchIndexDataReader)
   scope: aiSearch
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataReader)
+    principalId: agentServicePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ─── Agent Service → AI Search (Contributor — for ingestion) ───
+resource agentSearchContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiSearch.id, agentServicePrincipalId, searchIndexDataContributor)
+  scope: aiSearch
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataContributor)
     principalId: agentServicePrincipalId
     principalType: 'ServicePrincipal'
   }
@@ -168,6 +180,17 @@ resource userStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
+    principalId: principalId
+    principalType: 'User'
+  }
+}
+
+// ─── Deploying User → AI Search (Contributor — for local data ingestion) ───
+resource userSearchContributorRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
+  name: guid(aiSearch.id, principalId, searchIndexDataContributor)
+  scope: aiSearch
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataContributor)
     principalId: principalId
     principalType: 'User'
   }
