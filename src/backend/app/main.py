@@ -45,28 +45,19 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await blob_skill_service.initialize()
     application.state.blob_skill_service = blob_skill_service
 
-    # Load all use-case registries from blob storage (seeds on first run)
+    # Load all use-case registries from blob storage
     registries: dict[str, SkillRegistry] = {}
-    blob_available = blob_skill_service.is_available
-    if blob_available:
+    if not blob_skill_service.is_available:
+        logger.error("Blob storage is not configured — no skills will be available")
+    else:
         try:
-            # Seed first, then discover use-cases
-            await blob_skill_service.seed_from_local("use-cases")
             use_case_names = await blob_skill_service.list_use_cases()
+            for uc_name in use_case_names:
+                registry = SkillRegistry()
+                await registry.load(uc_name, blob_skill_service)
+                registries[uc_name] = registry
         except Exception:
-            logger.warning("Blob storage access failed — falling back to local skills", exc_info=True)
-            blob_available = False
-
-    if not blob_available:
-        # Local fallback — discover use-cases from local directory
-        from pathlib import Path
-        uc_dir = Path("use-cases")
-        use_case_names = sorted(d.name for d in uc_dir.iterdir() if d.is_dir()) if uc_dir.exists() else ["generic"]
-
-    for uc_name in use_case_names:
-        registry = SkillRegistry()
-        await registry.load(uc_name, blob_skill_service if blob_available else None)
-        registries[uc_name] = registry
+            logger.exception("Failed to load use-cases from blob storage")
 
     application.state.registries = registries
     # Keep backward compat: skill_registry points to "generic"

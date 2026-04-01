@@ -256,3 +256,4 @@ output AI_GATEWAY_URL string = aiGateway.outputs.gatewayUrl
 output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
 output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
+output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name

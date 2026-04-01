@@ -95,14 +95,11 @@ class SkillRegistry:
     _blob_service: BlobSkillService | None = field(default=None, repr=False)
 
     async def load(self, use_case: str, blob_service: BlobSkillService | None = None) -> None:
-        """Load skills for a use-case from blob storage, seeding on first run."""
+        """Load skills for a use-case from blob storage."""
         self.use_case = use_case
         self._blob_service = blob_service
 
         if blob_service is not None and blob_service.is_available:
-            # Seed any baked-in use-cases/skills not yet in blob
-            await blob_service.seed_from_local("use-cases")
-
             # Sync this use-case from blob → local filesystem
             await blob_service.sync_to_local(use_case)
             local_dir = blob_service.local_dir(use_case)

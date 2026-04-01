@@ -35,3 +35,8 @@ hooks:
     run: |
       echo "Post-provisioning: configuring services..."
       echo "Deployment complete."
+
+  postdeploy:
+    shell: sh
+    run: ./hooks/postdeploy.sh
+    interactive: true

@@ -13,9 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy backend application
 COPY src/backend/ .
 
-# Copy baked-in use-case definitions (seeded to blob on first run)
-COPY use-cases/ ./use-cases/
-
 # Install dependencies
 RUN pip install --no-cache-dir .
 
