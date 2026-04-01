@@ -17,9 +17,10 @@ interface Props {
   conversation: Conversation;
   onTitleChange?: (conversationId: string, title: string) => void;
   initialMessage?: string;
+  onOpenSidebar?: () => void;
 }
 
-export function ChatWindow({ conversation, onTitleChange, initialMessage }: Props) {
+export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpenSidebar }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -317,28 +318,36 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage }: Prop
   return (
     <div className="flex flex-col h-full bg-surface-50 dark:bg-navy-950">
       {/* Header */}
-      <header className="border-b border-slate-200/80 dark:border-white/[0.06] px-6 py-3 bg-white/80 dark:bg-navy-900/80 backdrop-blur-lg sticky top-0 z-10">
+      <header className="border-b border-slate-200/60 dark:border-white/[0.05] px-4 sm:px-6 py-3 bg-white/70 dark:bg-navy-900/70 backdrop-blur-xl sticky top-0 z-10">
         <div className="flex items-center gap-3 max-w-5xl mx-auto">
+          {/* Mobile hamburger */}
+          {onOpenSidebar && (
+            <button
+              onClick={onOpenSidebar}
+              className="lg:hidden p-2 -ml-1 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100/80 dark:hover:bg-white/[0.06] transition-all flex-shrink-0"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </button>
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-white truncate">
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-white truncate">
                 {conversation.title}
               </h2>
               {conversation.useCase && conversation.useCase !== "generic" && (
-                <span className="text-[11px] px-2.5 py-0.5 bg-gradient-to-r from-primary-50 to-accent-50 text-accent-700 rounded-full font-medium border border-accent-200 flex-shrink-0">
+                <span className="text-[10px] px-2 py-0.5 bg-primary-50 dark:bg-primary-500/10 text-primary-600 dark:text-primary-400 rounded-full font-medium flex-shrink-0">
                   {conversation.useCase.replace(/-/g, " ")}
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-              Powered by GitHub Copilot SDK &amp; Microsoft Foundry
-            </p>
           </div>
         </div>
       </header>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 sm:py-6">
         <div className="max-w-5xl mx-auto space-y-5">
           {messages.map((msg) => (
             <div key={msg.id}>
@@ -446,9 +455,9 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage }: Prop
       )}
 
       {/* Input area */}
-      <div className="px-4 pb-5 pt-2">
+      <div className="px-3 sm:px-4 pb-4 sm:pb-5 pt-2">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-end gap-2 bg-white dark:bg-navy-800 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] shadow-glass dark:shadow-none px-3 py-2 focus-within:border-primary-300 dark:focus-within:border-primary-500/50 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.1)] transition-all duration-200">
+          <div className="flex items-end gap-2 bg-white dark:bg-navy-900/80 rounded-2xl border border-slate-200/60 dark:border-white/[0.06] px-3 py-2 focus-within:border-primary-400/60 dark:focus-within:border-primary-500/40 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.08)] transition-all duration-200">
             <input
               ref={fileInputRef}
               type="file"
@@ -484,23 +493,20 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage }: Prop
             <button
               onClick={() => handleSend()}
               disabled={isStreaming || !input.trim()}
-              className="p-2 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm hover:shadow-md disabled:shadow-none"
+              className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
               {isStreaming ? (
-                <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                 </svg>
               )}
             </button>
           </div>
-          <p className="text-center text-[11px] text-slate-400 dark:text-slate-600 mt-2">
-            Kratos may produce inaccurate information. Verify important details.
-          </p>
         </div>
       </div>
     </div>

@@ -58,9 +58,9 @@ export function MessageBubble({ message }: Props) {
       {/* Assistant avatar */}
       {!isUser && (
         <div className="flex-shrink-0 mr-3 mt-1">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-sm">
-            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 flex items-center justify-center shadow-md shadow-primary-500/20 ring-2 ring-white/10">
+            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+              <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clipRule="evenodd" />
             </svg>
           </div>
         </div>
@@ -69,8 +69,8 @@ export function MessageBubble({ message }: Props) {
       <div
         className={`max-w-[75%] ${
           isUser
-            ? "rounded-2xl rounded-br-md px-5 py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-md shadow-primary-500/10"
-            : "rounded-2xl rounded-bl-md px-5 py-3 bg-white dark:bg-navy-800 border border-slate-200/80 dark:border-white/[0.06] text-slate-800 dark:text-slate-200 shadow-card dark:shadow-none"
+            ? "rounded-2xl rounded-br-sm px-4 py-3 bg-primary-600 text-white shadow-sm"
+            : "rounded-2xl rounded-bl-sm px-4 py-3 bg-white dark:bg-navy-900/80 border border-slate-100 dark:border-white/[0.06] text-slate-800 dark:text-slate-200"
         }`}
       >
         {isUser ? (
@@ -120,8 +120,8 @@ export function MessageBubble({ message }: Props) {
       {/* User avatar */}
       {isUser && (
         <div className="flex-shrink-0 ml-3 mt-1">
-          <div className="w-8 h-8 rounded-xl bg-slate-700 flex items-center justify-center shadow-sm">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+            <svg className="w-4 h-4 text-slate-500 dark:text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
             </svg>
           </div>
