@@ -22,10 +22,12 @@ export default function Home() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [configReady, setConfigReady] = useState(false);
 
   useEffect(() => {
     // Load runtime config (resolves API URL from /config.json if present)
     loadRuntimeConfig().then(() => {
+    setConfigReady(true);
     // Load use-cases
     listUseCases()
       .then((ucs) => {
@@ -50,12 +52,13 @@ export default function Home() {
     }); // end loadRuntimeConfig
   }, []);
 
-  // Fetch skills whenever the selected use-case changes
+  // Fetch skills whenever the selected use-case changes (only after config is loaded)
   useEffect(() => {
+    if (!configReady) return;
     listSkills(selectedUseCase)
       .then((s) => setSkills(s))
       .catch(() => setSkills([]));
-  }, [selectedUseCase]);
+  }, [selectedUseCase, configReady]);
 
   const handleNewConversation = () => {
     // Navigate to the landing page for the current use case

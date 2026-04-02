@@ -196,3 +196,22 @@ export type MCPServerConfig = MCPLocalServer | MCPRemoteServer;
 export interface MCPConfig {
   servers: Record<string, MCPServerConfig>;
 }
+
+// ─── Consistency Analysis ───
+
+export interface AnalysisIssue {
+  severity: "critical" | "warning" | "info";
+  category: "contradiction" | "overlap" | "gap" | "terminology" | "tone" | "ambiguity" | "unused";
+  title: string;
+  description: string;
+  affectedSkills: string[];
+  recommendation: string;
+}
+
+export interface AnalysisResult {
+  summary: string;
+  overallScore: number;
+  issues: AnalysisIssue[];
+  strengths: string[];
+  durationMs: number;
+}
