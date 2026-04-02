@@ -215,3 +215,17 @@ export interface AnalysisResult {
   strengths: string[];
   durationMs: number;
 }
+
+// ─── Apply Fix ───
+
+export interface FixChange {
+  target: string;
+  changeType: "modified" | "disabled";
+  summary: string;
+}
+
+export interface ApplyFixResult {
+  success: boolean;
+  changes: FixChange[];
+  error: string;
+}

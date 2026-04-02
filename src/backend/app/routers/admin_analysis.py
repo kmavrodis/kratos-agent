@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import time
 
 import httpx
@@ -110,10 +111,46 @@ class AnalysisResponse(BaseModel):
     durationMs: int = 0
 
 
+class ApplyFixRequest(BaseModel):
+    """Describes the issue to fix."""
+    category: str
+    title: str
+    description: str
+    recommendation: str = ""
+    affectedSkills: list[str] = Field(default_factory=list)
+
+
+class FixChange(BaseModel):
+    """A single change that was applied."""
+    target: str  # "system-prompt" or skill name
+    changeType: str  # "modified" or "disabled"
+    summary: str
+
+
+class ApplyFixResponse(BaseModel):
+    """Result of applying a fix."""
+    success: bool
+    changes: list[FixChange] = Field(default_factory=list)
+    error: str = ""
+
+
+FIX_SYSTEM_PROMPT = """You are an expert AI configuration editor. You will receive:
+1. An ISSUE describing a problem in an AI agent's configuration
+2. The CURRENT CONTENT that needs to be fixed (either a system prompt or skill instructions)
+
+Your job is to produce the FIXED version of the content that resolves the issue.
+
+Rules:
+- Make minimal, targeted changes — only fix what the issue describes
+- Preserve the overall structure, tone, and formatting of the original content
+- If the content has YAML frontmatter (--- block at the top), preserve it exactly
+- Do NOT add comments explaining your changes
+- Do NOT remove content unrelated to the issue
+- Return ONLY the fixed content, nothing else — no markdown fences, no explanations"""
+
+
 def _build_analysis_content(registry: SkillRegistry, include_disabled: bool) -> str:
     """Build the user-message content with the system prompt and all skills."""
-    import re
-
     parts: list[str] = []
 
     # System prompt
@@ -165,7 +202,30 @@ async def analyze_consistency(
     content = _build_analysis_content(registry, include_disabled)
     logger.info("Consistency analysis for '%s': %d chars", use_case, len(content))
 
-    # Call Foundry model
+    raw_content = await _call_llm(ANALYSIS_SYSTEM_PROMPT, content, json_mode=True)
+
+    try:
+        result = json.loads(raw_content)
+    except json.JSONDecodeError as e:
+        logger.error("Failed to parse analysis response: %s", e)
+        raise HTTPException(status_code=502, detail="Failed to parse LLM response") from e
+
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
+    return AnalysisResponse(
+        summary=result.get("summary", ""),
+        overallScore=result.get("overallScore", 0),
+        issues=[AnalysisIssue(**issue) for issue in result.get("issues", [])],
+        strengths=result.get("strengths", []),
+        durationMs=duration_ms,
+    )
+
+
+# ─── Shared LLM helper ───
+
+
+async def _call_llm(system_prompt: str, user_content: str, *, json_mode: bool = False) -> str:
+    """Call the Foundry model and return the raw response content string."""
     foundry_endpoint = os.environ.get("FOUNDRY_ENDPOINT", "")
     model_deployment = os.environ.get("FOUNDRY_MODEL_DEPLOYMENT", "")
     if not foundry_endpoint or not model_deployment:
@@ -181,18 +241,19 @@ async def analyze_consistency(
         credential = _get_credential()
         token = await credential.get_token("https://cognitiveservices.azure.com/.default")
     except Exception as e:
-        logger.error("Auth failed for consistency analysis: %s", e)
+        logger.error("Auth failed: %s", e)
         raise HTTPException(status_code=503, detail=f"Authentication failed: {e}") from e
 
-    payload = {
+    payload: dict = {
         "messages": [
-            {"role": "system", "content": ANALYSIS_SYSTEM_PROMPT},
-            {"role": "user", "content": content},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
         ],
         "temperature": 0.3,
         "max_completion_tokens": 4096,
-        "response_format": {"type": "json_object"},
     }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
 
     try:
         client = _get_http_client()
@@ -209,23 +270,125 @@ async def analyze_consistency(
         logger.error("Foundry API error: %s %s", e.response.status_code, e.response.text[:500])
         raise HTTPException(status_code=502, detail=f"LLM API error: {e.response.status_code}") from e
     except Exception as e:
-        logger.error("Failed to call Foundry for analysis: %s", e)
+        logger.error("Failed to call Foundry: %s", e)
         raise HTTPException(status_code=502, detail=f"LLM call failed: {e}") from e
 
-    try:
-        data = resp.json()
-        raw_content = data["choices"][0]["message"]["content"]
-        result = json.loads(raw_content)
-    except (KeyError, json.JSONDecodeError, IndexError) as e:
-        logger.error("Failed to parse analysis response: %s", e)
-        raise HTTPException(status_code=502, detail="Failed to parse LLM response") from e
+    data = resp.json()
+    return data["choices"][0]["message"]["content"]
 
-    duration_ms = int((time.monotonic() - t0) * 1000)
 
-    return AnalysisResponse(
-        summary=result.get("summary", ""),
-        overallScore=result.get("overallScore", 0),
-        issues=[AnalysisIssue(**issue) for issue in result.get("issues", [])],
-        strengths=result.get("strengths", []),
-        durationMs=duration_ms,
+# ─── Apply Fix endpoint ───
+
+
+def _reset_sessions(request: Request) -> None:
+    """Clear active SDK sessions so new conversations pick up changes."""
+    copilot_agent = getattr(request.app.state, "copilot_agent", None)
+    if copilot_agent is not None:
+        copilot_agent._sessions.clear()
+
+
+@router.post("/apply-fix", response_model=ApplyFixResponse)
+async def apply_fix(
+    request: Request,
+    body: ApplyFixRequest,
+    use_case: str = Query("generic"),
+) -> ApplyFixResponse:
+    """Apply an AI-generated fix for a specific consistency issue."""
+    registry = _get_registry(request, use_case)
+    changes: list[FixChange] = []
+
+    # ── Simple case: disable unused skills ──
+    if body.category == "unused" and body.affectedSkills:
+        for skill_name in body.affectedSkills:
+            skill = registry.get_skill(skill_name)
+            if skill and skill.enabled:
+                await registry.update_skill(skill_name, {"enabled": False})
+                changes.append(FixChange(
+                    target=skill_name,
+                    changeType="disabled",
+                    summary=f"Disabled unused skill '{skill_name}'",
+                ))
+        if changes:
+            _reset_sessions(request)
+            return ApplyFixResponse(success=True, changes=changes)
+        return ApplyFixResponse(success=False, error="No matching enabled skills found to disable")
+
+    # ── Determine what to fix ──
+    targets_prompt = _issue_touches_prompt(body)
+    targets_skills = body.affectedSkills if body.affectedSkills else []
+
+    issue_text = (
+        f"Category: {body.category}\n"
+        f"Title: {body.title}\n"
+        f"Description: {body.description}\n"
+        f"Recommendation: {body.recommendation}"
     )
+
+    # ── Fix system prompt if issue involves it ──
+    if targets_prompt:
+        prompt = registry.system_prompt or ""
+        if prompt:
+            user_msg = f"=== ISSUE ===\n{issue_text}\n\n=== CURRENT SYSTEM PROMPT ===\n{prompt}"
+            fixed = await _call_llm(FIX_SYSTEM_PROMPT, user_msg)
+            fixed = fixed.strip()
+            # Strip markdown code fences if the model wrapped it
+            if fixed.startswith("```"):
+                fixed = re.sub(r"^```\w*\n?", "", fixed)
+                fixed = re.sub(r"\n?```$", "", fixed)
+
+            if fixed and fixed != prompt:
+                # Update in Cosmos + copilot agent
+                cosmos = request.app.state.cosmos_service
+                copilot_agent = request.app.state.copilot_agent
+                await cosmos.upsert_setting({
+                    "id": "system-prompt",
+                    "category": "system",
+                    "content": fixed,
+                })
+                await copilot_agent.update_system_prompt(fixed)
+                registry.system_prompt = fixed
+                changes.append(FixChange(
+                    target="system-prompt",
+                    changeType="modified",
+                    summary="Updated system prompt to address the issue",
+                ))
+
+    # ── Fix affected skills ──
+    for skill_name in targets_skills:
+        skill = registry.get_skill(skill_name)
+        if not skill or not skill.instructions:
+            continue
+
+        user_msg = f"=== ISSUE ===\n{issue_text}\n\n=== CURRENT SKILL INSTRUCTIONS ({skill_name}) ===\n{skill.instructions}"
+        fixed = await _call_llm(FIX_SYSTEM_PROMPT, user_msg)
+        fixed = fixed.strip()
+        if fixed.startswith("```"):
+            fixed = re.sub(r"^```\w*\n?", "", fixed)
+            fixed = re.sub(r"\n?```$", "", fixed)
+
+        if fixed and fixed != skill.instructions:
+            await registry.update_skill(skill_name, {"instructions": fixed})
+            changes.append(FixChange(
+                target=skill_name,
+                changeType="modified",
+                summary=f"Updated instructions for skill '{skill_name}'",
+            ))
+
+    if changes:
+        _reset_sessions(request)
+        return ApplyFixResponse(success=True, changes=changes)
+
+    return ApplyFixResponse(success=False, error="No changes were needed or the LLM returned identical content")
+
+
+def _issue_touches_prompt(issue: ApplyFixRequest) -> bool:
+    """Heuristic: does this issue likely require editing the system prompt?"""
+    prompt_categories = {"gap", "ambiguity", "tone", "terminology", "contradiction"}
+    if issue.category in prompt_categories:
+        desc_lower = (issue.description + " " + issue.title + " " + issue.recommendation).lower()
+        if any(kw in desc_lower for kw in ("system prompt", "prompt says", "prompt instructs", "prompt references")):
+            return True
+        # If no affected skills, the issue is about the prompt
+        if not issue.affectedSkills:
+            return True
+    return False

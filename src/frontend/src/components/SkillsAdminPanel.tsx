@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig, analyzeConsistency } from "@/lib/api";
-import type { AnalysisResult, AnalysisIssue, MCPConfig, Skill, SkillFile, UseCase } from "@/types";
+import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig, analyzeConsistency, applyAnalysisFix } from "@/lib/api";
+import type { AnalysisResult, AnalysisIssue, ApplyFixResult, MCPConfig, Skill, SkillFile, UseCase } from "@/types";
 import { useTheme } from "./ThemeProvider";
 
 type Tab = "skills" | "prompt" | "mcp" | "consistency";
@@ -69,6 +69,8 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
   const [includeDisabled, setIncludeDisabled] = useState(true);
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
   const [issueFilter, setIssueFilter] = useState<"all" | "critical" | "warning" | "info">("all");
+  const [fixingIssue, setFixingIssue] = useState<number | null>(null);
+  const [fixResults, setFixResults] = useState<Record<number, ApplyFixResult>>({});
 
   const loadSkills = async () => {
     setLoading(true);
@@ -352,6 +354,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
     setError("");
     setAnalysisResult(null);
     setExpandedIssue(null);
+    setFixResults({});
     try {
       const result = await analyzeConsistency(useCase, includeDisabled);
       setAnalysisResult(result);
@@ -359,6 +362,25 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
       setError(err instanceof Error ? err.message : "Analysis failed");
     } finally {
       setAnalysisLoading(false);
+    }
+  };
+
+  const handleApplyFix = async (issue: AnalysisIssue, issueIdx: number) => {
+    setFixingIssue(issueIdx);
+    try {
+      const result = await applyAnalysisFix(issue, useCase);
+      setFixResults((prev) => ({ ...prev, [issueIdx]: result }));
+      if (result.success) {
+        // Refresh skills list since a skill may have been modified/disabled
+        loadSkills();
+      }
+    } catch (err) {
+      setFixResults((prev) => ({
+        ...prev,
+        [issueIdx]: { success: false, changes: [], error: err instanceof Error ? err.message : "Failed to apply fix" },
+      }));
+    } finally {
+      setFixingIssue(null);
     }
   };
 
@@ -1051,6 +1073,63 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
                                     <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Recommendation</span>
                                     <p className="text-sm text-emerald-800 dark:text-emerald-300 mt-0.5 leading-relaxed">{issue.recommendation}</p>
                                   </div>
+                                )}
+
+                                {/* Apply Fix button & result */}
+                                {fixResults[originalIdx] ? (
+                                  <div className={`rounded-lg px-3 py-2.5 border ${
+                                    fixResults[originalIdx].success
+                                      ? "bg-emerald-50 dark:bg-emerald-500/[0.06] border-emerald-200 dark:border-emerald-500/10"
+                                      : "bg-red-50 dark:bg-red-500/[0.06] border-red-200 dark:border-red-500/10"
+                                  }`}>
+                                    {fixResults[originalIdx].success ? (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <svg className="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                          </svg>
+                                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Fix applied</span>
+                                        </div>
+                                        {fixResults[originalIdx].changes.map((change, ci) => (
+                                          <p key={ci} className="text-xs text-emerald-700 dark:text-emerald-300 pl-5">{change.summary}</p>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5">
+                                        <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="text-xs text-red-700 dark:text-red-400">{fixResults[originalIdx].error}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleApplyFix(issue, originalIdx); }}
+                                    disabled={fixingIssue !== null}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all
+                                      bg-indigo-50 dark:bg-indigo-500/[0.08] text-indigo-700 dark:text-indigo-300
+                                      border border-indigo-200 dark:border-indigo-500/20
+                                      hover:bg-indigo-100 dark:hover:bg-indigo-500/[0.14]
+                                      disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {fixingIssue === originalIdx ? (
+                                      <>
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                                        </svg>
+                                        Applying fix…
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17l-5.59-5.59a2 2 0 112.83-2.83l4.17 4.17 8.17-8.17a2 2 0 112.83 2.83L11.42 15.17z" />
+                                        </svg>
+                                        Apply Fix
+                                      </>
+                                    )}
+                                  </button>
                                 )}
                               </div>
                             </div>
