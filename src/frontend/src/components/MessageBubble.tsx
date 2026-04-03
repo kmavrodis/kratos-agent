@@ -6,8 +6,10 @@ import { ChatMessage } from "@/types";
 
 import { getApiUrl } from "@/lib/config";
 
-/** Marker prefix so we can identify our download links in the rendered markdown. */
-const DL_PREFIX = `${getApiUrl()}/api/files/download/`;
+/** Build the download-link prefix on demand so it picks up runtime config. */
+function getDlPrefix(): string {
+  return `${getApiUrl()}/api/files/download/`;
+}
 
 /**
  * Detect absolute file paths (e.g. /tmp/foo.pdf) in agent responses and rewrite
@@ -15,34 +17,14 @@ const DL_PREFIX = `${getApiUrl()}/api/files/download/`;
  * Also strips surrounding backticks/bold markers so the link isn't rendered as code.
  */
 function rewriteFilePaths(text: string): string {
+  const dlPrefix = getDlPrefix();
   return text.replace(
     /`{0,3}\*{0,2}(\/tmp\/[\w.\-\/]+\.[a-zA-Z0-9]{1,10})\*{0,2}`{0,3}/g,
     (_match, path: string) => {
       const filename = path.split("/").pop() || path;
-      return `[${filename}](${DL_PREFIX}${encodeURIComponent(filename)}?path=${encodeURIComponent(path)})`;
+      return `[${filename}](${dlPrefix}${encodeURIComponent(filename)}?path=${encodeURIComponent(path)})`;
     }
   );
-}
-
-/** Fetch a file via the backend and trigger a browser download with the correct name. */
-async function downloadFile(url: string, filename: string) {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(blobUrl);
-  } catch (err) {
-    console.error("File download error:", err);
-    // Fallback: open the URL directly
-    window.open(url, "_blank");
-  }
 }
 
 interface Props {
@@ -81,21 +63,23 @@ export function MessageBubble({ message }: Props) {
               remarkPlugins={[remarkGfm]}
               components={{
                 a: ({ href, children }) => {
-                  const isDownload = href?.startsWith(DL_PREFIX);
+                  const prefix = getDlPrefix();
+                  const isDownload = href?.startsWith(prefix);
                   if (isDownload && href) {
                     const urlFilename = decodeURIComponent(
-                      href.slice(DL_PREFIX.length).split("?")[0]
+                      href.slice(prefix.length).split("?")[0]
                     );
                     return (
-                      <button
-                        onClick={() => downloadFile(href, urlFilename)}
+                      <a
+                        href={href}
+                        download={urlFilename}
                         className="inline-flex items-center gap-1.5 text-primary-600 hover:text-primary-700 underline decoration-primary-300 underline-offset-2 cursor-pointer bg-transparent border-none p-0 font-inherit text-inherit transition-colors"
                       >
                         <svg className="w-4 h-4 inline-block flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         {children}
-                      </button>
+                      </a>
                     );
                   }
                   return (
