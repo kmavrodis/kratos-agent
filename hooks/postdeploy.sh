@@ -79,11 +79,11 @@ for use_case in "${SELECTED[@]}"; do
   echo "🔄 Uploading '$use_case' → blob://$CONTAINER_NAME/$use_case/ ..."
 
   # Delete existing blobs for this use-case first (replace, not merge)
-  echo "   Clearing existing blobs under '$use_case/'..."
+  echo "   Clearing existing blobs under 'use-cases/$use_case/'..."
   az storage blob delete-batch \
     --account-name "$STORAGE_ACCOUNT" \
     --source "$CONTAINER_NAME" \
-    --pattern "$use_case/*" \
+    --pattern "use-cases/$use_case/*" \
     --auth-mode login \
     --only-show-errors 2>/dev/null || true
 
@@ -92,7 +92,7 @@ for use_case in "${SELECTED[@]}"; do
     --account-name "$STORAGE_ACCOUNT" \
     --destination "$CONTAINER_NAME" \
     --source "$LOCAL_PATH" \
-    --destination-path "$use_case" \
+    --destination-path "use-cases/$use_case" \
     --auth-mode login \
     --overwrite \
     --only-show-errors
