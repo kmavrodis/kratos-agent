@@ -2,7 +2,7 @@
 name: Insurance Service Advisor
 description: AI-powered insurance assistant with CRM access, internal knowledge-base search, and web research for policy servicing, coverage questions, and customer support
 sampleQuestions:
-  - Load the profile for customer Sarah Johnson and summarize her active policies
+  - Load the profile for customer John Doe and summarize his active policies
   - What does our homeowners policy say about water damage exclusions?
   - Find the waiting period and coverage limits for this health insurance plan
   - Check the latest storm guidance affecting auto and property claims in Texas

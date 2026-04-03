@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && npm install -g @github/copilot faker-mcp-server \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install Playwright Chromium and its system dependencies for PDF rendering
+RUN npx -y playwright install --with-deps chromium
+
 # Copy backend application
 COPY src/backend/ .
 

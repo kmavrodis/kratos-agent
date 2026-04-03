@@ -78,11 +78,13 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     }
 
     // Add user message
+    const currentAttachments = attachments.length > 0 ? [...attachments] : undefined;
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       conversationId: conversation.id,
       role: "user",
       content: trimmed,
+      attachments: currentAttachments,
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -95,7 +97,6 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     toolCallsRef.current = [];
     runStatsRef.current = null;
 
-    const currentAttachments = attachments.length > 0 ? [...attachments] : undefined;
     setAttachments([]);
 
     let assistantContent = "";

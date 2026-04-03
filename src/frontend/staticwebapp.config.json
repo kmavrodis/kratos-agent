@@ -18,6 +18,6 @@
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.azurecontainerapps.io https://*.azure-api.net https://*.cognitiveservices.azure.com"
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.azurecontainerapps.io https://*.azure-api.net https://*.cognitiveservices.azure.com; img-src 'self' https://*.azurecontainerapps.io https://*.azure-api.net data: blob:; frame-src 'self' https://*.azurecontainerapps.io https://*.azure-api.net"
   }
 }
