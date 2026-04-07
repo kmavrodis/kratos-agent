@@ -82,6 +82,11 @@ export interface UserInputRequestEvent {
   allowFreeform: boolean;
 }
 
+export interface FollowUpQuestionsEvent {
+  type: "follow_up_questions";
+  questions: string[];
+}
+
 // ─── Attachments ───
 
 export interface FileAttachment {
@@ -124,7 +129,8 @@ export type AgentEvent =
   | UsageEvent
   | DoneEvent
   | ErrorEvent
-  | UserInputRequestEvent;
+  | UserInputRequestEvent
+  | FollowUpQuestionsEvent;
 
 // ─── Skills Admin ───
 

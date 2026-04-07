@@ -187,6 +187,13 @@ class CopilotAgent:
         use_case = self._conversation_use_cases.get(conversation_id, DEFAULT_USE_CASE)
         return self._registries.get(use_case)
 
+    def get_enabled_skill_names(self, conversation_id: str) -> list[str] | None:
+        """Return the enabled skill/tool names for a conversation's use-case, or None."""
+        registry = self._get_registry(conversation_id)
+        if registry is not None and hasattr(registry, "get_enabled_tool_names"):
+            return registry.get_enabled_tool_names()
+        return None
+
     def _get_system_prompt(self, conversation_id: str) -> str:
         """Get the system prompt for a conversation's use-case."""
         registry = self._get_registry(conversation_id)

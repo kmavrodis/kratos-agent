@@ -149,6 +149,12 @@ class ErrorEvent(BaseModel):
     code: str = "UNKNOWN_ERROR"
 
 
+class FollowUpQuestionsEvent(BaseModel):
+    """Streamed event with suggested follow-up questions."""
+    type: str = "follow_up_questions"
+    questions: list[str] = Field(default_factory=list)
+
+
 class UserInputRequestEvent(BaseModel):
     """Streamed event when the agent asks the user a question."""
     type: str = "user_input_request"

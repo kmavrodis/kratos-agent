@@ -31,6 +31,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [userInputPrompt, setUserInputPrompt] = useState<UserInputPrompt | null>(null);
   const [userInputAnswer, setUserInputAnswer] = useState("");
+  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const thoughtsRef = useRef<string[]>([]);
@@ -93,6 +94,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     setThoughts([]);
     setActiveToolCalls([]);
     setRunStats(null);
+    setFollowUpQuestions([]);
     thoughtsRef.current = [];
     toolCallsRef.current = [];
     runStatsRef.current = null;
@@ -219,6 +221,14 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
               choices: (data.choices as string[]) || [],
               allowFreeform: (data.allowFreeform as boolean) ?? true,
             });
+            break;
+          }
+
+          case "follow_up_questions": {
+            const questions = (data.questions as string[]) || [];
+            if (questions.length > 0) {
+              setFollowUpQuestions(questions);
+            }
             break;
           }
         }
@@ -421,6 +431,39 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Follow-up question suggestions */}
+          {!isStreaming && followUpQuestions.length > 0 && (
+            <div className="ml-11 animate-fade-in">
+              <div className="flex items-center gap-2 mb-2.5">
+                <div className="w-5 h-5 rounded-md bg-gradient-to-br from-violet-500/10 to-primary-500/10 dark:from-violet-500/20 dark:to-primary-500/20 flex items-center justify-center">
+                  <svg className="w-3 h-3 text-primary-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <span className="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">Continue exploring</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {followUpQuestions.map((question, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setFollowUpQuestions([]);
+                      handleSend(question);
+                    }}
+                    className="group flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-left rounded-xl border border-transparent hover:bg-white dark:hover:bg-navy-900/80 hover:border-slate-200/60 dark:hover:border-white/[0.08] hover:shadow-sm transition-all duration-200"
+                  >
+                    <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-primary-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span className="text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors">
+                      {question}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

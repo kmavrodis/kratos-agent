@@ -18,6 +18,7 @@ from app.models import (
     ContentEvent,
     DoneEvent,
     ErrorEvent,
+    FollowUpQuestionsEvent,
     Message,
     MessageRole,
     ThoughtEvent,
@@ -26,6 +27,7 @@ from app.models import (
     UserInputRequestEvent,
     UserInputResponseRequest,
 )
+from app.services.follow_up_service import generate_follow_ups
 
 logger = logging.getLogger(__name__)
 
@@ -114,15 +116,25 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                     yield {"event": "error", "data": json.dumps(event.model_dump())}
 
             # Persist assistant response
+            full_response = "".join(assistant_content_parts)
             assistant_message = Message(
                 id=str(uuid.uuid4()),
                 conversationId=body.conversationId,
                 role=MessageRole.ASSISTANT,
-                content="".join(assistant_content_parts),
+                content=full_response,
                 metadata={"tool_calls": total_tool_calls},
                 createdAt=datetime.now(timezone.utc),
             )
             await cosmos.upsert_message(assistant_message)
+
+            # Generate follow-up questions (best-effort, non-blocking)
+            try:
+                skill_names = copilot_agent.get_enabled_skill_names(body.conversationId)
+                follow_ups = await generate_follow_ups(body.message, full_response, skill_names)
+                if follow_ups:
+                    yield {"event": "follow_up_questions", "data": json.dumps(FollowUpQuestionsEvent(questions=follow_ups).model_dump())}
+            except Exception:
+                logger.debug("Follow-up generation skipped", exc_info=True)
 
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
             stats = copilot_agent.get_run_stats(body.conversationId)
