@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import instrument_fastapi_app, setup_telemetry
-from app.routers import admin_mcp, admin_prompt, admin_skills, agent, conversations, copilot_studio, files, health, settings, use_cases
+from app.routers import admin_analysis, admin_mcp, admin_prompt, admin_skills, agent, conversations, copilot_studio, files, health, settings, use_cases
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
@@ -45,28 +45,19 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await blob_skill_service.initialize()
     application.state.blob_skill_service = blob_skill_service
 
-    # Load all use-case registries from blob storage (seeds on first run)
+    # Load all use-case registries from blob storage
     registries: dict[str, SkillRegistry] = {}
-    blob_available = blob_skill_service.is_available
-    if blob_available:
+    if not blob_skill_service.is_available:
+        logger.error("Blob storage is not configured — no skills will be available")
+    else:
         try:
-            # Seed first, then discover use-cases
-            await blob_skill_service.seed_from_local("use-cases")
             use_case_names = await blob_skill_service.list_use_cases()
+            for uc_name in use_case_names:
+                registry = SkillRegistry()
+                await registry.load(uc_name, blob_skill_service)
+                registries[uc_name] = registry
         except Exception:
-            logger.warning("Blob storage access failed — falling back to local skills", exc_info=True)
-            blob_available = False
-
-    if not blob_available:
-        # Local fallback — discover use-cases from local directory
-        from pathlib import Path
-        uc_dir = Path("use-cases")
-        use_case_names = sorted(d.name for d in uc_dir.iterdir() if d.is_dir()) if uc_dir.exists() else ["generic"]
-
-    for uc_name in use_case_names:
-        registry = SkillRegistry()
-        await registry.load(uc_name, blob_skill_service if blob_available else None)
-        registries[uc_name] = registry
+            logger.exception("Failed to load use-cases from blob storage")
 
     application.state.registries = registries
     # Keep backward compat: skill_registry points to "generic"
@@ -124,6 +115,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
 app.include_router(admin_mcp.router, prefix="/api/admin/mcp-servers", tags=["admin"])
+app.include_router(admin_analysis.router, prefix="/api/admin/analysis", tags=["admin"])
 app.include_router(use_cases.router, prefix="/api/use-cases", tags=["use-cases"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(copilot_studio.router, prefix="/api/copilot-studio", tags=["copilot-studio"])

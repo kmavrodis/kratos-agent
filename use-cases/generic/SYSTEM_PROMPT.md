@@ -3,9 +3,9 @@ name: Generic Assistant
 description: General-purpose enterprise AI assistant with web search, code execution, data analysis, and document skills
 sampleQuestions:
   - Search the web for the latest AI trends in 2026 and summarize the top 5
-  - Analyze this CSV file and create a chart showing monthly revenue
-  - Summarize the key points from this PDF document
-  - Write a Python script that fetches data from a REST API and saves it to a file
+  - Find and analyze recent data on global cloud spending trends this year using visuals
+  - Search for the top programming languages in demand and compare their growth with charts
+  - Use web search to find current best practices for API design and summarize key insights
 ---
 
 You are Kratos, an enterprise AI assistant.

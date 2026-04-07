@@ -1,24 +1,28 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig } from "@/lib/api";
-import type { MCPConfig, Skill, SkillFile } from "@/types";
+import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig, analyzeConsistency, applyAnalysisFix } from "@/lib/api";
+import type { AnalysisResult, AnalysisIssue, ApplyFixResult, MCPConfig, Skill, SkillFile, UseCase } from "@/types";
+import { useTheme } from "./ThemeProvider";
 
-type Tab = "skills" | "prompt" | "mcp";
+type Tab = "skills" | "prompt" | "mcp" | "consistency";
 
 interface Props {
-  open: boolean;
   onClose: () => void;
   useCase?: string;
+  useCases?: UseCase[];
+  onSelectUseCase?: (name: string) => void;
 }
 
-export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) {
+export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], onSelectUseCase }: Props) {
   const [tab, setTab] = useState<Tab>("skills");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   // New skill form state
   const [newName, setNewName] = useState("");
@@ -58,6 +62,15 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploadPath, setUploadPath] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Consistency analysis state
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [includeDisabled, setIncludeDisabled] = useState(true);
+  const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
+  const [issueFilter, setIssueFilter] = useState<"all" | "critical" | "warning" | "info">("all");
+  const [fixingIssue, setFixingIssue] = useState<number | null>(null);
+  const [fixResults, setFixResults] = useState<Record<number, ApplyFixResult>>({});
 
   const loadSkills = async () => {
     setLoading(true);
@@ -181,12 +194,10 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
   };
 
   useEffect(() => {
-    if (open) {
-      loadSkills();
-      loadPrompt();
-      loadMCPConfig();
-    }
-  }, [open, useCase]);
+    loadSkills();
+    loadPrompt();
+    loadMCPConfig();
+  }, [useCase]);
 
   const handleToggle = async (skill: Skill) => {
     try {
@@ -338,63 +349,280 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
     }
   };
 
-  if (!open) return null;
+  const handleRunAnalysis = async () => {
+    setAnalysisLoading(true);
+    setError("");
+    setAnalysisResult(null);
+    setExpandedIssue(null);
+    setFixResults({});
+    try {
+      const result = await analyzeConsistency(useCase, includeDisabled);
+      setAnalysisResult(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
+  const handleApplyFix = async (issue: AnalysisIssue, issueIdx: number) => {
+    setFixingIssue(issueIdx);
+    try {
+      const result = await applyAnalysisFix(issue, useCase);
+      setFixResults((prev) => ({ ...prev, [issueIdx]: result }));
+      if (result.success) {
+        // Refresh skills list since a skill may have been modified/disabled
+        loadSkills();
+      }
+    } catch (err) {
+      setFixResults((prev) => ({
+        ...prev,
+        [issueIdx]: { success: false, changes: [], error: err instanceof Error ? err.message : "Failed to apply fix" },
+      }));
+    } finally {
+      setFixingIssue(null);
+    }
+  };
+
+  const navItems: { id: Tab; label: string; icon: string }[] = [
+    { id: "skills", label: "Skills", icon: "puzzle" },
+    { id: "prompt", label: "System Prompt", icon: "document" },
+    { id: "mcp", label: "MCP Servers", icon: "server" },
+    { id: "consistency", label: "Consistency", icon: "shield" },
+  ];
+
+  const renderNavIcon = (icon: string) => {
+    switch (icon) {
+      case "puzzle": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 01-.657.643 48.39 48.39 0 01-4.163-.3c.186 1.613.166 3.532-1.005 3.532a1.5 1.5 0 01-1.5-1.5v0c0-.828-.895-1.5-2-1.5s-2 .672-2 1.5v0a1.5 1.5 0 01-1.5 1.5c-1.171 0-1.191-1.919-1.005-3.532a48.39 48.39 0 01-4.163.3A.64.64 0 012.25 6.73v0c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003C3 3.732 3.84 2.875 5.25 2.875s2.25.857 2.25 1.893c0 .369-.128.713-.349 1.003" /></svg>;
+      case "document": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>;
+      case "server": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /></svg>;
+      case "shield": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>;
+      default: return null;
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white dark:bg-navy-800 rounded-2xl shadow-glass-lg max-w-3xl w-full max-h-[85vh] flex flex-col border border-slate-200/50 dark:border-white/[0.08] animate-slide-up" onClick={(e) => e.stopPropagation()}>
+    <div className="flex h-screen bg-surface-50 dark:bg-navy-950">
+      {/* Mobile nav overlay */}
+      {mobileNavOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      {/* Left sidebar navigation */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-[280px] bg-navy-950 border-r border-white/[0.06] flex flex-col
+        transform transition-transform duration-300 ease-out
+        md:relative md:translate-x-0 md:z-auto
+        ${mobileNavOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+      `}>
         {/* Header */}
-        <div className="px-6 pt-5 pb-0 border-b border-slate-100 dark:border-white/[0.06]">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent-100 to-primary-100 dark:from-accent-900/30 dark:to-primary-900/30 flex items-center justify-center border border-primary-200/50 dark:border-primary-500/20">
-                <svg className="w-4.5 h-4.5 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-white">Agent Manager</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Manage skills, MCP servers, and system prompt &mdash; <span className="font-medium text-slate-700 dark:text-slate-300">{useCase.replace(/-/g, " ")}</span>
-                </p>
-              </div>
-            </div>
+        <div className="px-5 py-4">
+          <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-all"
+              className="w-9 h-9 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center transition-all flex-shrink-0"
+              title="Back to Chat"
             >
+              <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+              </svg>
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-semibold text-white text-sm tracking-tight">Agent Manager</h1>
+              <p className="text-[11px] text-slate-400">Configure skills, prompts &amp; MCP</p>
+            </div>
+            {/* Mobile close */}
+            <button
+              onClick={() => setMobileNavOpen(false)}
+              className="md:hidden p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-white/[0.06] transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Use case selector */}
+        {useCases.length > 1 && (
+          <div className="px-4 pb-3">
+            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-1">
+              Agent Persona
+            </label>
+            <div className="relative">
+              <select
+                value={useCase}
+                onChange={(e) => onSelectUseCase?.(e.target.value)}
+                className="w-full text-sm text-slate-200 bg-white/[0.06] border border-white/[0.1] rounded-lg pl-3 pr-9 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary-500/50 focus:border-primary-500/50 appearance-none cursor-pointer hover:bg-white/[0.1] hover:border-white/[0.14] transition-all"
+              >
+                {useCases.map((uc) => (
+                  <option key={uc.name} value={uc.name} className="bg-navy-900">
+                    {uc.displayName} ({uc.skillCount} skills)
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5">
+                <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="mx-4 my-1 border-t border-white/[0.06]" />
+
+        {/* Navigation items */}
+        <nav className="flex-1 px-3 py-2 space-y-1">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => { setTab(item.id); setMobileNavOpen(false); setEditingSkill(null); setShowCreate(false); setEditingMcp(null); setShowMcpCreate(false); }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150 ${
+                tab === item.id
+                  ? "bg-white/[0.12] text-white font-medium"
+                  : "text-slate-300 hover:text-white hover:bg-white/[0.06]"
+              }`}
+            >
+              <span className={tab === item.id ? "text-primary-400" : "text-slate-400"}>
+                {renderNavIcon(item.icon)}
+              </span>
+              {item.label}
+              {item.id === "skills" && skills.length > 0 && (
+                <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-white/[0.1] text-slate-400 font-mono">
+                  {skills.length}
+                </span>
+              )}
+              {item.id === "mcp" && Object.keys(mcpServers).length > 0 && (
+                <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-white/[0.1] text-slate-400 font-mono">
+                  {Object.keys(mcpServers).length}
+                </span>
+              )}
+              {item.id === "consistency" && analysisResult && (
+                <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                  analysisResult.overallScore >= 90 ? "bg-emerald-500/20 text-emerald-400" :
+                  analysisResult.overallScore >= 70 ? "bg-blue-500/20 text-blue-400" :
+                  analysisResult.overallScore >= 50 ? "bg-amber-500/20 text-amber-400" :
+                  "bg-red-500/20 text-red-400"
+                }`}>
+                  {analysisResult.overallScore}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* Footer */}
+        <div className="px-3 py-3 border-t border-white/[0.06]">
+          <button
+            onClick={onClose}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-150"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
+            </svg>
+            Back to Chat
+          </button>
+          <div className="pt-2 px-3 flex items-center justify-between">
+            <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-slow"></span>
+              {useCase.replace(/-/g, " ")}
+            </p>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-white/[0.06] transition-all"
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top bar */}
+        <header className="border-b border-slate-200/80 dark:border-white/[0.06] px-4 sm:px-8 py-4 bg-white/80 dark:bg-navy-900/80 backdrop-blur-lg">
+          <div className="flex items-center gap-3">
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              className="md:hidden p-2 -ml-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </button>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                {tab === "skills" ? (showCreate ? "Create Skill" : "Skills") : tab === "prompt" ? "System Prompt" : tab === "consistency" ? "Consistency Analysis" : (editingMcp ? `Edit: ${editingMcp.name}` : showMcpCreate ? "Add MCP Server" : "MCP Servers")}
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {tab === "skills" ? `${skills.filter(s => s.enabled).length} of ${skills.length} active` : tab === "prompt" ? "Configure the system prompt for all conversations" : tab === "consistency" ? "Detect contradictions, overlaps, and gaps in your agent configuration" : `${Object.keys(mcpServers).length} server${Object.keys(mcpServers).length !== 1 ? "s" : ""} configured`}
+              </p>
+            </div>
+            {/* Action buttons */}
+            {tab === "skills" && !showCreate && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">Add Skill</span>
+              </button>
+            )}
+            {tab === "mcp" && !editingMcp && !showMcpCreate && (
+              <button
+                onClick={() => { resetMcpForm(); setShowMcpCreate(true); }}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">Add Server</span>
+              </button>
+            )}
+            {tab === "consistency" && analysisResult && !analysisLoading && (
+              <button
+                onClick={handleRunAnalysis}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                </svg>
+                <span className="hidden sm:inline">Re-run</span>
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Error banner */}
+        {error && (
+          <div className="mx-4 sm:mx-8 mt-4 px-4 py-3 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-100 dark:border-red-500/20 animate-fade-in flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError("")} className="text-red-400 hover:text-red-600 transition-colors">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <div className="flex gap-1">
-            {(["skills", "prompt", "mcp"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`pb-2.5 px-3 text-sm font-medium border-b-2 transition-all duration-200 ${
-                  tab === t
-                    ? "border-primary-600 text-primary-600"
-                    : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                }`}
-              >
-                {t === "skills" ? "Skills" : t === "prompt" ? "System Prompt" : "MCP Servers"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="mx-6 mt-4 px-4 py-2.5 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-100 dark:border-red-500/20 animate-fade-in">
-            {error}
-          </div>
         )}
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
           {tab === "mcp" ? (
             /* ── MCP Servers tab ── */
             mcpLoading ? (
@@ -403,11 +631,7 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
               </div>
             ) : editingMcp ? (
               /* ── MCP Edit view ── */
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <button onClick={() => { setEditingMcp(null); resetMcpForm(); }} className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">&larr; Back</button>
-                  <h3 className="font-medium text-slate-900 dark:text-white">Editing: {editingMcp.name}</h3>
-                </div>
+              <div className="max-w-3xl space-y-5">
                 {mcpError && <div className="px-4 py-2.5 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-sm rounded-xl border border-red-100 dark:border-red-500/20">{mcpError}</div>}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Type</label>
@@ -463,11 +687,7 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
               </div>
             ) : showMcpCreate ? (
               /* ── MCP Create view ── */
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <button onClick={() => { setShowMcpCreate(false); resetMcpForm(); }} className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">&larr; Back</button>
-                  <h3 className="font-medium text-slate-900 dark:text-white">Add MCP Server</h3>
-                </div>
+              <div className="max-w-3xl space-y-5">
                 {mcpError && <div className="px-3 py-2 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 text-sm rounded-lg">{mcpError}</div>}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Server Name <span className="text-red-500">*</span></label>
@@ -527,29 +747,42 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
               </div>
             ) : (
               /* ── MCP server list ── */
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {Object.keys(mcpServers).length === 0 ? (
-                  <p className="text-sm text-slate-500 text-center py-8">No MCP servers configured yet</p>
+                  <div className="col-span-full text-center py-16">
+                    <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 dark:bg-white/[0.04] flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-slate-500 font-medium">No MCP servers configured</p>
+                    <p className="text-xs text-slate-400 mt-1">Add a server to extend agent capabilities</p>
+                  </div>
                 ) : (
                   Object.entries(mcpServers).map(([name, cfg]) => (
-                    <div key={name} className="flex items-center justify-between p-4 border border-slate-200 dark:border-white/[0.06] rounded-xl dark:bg-white/[0.02] hover:border-slate-300 dark:hover:border-white/[0.1] hover:shadow-sm transition-all">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          cfg.type === "local" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400"
-                        }`}>{cfg.type}</span>
-                        <div className="min-w-0">
-                          <span className="font-medium text-sm text-slate-900 dark:text-white">{name}</span>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono">
+                    <div key={name} className="flex flex-col p-5 border border-slate-200 dark:border-white/[0.06] rounded-2xl bg-white dark:bg-navy-800 hover:border-slate-300 dark:hover:border-white/[0.1] hover:shadow-card-hover transition-all">
+                      <div className="flex items-start gap-3 mb-3">
+                        <span className={`text-xs px-2.5 py-1 rounded-lg font-medium flex-shrink-0 ${
+                          cfg.type === "local" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20" : "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
+                        }`}>{cfg.type.toUpperCase()}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-semibold text-sm text-slate-900 dark:text-white block">{name}</span>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono mt-1">
                             {cfg.type === "local" ? cfg.command : cfg.url}
                           </p>
+                          {cfg.tools && cfg.tools.length > 0 && cfg.tools[0] !== "*" && (
+                            <p className="text-[10px] text-slate-400 mt-1">{cfg.tools.length} tool{cfg.tools.length !== 1 ? "s" : ""} configured</p>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 ml-3">
-                        <button onClick={() => { populateMcpForm(name, cfg); setEditingMcp({ name, config: cfg }); }} className="p-1.5 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" title="Edit">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      <div className="flex items-center gap-2 mt-auto pt-3 border-t border-slate-100 dark:border-white/[0.04]">
+                        <button onClick={() => { populateMcpForm(name, cfg); setEditingMcp({ name, config: cfg }); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-lg transition-all font-medium">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          Edit
                         </button>
-                        <button onClick={() => handleDeleteMcp(name)} className="p-1.5 text-slate-400 hover:text-red-500 transition-colors" title="Delete">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <button onClick={() => handleDeleteMcp(name)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all font-medium">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          Delete
                         </button>
                       </div>
                     </div>
@@ -564,7 +797,7 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="max-w-3xl space-y-5">
                 <div className="flex items-center justify-between">
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                     System prompt sent to the LLM at the start of every conversation
@@ -581,8 +814,8 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                     setPromptDraft(e.target.value);
                     setPromptDirty(e.target.value !== promptContent);
                   }}
-                  rows={16}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all"
+                  rows={20}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all resize-y"
                 />
                 <div className="flex justify-between">
                   <button
@@ -617,181 +850,351 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                 </p>
               </div>
             )
+          ) : tab === "consistency" ? (
+            /* ── Consistency Analysis tab ── */
+            <div className="max-w-4xl space-y-6">
+              {/* Controls */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <button
+                  onClick={handleRunAnalysis}
+                  disabled={analysisLoading}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm text-white bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {analysisLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                      </svg>
+                      Run Analysis
+                    </>
+                  )}
+                </button>
+                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeDisabled}
+                    onChange={(e) => setIncludeDisabled(e.target.checked)}
+                    className="rounded border-slate-300 dark:border-slate-600 text-primary-500 focus:ring-primary-500/20"
+                  />
+                  Include disabled skills
+                </label>
+              </div>
+
+              {/* Loading state */}
+              {analysisLoading && (
+                <div className="flex flex-col items-center justify-center py-16 animate-fade-in">
+                  <div className="relative mb-6">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500/20 to-cyan-500/20 flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary-500/30 border-t-primary-500" />
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Analyzing system prompt and {skills.length} skills for inconsistencies...</p>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">This may take 10-30 seconds</p>
+                </div>
+              )}
+
+              {/* Results */}
+              {analysisResult && !analysisLoading && (
+                <div className="space-y-6 animate-fade-in">
+                  {/* Score + Summary card */}
+                  <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.08] rounded-2xl p-6">
+                    <div className="flex items-start gap-6">
+                      {/* Score ring */}
+                      <div className="flex-shrink-0">
+                        <div className={`relative w-20 h-20 rounded-full flex items-center justify-center border-4 ${
+                          analysisResult.overallScore >= 90 ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" :
+                          analysisResult.overallScore >= 70 ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10" :
+                          analysisResult.overallScore >= 50 ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10" :
+                          "border-red-500 bg-red-50 dark:bg-red-500/10"
+                        }`}>
+                          <div className="text-center">
+                            <span className={`text-2xl font-bold ${
+                              analysisResult.overallScore >= 90 ? "text-emerald-600 dark:text-emerald-400" :
+                              analysisResult.overallScore >= 70 ? "text-blue-600 dark:text-blue-400" :
+                              analysisResult.overallScore >= 50 ? "text-amber-600 dark:text-amber-400" :
+                              "text-red-600 dark:text-red-400"
+                            }`}>{analysisResult.overallScore}</span>
+                            <span className="block text-[10px] text-slate-400 -mt-0.5">/ 100</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
+                          {analysisResult.overallScore >= 90 ? "Excellent" :
+                           analysisResult.overallScore >= 70 ? "Good" :
+                           analysisResult.overallScore >= 50 ? "Needs Attention" :
+                           "Significant Issues"}
+                        </h3>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{analysisResult.summary}</p>
+                        <div className="flex items-center gap-4 mt-3 text-xs text-slate-400">
+                          <span>{analysisResult.issues.length} issue{analysisResult.issues.length !== 1 ? "s" : ""} found</span>
+                          <span>{analysisResult.strengths.length} strength{analysisResult.strengths.length !== 1 ? "s" : ""}</span>
+                          <span>{(analysisResult.durationMs / 1000).toFixed(1)}s analysis time</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Issue stats pills */}
+                  {analysisResult.issues.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setIssueFilter("all")}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                          issueFilter === "all"
+                            ? "bg-slate-900 dark:bg-white/[0.12] text-white border-transparent"
+                            : "bg-white dark:bg-white/[0.03] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-white/[0.08] hover:bg-slate-50 dark:hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        All ({analysisResult.issues.length})
+                      </button>
+                      {analysisResult.issues.filter(i => i.severity === "critical").length > 0 && (
+                        <button
+                          onClick={() => setIssueFilter("critical")}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                            issueFilter === "critical"
+                              ? "bg-red-500 text-white border-transparent"
+                              : "text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/20 hover:bg-red-50 dark:hover:bg-red-500/10"
+                          }`}
+                        >
+                          Critical ({analysisResult.issues.filter(i => i.severity === "critical").length})
+                        </button>
+                      )}
+                      {analysisResult.issues.filter(i => i.severity === "warning").length > 0 && (
+                        <button
+                          onClick={() => setIssueFilter("warning")}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                            issueFilter === "warning"
+                              ? "bg-amber-500 text-white border-transparent"
+                              : "text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/20 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                          }`}
+                        >
+                          Warning ({analysisResult.issues.filter(i => i.severity === "warning").length})
+                        </button>
+                      )}
+                      {analysisResult.issues.filter(i => i.severity === "info").length > 0 && (
+                        <button
+                          onClick={() => setIssueFilter("info")}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                            issueFilter === "info"
+                              ? "bg-blue-500 text-white border-transparent"
+                              : "text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20 hover:bg-blue-50 dark:hover:bg-blue-500/10"
+                          }`}
+                        >
+                          Info ({analysisResult.issues.filter(i => i.severity === "info").length})
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Issues list */}
+                  {analysisResult.issues.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Issues</h4>
+                      {analysisResult.issues
+                        .filter(issue => issueFilter === "all" || issue.severity === issueFilter)
+                        .map((issue, idx) => {
+                          const originalIdx = analysisResult.issues.indexOf(issue);
+                          return (
+                        <div
+                          key={idx}
+                          className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.08] rounded-xl overflow-hidden transition-all"
+                        >
+                          <button
+                            onClick={() => setExpandedIssue(expandedIssue === originalIdx ? null : originalIdx)}
+                            className="w-full flex items-start gap-3 px-4 py-3.5 text-left hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-all"
+                          >
+                            {/* Severity icon */}
+                            <div className={`flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center mt-0.5 ${
+                              issue.severity === "critical" ? "bg-red-100 dark:bg-red-500/10" :
+                              issue.severity === "warning" ? "bg-amber-100 dark:bg-amber-500/10" :
+                              "bg-blue-100 dark:bg-blue-500/10"
+                            }`}>
+                              {issue.severity === "critical" ? (
+                                <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                              ) : issue.severity === "warning" ? (
+                                <svg className="w-3.5 h-3.5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium text-slate-900 dark:text-white">{issue.title}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium uppercase tracking-wide ${
+                                  issue.category === "contradiction" ? "bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400" :
+                                  issue.category === "overlap" ? "bg-purple-100 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400" :
+                                  issue.category === "gap" ? "bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" :
+                                  issue.category === "terminology" ? "bg-cyan-100 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400" :
+                                  issue.category === "tone" ? "bg-pink-100 dark:bg-pink-500/10 text-pink-600 dark:text-pink-400" :
+                                  issue.category === "ambiguity" ? "bg-yellow-100 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" :
+                                  "bg-slate-100 dark:bg-slate-500/10 text-slate-600 dark:text-slate-400"
+                                }`}>
+                                  {issue.category}
+                                </span>
+                              </div>
+                              {expandedIssue !== originalIdx && (
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-1">{issue.description}</p>
+                              )}
+                            </div>
+                            <svg className={`w-4 h-4 text-slate-400 flex-shrink-0 mt-1 transition-transform ${expandedIssue === originalIdx ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                          {expandedIssue === originalIdx && (
+                            <div className="px-4 pb-4 pt-0 border-t border-slate-100 dark:border-white/[0.04] animate-fade-in">
+                              <div className="pl-9 space-y-3 pt-3">
+                                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{issue.description}</p>
+                                {issue.affectedSkills.length > 0 && (
+                                  <div>
+                                    <span className="text-xs font-medium text-slate-500 dark:text-slate-500">Affected skills:</span>
+                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                      {issue.affectedSkills.map((skill) => (
+                                        <span key={skill} className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-300 rounded-md font-mono">
+                                          {skill}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {issue.recommendation && (
+                                  <div className="bg-emerald-50 dark:bg-emerald-500/[0.06] border border-emerald-100 dark:border-emerald-500/10 rounded-lg px-3 py-2.5">
+                                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Recommendation</span>
+                                    <p className="text-sm text-emerald-800 dark:text-emerald-300 mt-0.5 leading-relaxed">{issue.recommendation}</p>
+                                  </div>
+                                )}
+
+                                {/* Apply Fix button & result */}
+                                {fixResults[originalIdx] ? (
+                                  <div className={`rounded-lg px-3 py-2.5 border ${
+                                    fixResults[originalIdx].success
+                                      ? "bg-emerald-50 dark:bg-emerald-500/[0.06] border-emerald-200 dark:border-emerald-500/10"
+                                      : "bg-red-50 dark:bg-red-500/[0.06] border-red-200 dark:border-red-500/10"
+                                  }`}>
+                                    {fixResults[originalIdx].success ? (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <svg className="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                          </svg>
+                                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Fix applied</span>
+                                        </div>
+                                        {fixResults[originalIdx].changes.map((change, ci) => (
+                                          <p key={ci} className="text-xs text-emerald-700 dark:text-emerald-300 pl-5">{change.summary}</p>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5">
+                                        <svg className="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="text-xs text-red-700 dark:text-red-400">{fixResults[originalIdx].error}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleApplyFix(issue, originalIdx); }}
+                                    disabled={fixingIssue !== null}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all
+                                      bg-indigo-50 dark:bg-indigo-500/[0.08] text-indigo-700 dark:text-indigo-300
+                                      border border-indigo-200 dark:border-indigo-500/20
+                                      hover:bg-indigo-100 dark:hover:bg-indigo-500/[0.14]
+                                      disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {fixingIssue === originalIdx ? (
+                                      <>
+                                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                                        </svg>
+                                        Applying fix…
+                                      </>
+                                    ) : (
+                                      <>
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17l-5.59-5.59a2 2 0 112.83-2.83l4.17 4.17 8.17-8.17a2 2 0 112.83 2.83L11.42 15.17z" />
+                                        </svg>
+                                        Apply Fix
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                          );
+                        })}
+                    </div>
+                  )}
+
+                  {/* Strengths */}
+                  {analysisResult.strengths.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Strengths</h4>
+                      <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.08] rounded-xl divide-y divide-slate-100 dark:divide-white/[0.04]">
+                        {analysisResult.strengths.map((strength, idx) => (
+                          <div key={idx} className="flex items-start gap-3 px-4 py-3">
+                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mt-0.5">
+                              <svg className="w-3 h-3 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">{strength}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!analysisResult && !analysisLoading && (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500/10 to-cyan-500/10 dark:from-primary-500/5 dark:to-cyan-500/5 flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-700 dark:text-slate-300 mb-1">Consistency Checker</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-md leading-relaxed">
+                    Analyzes your system prompt and skill definitions using AI to detect contradictions,
+                    overlapping responsibilities, terminology drift, coverage gaps, and other configuration
+                    issues that could confuse the LLM at runtime.
+                  </p>
+                  <button
+                    onClick={handleRunAnalysis}
+                    className="mt-6 flex items-center gap-2 px-5 py-2.5 text-sm text-white bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                    </svg>
+                    Run First Analysis
+                  </button>
+                </div>
+              )}
+            </div>
           ) : loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
             </div>
-          ) : editingSkill ? (
-            /* ── Edit view ── */
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-4">
-                <button
-                  onClick={() => setEditingSkill(null)}
-                  className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                >
-                  &larr; Back
-                </button>
-                <h3 className="font-medium text-slate-900 dark:text-white">
-                  Editing: {editingSkill.name}
-                </h3>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Description
-                </label>
-                <input
-                  type="text"
-                  value={editingSkill.description}
-                  onChange={(e) =>
-                    setEditingSkill({ ...editingSkill, description: e.target.value })
-                  }
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Instructions (SKILL.md content)
-                </label>
-                <textarea
-                  value={editingSkill.instructions}
-                  onChange={(e) =>
-                    setEditingSkill({ ...editingSkill, instructions: e.target.value })
-                  }
-                  rows={12}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all"
-                />
-              </div>
-
-              {/* Files & Scripts section */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Scripts &amp; Files
-                    {skillFiles.length > 0 && (
-                      <span className="ml-1.5 text-xs font-normal text-slate-400">({skillFiles.length})</span>
-                    )}
-                  </label>
-                  {!showUploadForm && (
-                    <button
-                      type="button"
-                      onClick={() => setShowUploadForm(true)}
-                      className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-xl transition-all border border-primary-200 dark:border-primary-500/20"
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Upload
-                    </button>
-                  )}
-                </div>
-                {showUploadForm && (
-                  <div className="flex items-center gap-2 mb-3 p-2.5 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl">
-                    <div className="flex-1 flex items-center gap-1.5">
-                      <span className="text-xs text-slate-500 font-mono flex-shrink-0">path:</span>
-                      <input
-                        type="text"
-                        value={uploadPath}
-                        onChange={(e) => setUploadPath(e.target.value)}
-                        placeholder="scripts/"
-                        className="flex-1 px-2 py-1 text-xs font-mono border border-slate-200 dark:border-white/[0.08] rounded focus:outline-none focus:ring-1 focus:ring-primary-500 min-w-0"
-                        onKeyDown={(e) => e.key === "Escape" && (setShowUploadForm(false), setUploadPath(""))}
-                      />
-                    </div>
-                    <label className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-primary-600 hover:bg-primary-700 rounded-xl cursor-pointer transition-colors flex-shrink-0">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                      </svg>
-                      Choose file
-                      <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadFile} />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => { setShowUploadForm(false); setUploadPath(""); }}
-                      className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex-shrink-0"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                {filesLoading ? (
-                  <div className="flex items-center gap-2 py-3 text-xs text-slate-500">
-                    <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-slate-500" />
-                    Loading files…
-                  </div>
-                ) : skillFiles.length === 0 ? (
-                  <p className="text-xs text-slate-500 text-center py-4 border border-dashed border-slate-300 dark:border-white/[0.08] rounded-xl">
-                    No files yet. Upload scripts or other supporting files for this skill.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {skillFiles.map((file) => (
-                      <div key={file.path} className="border border-slate-200 dark:border-white/[0.06] rounded-xl dark:bg-white/[0.02] overflow-hidden">
-                        <div
-                          className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/[0.03] hover:bg-slate-100 dark:hover:bg-white/[0.06] cursor-pointer transition-colors select-none"
-                          onClick={() => setExpandedFile(expandedFile === file.path ? null : file.path)}
-                        >
-                          <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          <span className="text-xs font-mono text-slate-400 flex-1 truncate">{file.path}</span>
-                          <svg
-                            className={`w-3.5 h-3.5 text-slate-400 transition-transform flex-shrink-0 ${expandedFile === file.path ? "rotate-180" : ""}`}
-                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.path); }}
-                            className="p-0.5 text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
-                            title="Delete file"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                        {expandedFile === file.path && (
-                          <pre className="text-xs font-mono p-3 bg-slate-100 dark:bg-navy-950 text-slate-700 dark:text-slate-300 overflow-x-auto max-h-52 overflow-y-auto whitespace-pre leading-relaxed">
-                            {file.content || "(binary or empty file)"}
-                          </pre>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <button
-                  onClick={() => setEditingSkill(null)}
-                  className="px-4 py-2 text-sm text-slate-500 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-all font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="px-4 py-2 text-sm text-white bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm font-medium"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </div>
           ) : showCreate ? (
             /* ── Create view ── */
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-4">
-                <button
-                  onClick={() => setShowCreate(false)}
-                  className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                >
-                  &larr; Back
-                </button>
-                <h3 className="font-medium text-slate-900 dark:text-white">Add New Skill</h3>
-              </div>
+            <div className="max-w-3xl space-y-5">
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
@@ -826,9 +1229,9 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                 <textarea
                   value={newInstructions}
                   onChange={(e) => setNewInstructions(e.target.value)}
-                  rows={8}
+                  rows={16}
                   placeholder="## Instructions&#10;&#10;1. Accept a query...&#10;2. Process it..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all resize-y"
                 />
               </div>
 
@@ -850,42 +1253,37 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
             </div>
           ) : (
             /* ── Skills list ── */
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {skills.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">
-                  No skills configured yet
-                </p>
+                <div className="col-span-full text-center py-16">
+                  <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 dark:bg-white/[0.04] flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 6.087c0-.355.186-.676.401-.959.221-.29.349-.634.349-1.003 0-1.036-1.007-1.875-2.25-1.875s-2.25.84-2.25 1.875c0 .369.128.713.349 1.003.215.283.401.604.401.959v0a.64.64 0 01-.657.643 48.39 48.39 0 01-4.163-.3c.186 1.613.166 3.532-1.005 3.532" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-slate-500 font-medium">No skills configured</p>
+                  <p className="text-xs text-slate-400 mt-1">Add your first skill to get started</p>
+                </div>
               ) : (
-                skills.map((skill) => (
+                skills.map((skill) => {
+                  const isEditing = editingSkill?.name === skill.name;
+                  return (
                   <div
                     key={skill.name}
-                    className="flex items-center justify-between p-4 border border-slate-200 dark:border-white/[0.06] rounded-xl dark:bg-white/[0.02] hover:border-slate-300 dark:hover:border-white/[0.1] hover:shadow-sm transition-all"
+                    className={`flex flex-col p-5 border rounded-2xl transition-all ${
+                      isEditing
+                        ? "col-span-full border-primary-300 dark:border-primary-500/30 bg-white dark:bg-navy-800 shadow-lg ring-1 ring-primary-200 dark:ring-primary-500/20"
+                        : "border-slate-200 dark:border-white/[0.06] bg-white dark:bg-navy-800 hover:border-slate-300 dark:hover:border-white/[0.1] hover:shadow-card-hover group"
+                    }`}
                   >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {/* Toggle */}
-                      <button
-                        onClick={() => handleToggle(skill)}
-                        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full transition-colors ${
-                          skill.enabled ? "bg-primary-600" : "bg-slate-300 dark:bg-slate-600"
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform mt-0.5 ${
-                            skill.enabled ? "translate-x-4 ml-0.5" : "translate-x-0.5"
-                          }`}
-                        />
-                      </button>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm text-slate-900 dark:text-white">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">
                             {skill.name}
                           </span>
-                          <span className="text-xs text-slate-500 font-mono">
-                            {skill.toolName}
-                          </span>
                           {(skill.fileCount ?? 0) > 0 && (
-                            <span className="inline-flex items-center gap-0.5 text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full">
+                            <span className="inline-flex items-center gap-0.5 text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-1.5 py-0.5 rounded-full flex-shrink-0">
                               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                               </svg>
@@ -893,78 +1291,197 @@ export function SkillsAdminPanel({ open, onClose, useCase = "generic" }: Props) 
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                          {skill.description}
-                        </p>
+                        {!isEditing && (
+                          <>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                              {skill.description || "No description"}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-mono mt-1.5">{skill.toolName}</p>
+                          </>
+                        )}
                       </div>
+                      {/* Toggle */}
+                      <button
+                        onClick={() => handleToggle(skill)}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors ${
+                          skill.enabled ? "bg-primary-600" : "bg-slate-300 dark:bg-slate-600"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform mt-0.5 ${
+                            skill.enabled ? "translate-x-5 ml-0.5" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
                     </div>
 
-                    <div className="flex items-center gap-1 ml-3">
-                      <button
-                        onClick={() => setEditingSkill(skill)}
-                        className="p-1.5 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                        title="Edit"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(skill.name)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
-                        title="Delete"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
+                    {isEditing ? (
+                      /* ── Inline Edit Form ── */
+                      <div className="space-y-5 pt-3 border-t border-slate-100 dark:border-white/[0.04]">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Description</label>
+                          <input
+                            type="text"
+                            value={editingSkill.description}
+                            onChange={(e) => setEditingSkill({ ...editingSkill, description: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Instructions (SKILL.md content)</label>
+                          <textarea
+                            value={editingSkill.instructions}
+                            onChange={(e) => setEditingSkill({ ...editingSkill, instructions: e.target.value })}
+                            rows={20}
+                            className="w-full px-4 py-3 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-sm text-slate-900 dark:text-slate-200 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 transition-all resize-y"
+                          />
+                        </div>
+
+                        {/* Files & Scripts section */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Scripts &amp; Files
+                              {skillFiles.length > 0 && (
+                                <span className="ml-1.5 text-xs font-normal text-slate-400">({skillFiles.length})</span>
+                              )}
+                            </label>
+                            {!showUploadForm && (
+                              <button
+                                type="button"
+                                onClick={() => setShowUploadForm(true)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-xl transition-all border border-primary-200 dark:border-primary-500/20"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                </svg>
+                                Upload
+                              </button>
+                            )}
+                          </div>
+                          {showUploadForm && (
+                            <div className="flex items-center gap-2 mb-3 p-2.5 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl">
+                              <div className="flex-1 flex items-center gap-1.5">
+                                <span className="text-xs text-slate-500 font-mono flex-shrink-0">path:</span>
+                                <input
+                                  type="text"
+                                  value={uploadPath}
+                                  onChange={(e) => setUploadPath(e.target.value)}
+                                  placeholder="scripts/"
+                                  className="flex-1 px-2 py-1 text-xs font-mono border border-slate-200 dark:border-white/[0.08] rounded focus:outline-none focus:ring-1 focus:ring-primary-500 min-w-0"
+                                  onKeyDown={(e) => e.key === "Escape" && (setShowUploadForm(false), setUploadPath(""))}
+                                />
+                              </div>
+                              <label className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white bg-primary-600 hover:bg-primary-700 rounded-xl cursor-pointer transition-colors flex-shrink-0">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                                Choose file
+                                <input ref={fileInputRef} type="file" className="hidden" onChange={handleUploadFile} />
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => { setShowUploadForm(false); setUploadPath(""); }}
+                                className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex-shrink-0"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                          {filesLoading ? (
+                            <div className="flex items-center gap-2 py-3 text-xs text-slate-500">
+                              <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-slate-500" />
+                              Loading files…
+                            </div>
+                          ) : skillFiles.length === 0 ? (
+                            <p className="text-xs text-slate-500 text-center py-4 border border-dashed border-slate-300 dark:border-white/[0.08] rounded-xl">
+                              No files yet. Upload scripts or other supporting files for this skill.
+                            </p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {skillFiles.map((file) => (
+                                <div key={file.path} className="border border-slate-200 dark:border-white/[0.06] rounded-xl dark:bg-white/[0.02] overflow-hidden">
+                                  <div
+                                    className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/[0.03] hover:bg-slate-100 dark:hover:bg-white/[0.06] cursor-pointer transition-colors select-none"
+                                    onClick={() => setExpandedFile(expandedFile === file.path ? null : file.path)}
+                                  >
+                                    <svg className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span className="text-xs font-mono text-slate-400 flex-1 truncate">{file.path}</span>
+                                    <svg
+                                      className={`w-3.5 h-3.5 text-slate-400 transition-transform flex-shrink-0 ${expandedFile === file.path ? "rotate-180" : ""}`}
+                                      fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteFile(file.path); }}
+                                      className="p-0.5 text-slate-400 hover:text-red-500 transition-colors flex-shrink-0"
+                                      title="Delete file"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                  {expandedFile === file.path && (
+                                    <pre className="text-xs font-mono p-3 bg-slate-100 dark:bg-navy-950 text-slate-700 dark:text-slate-300 overflow-x-auto max-h-52 overflow-y-auto whitespace-pre leading-relaxed">
+                                      {file.content || "(binary or empty file)"}
+                                    </pre>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-2">
+                          <button
+                            onClick={() => setEditingSkill(null)}
+                            className="px-5 py-2.5 text-sm text-slate-500 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-all font-medium"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSaveEdit}
+                            className="px-5 py-2.5 text-sm text-white bg-gradient-to-r from-primary-600 to-primary-500 rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all shadow-sm font-medium"
+                          >
+                            Save Changes
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-auto pt-3 border-t border-slate-100 dark:border-white/[0.04]">
+                        <button
+                          onClick={() => setEditingSkill(skill)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-lg transition-all font-medium"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(skill.name)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all font-medium"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
         </div>
-
-        {/* Footer — show when on skills or MCP list view */}
-        {tab === "skills" && !editingSkill && !showCreate && (
-          <div className="flex justify-between items-center px-6 py-4 border-t border-slate-100 dark:border-white/[0.06]">
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-xl transition-all"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Skill
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-slate-500 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-all font-medium"
-            >
-              Close
-            </button>
-          </div>
-        )}
-        {tab === "mcp" && !editingMcp && !showMcpCreate && (
-          <div className="flex justify-between items-center px-6 py-4 border-t border-slate-100 dark:border-white/[0.06]">
-            <button
-              onClick={() => { resetMcpForm(); setShowMcpCreate(true); }}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-xl transition-all"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Server
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm text-slate-500 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-all font-medium"
-            >
-              Close
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

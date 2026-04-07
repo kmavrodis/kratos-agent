@@ -1,5 +1,6 @@
 """Conversation management endpoints."""
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -13,6 +14,9 @@ from app.models import (
     ConversationUpdate,
     Message,
 )
+from app.services.skill_registry import SkillRegistry
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,6 +29,20 @@ def _get_cosmos(request: Request):  # noqa: ANN202
 async def create_conversation(body: ConversationCreate, request: Request) -> Conversation:
     """Create a new conversation."""
     cosmos = _get_cosmos(request)
+
+    # Re-sync the use-case's skills from blob storage so every new conversation
+    # picks up the latest skills, prompts, and MCP config.
+    blob_service = request.app.state.blob_skill_service
+    if blob_service and blob_service.is_available:
+        try:
+            registry = SkillRegistry()
+            await registry.load(body.useCase, blob_service)
+            registries: dict[str, SkillRegistry] = request.app.state.registries
+            registries[body.useCase] = registry
+            logger.info("Re-synced use-case '%s' from blob for new conversation", body.useCase)
+        except Exception:
+            logger.exception("Failed to re-sync use-case '%s' from blob — using cached version", body.useCase)
+
     now = datetime.now(timezone.utc)
     conversation = Conversation(
         id=str(uuid.uuid4()),

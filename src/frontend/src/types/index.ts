@@ -14,6 +14,7 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCallInfo[];
   thoughts?: string[];
+  attachments?: Attachment[];
   createdAt: string;
 }
 
@@ -195,4 +196,37 @@ export type MCPServerConfig = MCPLocalServer | MCPRemoteServer;
 
 export interface MCPConfig {
   servers: Record<string, MCPServerConfig>;
+}
+
+// ─── Consistency Analysis ───
+
+export interface AnalysisIssue {
+  severity: "critical" | "warning" | "info";
+  category: "contradiction" | "overlap" | "gap" | "terminology" | "tone" | "ambiguity" | "unused";
+  title: string;
+  description: string;
+  affectedSkills: string[];
+  recommendation: string;
+}
+
+export interface AnalysisResult {
+  summary: string;
+  overallScore: number;
+  issues: AnalysisIssue[];
+  strengths: string[];
+  durationMs: number;
+}
+
+// ─── Apply Fix ───
+
+export interface FixChange {
+  target: string;
+  changeType: "modified" | "disabled";
+  summary: string;
+}
+
+export interface ApplyFixResult {
+  success: boolean;
+  changes: FixChange[];
+  error: string;
 }

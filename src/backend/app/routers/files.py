@@ -25,8 +25,9 @@ def _is_safe_path(requested: str) -> bool:
 async def download_file(
     filename: str,
     path: str = Query(..., description="Absolute path of the file on the server"),
+    inline: bool = Query(False, description="Serve inline for browser preview instead of download"),
 ) -> FileResponse:
-    """Serve a file the agent created so the user can download it."""
+    """Serve a file the agent created so the user can download / preview it."""
     resolved = os.path.realpath(path)
 
     if not _is_safe_path(resolved):
@@ -37,10 +38,11 @@ async def download_file(
 
     media_type = mimetypes.guess_type(resolved)[0] or "application/octet-stream"
     safe_name = os.path.basename(resolved)
+    disposition = "inline" if inline else "attachment"
 
     return FileResponse(
         path=resolved,
         media_type=media_type,
         filename=safe_name,
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+        headers={"Content-Disposition": f'{disposition}; filename="{safe_name}"'},
     )

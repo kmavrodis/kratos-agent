@@ -335,3 +335,53 @@ export async function updateMCPConfig(useCase: string, servers: MCPConfig["serve
   }
   return response.json();
 }
+
+// ─── Consistency Analysis API ───
+
+import type { AnalysisResult } from "@/types";
+
+export async function analyzeConsistency(
+  useCase: string = "generic",
+  includeDisabled: boolean = true
+): Promise<AnalysisResult> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/analysis/consistency?use_case=${encodeURIComponent(useCase)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ includeDisabled }),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Analysis failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+import type { AnalysisIssue, ApplyFixResult } from "@/types";
+
+export async function applyAnalysisFix(
+  issue: AnalysisIssue,
+  useCase: string = "generic"
+): Promise<ApplyFixResult> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/analysis/apply-fix?use_case=${encodeURIComponent(useCase)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        category: issue.category,
+        title: issue.title,
+        description: issue.description,
+        recommendation: issue.recommendation,
+        affectedSkills: issue.affectedSkills,
+      }),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Apply fix failed: ${response.status}`);
+  }
+  return response.json();
+}

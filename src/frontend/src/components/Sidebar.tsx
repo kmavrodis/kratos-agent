@@ -29,26 +29,38 @@ interface Props {
   useCases: UseCase[];
   selectedUseCase: string;
   onSelectUseCase: (name: string) => void;
+  onCloseMobile?: () => void;
 }
 
-export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, onOpenSettings, onOpenSkills, useCases, selectedUseCase, onSelectUseCase }: Props) {
+export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, onOpenSettings, onOpenSkills, useCases, selectedUseCase, onSelectUseCase, onCloseMobile }: Props) {
   const { theme, toggleTheme } = useTheme();
   return (
-    <aside className="w-[280px] bg-navy-900 flex flex-col h-full border-r border-white/[0.06]">
+    <aside className="w-[300px] bg-navy-950 flex flex-col h-full border-r border-white/[0.06]">
       {/* Logo / brand */}
-      <div className="px-5 py-5">
+      <div className="px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20">
-            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+          <div className="w-9 h-9 bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20 flex-shrink-0 ring-1 ring-white/10">
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+              <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clipRule="evenodd" />
             </svg>
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="font-semibold text-white text-sm tracking-tight">
               Kratos Agent
             </h1>
-            <p className="text-[11px] text-slate-500">AI Solution Accelerator</p>
+            <p className="text-[11px] text-slate-400">AI Solution Accelerator</p>
           </div>
+          {/* Mobile close button */}
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="lg:hidden p-1.5 text-slate-500 hover:text-slate-300 rounded-lg hover:bg-white/[0.06] transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -56,7 +68,7 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
       <div className="px-3 pb-2">
         <button
           onClick={onNew}
-          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-300 bg-white/[0.05] border border-white/[0.08] rounded-xl hover:bg-white/[0.08] hover:border-white/[0.12] transition-all duration-150"
+          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-200 bg-white/[0.06] border border-white/[0.1] rounded-xl hover:bg-white/[0.1] hover:border-white/[0.14] transition-all duration-150"
         >
           <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -68,14 +80,14 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
       {/* Use-case selector */}
       {useCases.length > 1 && (
         <div className="px-3 py-2">
-          <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 px-1">
+          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 px-1">
             Agent Persona
           </label>
           <div className="relative">
             <select
               value={selectedUseCase}
               onChange={(e) => onSelectUseCase(e.target.value)}
-              className="w-full text-sm text-slate-300 bg-white/[0.05] border border-white/[0.08] rounded-lg pl-3 pr-9 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary-500/50 focus:border-primary-500/50 appearance-none cursor-pointer hover:bg-white/[0.08] hover:border-white/[0.12] transition-all"
+              className="w-full text-sm text-slate-200 bg-white/[0.06] border border-white/[0.1] rounded-lg pl-3 pr-9 py-2.5 focus:outline-none focus:ring-1 focus:ring-primary-500/50 focus:border-primary-500/50 appearance-none cursor-pointer hover:bg-white/[0.1] hover:border-white/[0.14] transition-all"
             >
               {useCases.map((uc) => (
                 <option key={uc.name} value={uc.name} className="bg-navy-900">
@@ -110,29 +122,33 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
           <ul className="space-y-0.5">
             {conversations.map((conv) => (
               <li key={conv.id} className="animate-slide-in-left">
-                <div className={`group flex items-center rounded-lg transition-all duration-150 ${
+                <div className={`group flex items-center rounded-xl transition-all duration-200 ${
                   activeId === conv.id
-                    ? "bg-white/[0.1]"
-                    : "hover:bg-white/[0.04]"
+                    ? "bg-primary-500/[0.15] border border-primary-500/20"
+                    : "hover:bg-white/[0.06] border border-transparent"
                 }`}>
                   <button
                     onClick={() => onSelect(conv)}
                     className="flex-1 min-w-0 text-left px-3 py-2.5"
                   >
-                    <span className={`block truncate text-sm ${
+                    <span className={`block truncate text-sm leading-snug ${
                       activeId === conv.id
                         ? "text-white font-medium"
-                        : "text-slate-400"
+                        : "text-slate-300"
                     }`}>
                       {conv.title}
                     </span>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mt-1">
                       {conv.useCase && conv.useCase !== "generic" && (
-                        <span className="text-[10px] text-slate-600">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
+                          activeId === conv.id
+                            ? "bg-primary-500/20 text-primary-300"
+                            : "bg-white/[0.04] text-slate-500"
+                        }`}>
                           {conv.useCase.replace(/-/g, " ")}
                         </span>
                       )}
-                      <span className="text-[10px] text-slate-700 tabular-nums">
+                      <span className="text-[10px] text-slate-500 tabular-nums">
                         {timeAgo(conv.updatedAt || conv.createdAt)}
                       </span>
                     </div>
@@ -157,7 +173,7 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
       <div className="px-2 py-3 border-t border-white/[0.06] space-y-0.5">
         <button
           onClick={onOpenSkills}
-          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] rounded-lg transition-all duration-150"
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all duration-150"
         >
           <svg className="w-4 h-4 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
@@ -167,15 +183,15 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
         </button>
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] rounded-lg transition-all duration-150"
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all duration-150"
         >
-          <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
           </svg>
           BYOK Settings
         </button>
         <div className="pt-2 px-3 flex items-center justify-between">
-          <p className="text-[10px] text-slate-700 flex items-center gap-1.5">
+            <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-slow"></span>
             Copilot SDK + Foundry + MCP
           </p>

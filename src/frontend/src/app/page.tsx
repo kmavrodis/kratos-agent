@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { ChatWindow } from "@/components/ChatWindow";
 import { Sidebar } from "@/components/Sidebar";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -13,16 +13,21 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] =
     useState<Conversation | null>(null);
+  const [landingInput, setLandingInput] = useState("");
+  const landingInputRef = useRef<HTMLTextAreaElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [useCases, setUseCases] = useState<UseCase[]>([]);
   const [selectedUseCase, setSelectedUseCase] = useState<string>("generic");
   const [skills, setSkills] = useState<Skill[]>([]);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [configReady, setConfigReady] = useState(false);
 
   useEffect(() => {
     // Load runtime config (resolves API URL from /config.json if present)
     loadRuntimeConfig().then(() => {
+    setConfigReady(true);
     // Load use-cases
     listUseCases()
       .then((ucs) => {
@@ -47,15 +52,24 @@ export default function Home() {
     }); // end loadRuntimeConfig
   }, []);
 
-  // Fetch skills whenever the selected use-case changes
+  // Fetch skills whenever the selected use-case changes (only after config is loaded)
   useEffect(() => {
+    if (!configReady) return;
     listSkills(selectedUseCase)
       .then((s) => setSkills(s))
       .catch(() => setSkills([]));
-  }, [selectedUseCase]);
+  }, [selectedUseCase, configReady]);
 
-  const handleNewConversation = async () => {
-    // Optimistically show the conversation immediately
+  const handleNewConversation = () => {
+    // Navigate to the landing page for the current use case
+    setActiveConversation(null);
+    setPendingMessage(null);
+    setSidebarOpen(false);
+    setSkillsOpen(false);
+  };
+
+  // Create a conversation and optionally pre-fill a message
+  const startConversation = async (message?: string) => {
     const tempId = crypto.randomUUID();
     const optimistic: Conversation = {
       id: tempId,
@@ -67,19 +81,18 @@ export default function Home() {
     };
     setConversations((prev) => [optimistic, ...prev]);
     setActiveConversation(optimistic);
-    setPendingMessage(null);
+    setLandingInput("");
 
-    // Persist to Cosmos and replace the optimistic entry with the server one
     try {
       const saved = await createConversation("New Conversation", selectedUseCase) as Conversation;
+      const real = { ...optimistic, id: saved.id };
       setConversations((prev) =>
-        prev.map((c) => (c.id === tempId ? { ...optimistic, id: saved.id } : c))
+        prev.map((c) => (c.id === tempId ? real : c))
       );
-      setActiveConversation((prev) =>
-        prev?.id === tempId ? { ...optimistic, id: saved.id } : prev
-      );
+      setActiveConversation(real);
+      if (message) setPendingMessage(message);
     } catch {
-      // Keep the optimistic entry — messages will still work, just won't survive a reload
+      if (message) setPendingMessage(message);
     }
   };
 
@@ -110,125 +123,181 @@ export default function Home() {
     setActiveConversation(conv);
     setSelectedUseCase(conv.useCase || "generic");
     setPendingMessage(null);
+    setSidebarOpen(false);
   };
 
   const handleSampleQuestion = async (question: string) => {
-    // Create a new conversation and auto-send the sample question
-    const tempId = crypto.randomUUID();
-    const optimistic: Conversation = {
-      id: tempId,
-      title: "New Conversation",
-      useCase: selectedUseCase,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setConversations((prev) => [optimistic, ...prev]);
-    setActiveConversation(optimistic);
-
-    // Wait for the real conversation ID before setting the pending message
-    // so ChatWindow sends to a conversation that exists in Cosmos
-    try {
-      const saved = await createConversation("New Conversation", selectedUseCase) as Conversation;
-      const real = { ...optimistic, id: saved.id };
-      setConversations((prev) =>
-        prev.map((c) => (c.id === tempId ? real : c))
-      );
-      setActiveConversation(real);
-      setPendingMessage(question);
-    } catch {
-      // Fallback: try with the optimistic entry
-      setPendingMessage(question);
-    }
+    await startConversation(question);
   };
+
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+  // Full-screen Agent Manager view
+  if (skillsOpen) {
+    return (
+      <SkillsAdminPanel
+        onClose={() => setSkillsOpen(false)}
+        useCase={selectedUseCase}
+        useCases={useCases}
+        onSelectUseCase={setSelectedUseCase}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden animate-fade-in"
+          onClick={closeSidebar}
+        />
+      )}
+
       {/* Sidebar */}
-      <Sidebar
-        conversations={conversations}
-        activeId={activeConversation?.id ?? null}
-        onNew={handleNewConversation}
-        onSelect={handleSelectConversation}
-        onDelete={handleDeleteConversation}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenSkills={() => setSkillsOpen(true)}
-        useCases={useCases}
-        selectedUseCase={selectedUseCase}
-        onSelectUseCase={setSelectedUseCase}
-      />
+      <div className={`
+        fixed inset-y-0 left-0 z-50 w-[300px] transform transition-transform duration-300 ease-out
+        lg:relative lg:translate-x-0 lg:z-auto
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+      `}>
+        <Sidebar
+          conversations={conversations}
+          activeId={activeConversation?.id ?? null}
+          onNew={handleNewConversation}
+          onSelect={handleSelectConversation}
+          onDelete={handleDeleteConversation}
+          onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false); }}
+          onOpenSkills={() => { setSkillsOpen(true); setSidebarOpen(false); }}
+          useCases={useCases}
+          selectedUseCase={selectedUseCase}
+          onSelectUseCase={setSelectedUseCase}
+          onCloseMobile={closeSidebar}
+        />
+      </div>
 
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
-      {/* Skills admin panel */}
-      <SkillsAdminPanel open={skillsOpen} onClose={() => setSkillsOpen(false)} useCase={selectedUseCase} />
-
       {/* Main chat area */}
       <main className="flex-1 flex flex-col min-w-0">
         {activeConversation ? (
-          <ChatWindow conversation={activeConversation} onTitleChange={handleTitleChange} initialMessage={pendingMessage ?? undefined} />
+          <ChatWindow
+            conversation={activeConversation}
+            onTitleChange={handleTitleChange}
+            initialMessage={pendingMessage ?? undefined}
+            onOpenSidebar={() => setSidebarOpen(true)}
+          />
         ) : (
-          <div className="flex-1 flex items-center justify-center mesh-bg">
-            <div className="text-center max-w-2xl animate-fade-in">
-              {/* Logo */}
-              <div className="mx-auto mb-8 w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center shadow-lg shadow-primary-500/25">
-                <svg className="w-10 h-10 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                </svg>
-              </div>
-
-              <h1 className="text-4xl font-bold mb-3">
-                <span className="gradient-text">
-                  {useCases.find((uc) => uc.name === selectedUseCase)?.displayName || "Kratos Agent"}
-                </span>
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400 text-lg mb-10 leading-relaxed">
-                {useCases.find((uc) => uc.name === selectedUseCase)?.description || (
-                  <>Enterprise AI Agent powered by GitHub Copilot SDK<br /><span className="text-slate-400">&amp; Microsoft Foundry</span></>
-                )}
-              </p>
-
+          <div className="flex-1 flex flex-col mesh-bg">
+            {/* Mobile top bar */}
+            <div className="lg:hidden flex items-center px-4 py-3 border-b border-slate-200/80 dark:border-white/[0.06] bg-white/80 dark:bg-navy-900/80 backdrop-blur-lg">
               <button
-                onClick={handleNewConversation}
-                className="group inline-flex items-center gap-2.5 px-7 py-3.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-xl hover:from-primary-700 hover:to-primary-600 transition-all duration-200 font-medium shadow-lg shadow-primary-500/25 hover:shadow-xl hover:shadow-primary-500/30 hover:-translate-y-0.5"
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 -ml-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-all"
               >
-                <svg className="w-5 h-5 transition-transform group-hover:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
                 </svg>
-                Start a conversation
               </button>
+              <span className="ml-2 text-sm font-semibold text-slate-800 dark:text-white">Kratos Agent</span>
+            </div>
 
-              {/* Sample questions */}
-              {(useCases.find((uc) => uc.name === selectedUseCase)?.sampleQuestions ?? []).length > 0 && (
-                <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl mx-auto">
-                  {useCases.find((uc) => uc.name === selectedUseCase)!.sampleQuestions.map((q, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleSampleQuestion(q)}
-                      className="group text-left px-4 py-3 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-white/[0.04] hover:border-primary-300 dark:hover:border-primary-500/30 hover:bg-primary-50 dark:hover:bg-primary-500/[0.06] transition-all duration-200 shadow-sm hover:shadow-md"
-                    >
-                      <div className="flex items-start gap-3">
-                        <svg className="w-4 h-4 mt-0.5 text-primary-400 dark:text-primary-500 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
-                        </svg>
-                        <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors leading-snug">{q}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+            {/* Landing page */}
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+              <div className="w-full max-w-2xl animate-fade-in">
+                {/* Hero */}
+                <div className="text-center mb-10">
+                  <div className="relative mx-auto mb-6 w-16 h-16">
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 blur-xl opacity-30 animate-pulse-slow" />
+                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-primary-500/25 ring-1 ring-white/20">
+                      <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
 
-              {/* Skill pills */}
-              {skills.filter((s) => s.enabled).length > 0 && (
-                <div className="mt-12 flex flex-wrap justify-center gap-2.5">
-                  {skills.filter((s) => s.enabled).map((s) => (
-                    <span key={s.name} className="px-3.5 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-white/[0.06] rounded-full border border-slate-200 dark:border-white/[0.08] shadow-sm dark:shadow-none">
-                      {s.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  <h1 className="text-2xl sm:text-3xl font-bold mb-2 tracking-tight">
+                    <span className="gradient-text">
+                      {useCases.find((uc) => uc.name === selectedUseCase)?.displayName || "Kratos Agent"}
                     </span>
-                  ))}
+                  </h1>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base leading-relaxed max-w-lg mx-auto">
+                    {useCases.find((uc) => uc.name === selectedUseCase)?.description || (
+                      <>Enterprise AI Agent powered by GitHub Copilot SDK &amp; Microsoft Foundry</>
+                    )}
+                  </p>
                 </div>
-              )}
+
+                {/* Chat input bar */}
+                <div className="relative mb-8">
+                  <div className="flex items-end gap-2 p-2 bg-white dark:bg-navy-900/80 border border-slate-200/60 dark:border-white/[0.06] rounded-2xl shadow-sm focus-within:border-primary-400/60 dark:focus-within:border-primary-500/40 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.08)] transition-all duration-300">
+                    <textarea
+                      ref={landingInputRef}
+                      value={landingInput}
+                      onChange={(e) => {
+                        setLandingInput(e.target.value);
+                        // Auto-resize
+                        e.target.style.height = "auto";
+                        e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (landingInput.trim()) startConversation(landingInput.trim());
+                        }
+                      }}
+                      placeholder="Ask me anything..."
+                      rows={1}
+                      className="flex-1 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 bg-transparent resize-none focus:outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 leading-relaxed"
+                      style={{ minHeight: "44px", maxHeight: "120px" }}
+                    />
+                    <button
+                      onClick={() => { if (landingInput.trim()) startConversation(landingInput.trim()); }}
+                      disabled={!landingInput.trim()}
+                      className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                      </svg>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center mt-2">
+                    <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-white/[0.06] rounded text-[10px] font-mono border border-slate-200/60 dark:border-white/[0.08]">Enter</kbd> to send · <kbd className="px-1.5 py-0.5 bg-slate-100 dark:bg-white/[0.06] rounded text-[10px] font-mono border border-slate-200/60 dark:border-white/[0.08]">Shift+Enter</kbd> new line
+                  </p>
+                </div>
+
+                {/* Sample questions */}
+                {(useCases.find((uc) => uc.name === selectedUseCase)?.sampleQuestions ?? []).length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-8">
+                    {useCases.find((uc) => uc.name === selectedUseCase)!.sampleQuestions.map((q, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleSampleQuestion(q)}
+                        className="group text-left px-4 py-3 rounded-xl border border-slate-200/80 dark:border-white/[0.06] bg-white/60 dark:bg-white/[0.02] hover:border-primary-300 dark:hover:border-primary-500/30 hover:bg-white dark:hover:bg-white/[0.04] transition-all duration-200 hover:shadow-sm"
+                      >
+                        <div className="flex items-start gap-3">
+                          <svg className="w-4 h-4 mt-0.5 text-primary-400 dark:text-primary-500 flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+                          </svg>
+                          <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors leading-snug">{q}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Skill pills */}
+                {skills.filter((s) => s.enabled).length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-2 px-4">
+                    {skills.filter((s) => s.enabled).map((s) => (
+                      <span key={s.name} className="inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-white/[0.04] rounded-full border border-slate-200/80 dark:border-white/[0.06]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 opacity-70" />
+                        {s.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
