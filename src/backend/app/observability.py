@@ -11,12 +11,43 @@ from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
 
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
+
+# HTTP methods we want to keep in traces (everything else is noise)
+_TRACED_HTTP_METHODS = frozenset({"GET", "POST"})
+
+
+class FilteringSpanProcessor(BatchSpanProcessor):
+    """BatchSpanProcessor that silently drops noisy spans before export.
+
+    Filters out:
+    - ASGI internal send/receive spans (kind=INTERNAL, name contains 'http send'
+      or 'http receive') that create duplicate InProcess entries for SSE streams.
+    - HTTP spans for methods other than GET/POST (OPTIONS, PATCH, DELETE, …).
+    """
+
+    def __init__(self, exporter: SpanExporter, **kwargs) -> None:
+        super().__init__(exporter, **kwargs)
+
+    def on_end(self, span: ReadableSpan) -> None:
+        # Drop ASGI internal send/receive spans
+        if span.kind == trace.SpanKind.INTERNAL:
+            name = span.name
+            if "http send" in name or "http receive" in name:
+                return
+
+        # Drop HTTP spans for methods we don't care about
+        attrs = span.attributes or {}
+        http_method = attrs.get("http.request.method") or attrs.get("http.method")
+        if http_method and http_method.upper() not in _TRACED_HTTP_METHODS:
+            return
+
+        super().on_end(span)
 
 # GenAI metric bucket boundaries per OTel semantic conventions
 _TOKEN_BUCKETS = (1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864)
@@ -52,7 +83,7 @@ def setup_telemetry(settings: Settings) -> None:
 
             # Traces → AppInsights 'dependencies' and 'requests' tables
             trace_exporter = AzureMonitorTraceExporter(connection_string=conn_str)
-            provider.add_span_processor(BatchSpanProcessor(trace_exporter))
+            provider.add_span_processor(FilteringSpanProcessor(trace_exporter))
             logger.info("Azure Monitor trace exporter configured")
 
             # Metrics → AppInsights 'customMetrics' table

@@ -61,3 +61,5 @@ secrets/
 
 .github/
 tests/
+
+copilot-studio-openapi.yaml

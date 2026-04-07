@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # Default resolves to <repo-root>/use-cases/insurance/sample-data
 #CHANGE the folder name to ingest sample-data accordingly   
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-PDF_INGEST_FOLDER = os.environ.get("PDF_INGEST_FOLDER", str(_REPO_ROOT / "use-cases" / "insurance" / "sample-data"))
+PDF_INGEST_FOLDER = os.environ.get("PDF_INGEST_FOLDER", str(_REPO_ROOT / "use-cases" / "wealth-management" / "sample-data"))
 
 # Embedding model deployment name on Foundry/OpenAI (set to empty to skip vectors)
 EMBEDDING_DEPLOYMENT = os.environ.get("EMBEDDING_DEPLOYMENT", "text-embedding-ada-002")

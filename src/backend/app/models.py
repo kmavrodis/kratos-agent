@@ -165,6 +165,24 @@ class UserInputResponseRequest(BaseModel):
     answer: str
 
 
+# ─── Copilot Studio (synchronous bridge) ───
+
+class CopilotStudioRequest(BaseModel):
+    """Inbound message from Copilot Studio / Teams."""
+    message: str = Field(..., description="User message text")
+    conversationId: str = Field(
+        default="",
+        description="Optional conversation ID to continue a multi-turn session. Leave empty to start a new conversation.",
+    )
+    useCase: str = Field(default="generic", description="Use-case identifier")
+
+
+class CopilotStudioResponse(BaseModel):
+    """Response returned to Copilot Studio / Teams."""
+    conversationId: str = Field(description="Conversation ID (new or existing)")
+    reply: str = Field(description="Agent's complete response text")
+
+
 # ─── Settings ───
 
 class AIServiceSettings(BaseModel):
