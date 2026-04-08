@@ -5,6 +5,7 @@ import { ChatWindow } from "@/components/ChatWindow";
 import { Sidebar } from "@/components/Sidebar";
 import { SettingsModal } from "@/components/SettingsModal";
 import { SkillsAdminPanel } from "@/components/SkillsAdminPanel";
+import AgentLoop from "@/components/AgentLoop";
 import { Conversation, UseCase, Skill } from "@/types";
 import { listUseCases, listConversations, createConversation, deleteConversation, listSkills } from "@/lib/api";
 import { loadRuntimeConfig } from "@/lib/config";
@@ -22,6 +23,7 @@ export default function Home() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [agenticLoopOpen, setAgenticLoopOpen] = useState(false);
   const [configReady, setConfigReady] = useState(false);
 
   useEffect(() => {
@@ -168,6 +170,7 @@ export default function Home() {
           onDelete={handleDeleteConversation}
           onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false); }}
           onOpenSkills={() => { setSkillsOpen(true); setSidebarOpen(false); }}
+          onOpenAgenticLoop={() => { setAgenticLoopOpen(true); setSidebarOpen(false); }}
           useCases={useCases}
           selectedUseCase={selectedUseCase}
           onSelectUseCase={setSelectedUseCase}
@@ -177,6 +180,9 @@ export default function Home() {
 
       {/* Settings modal */}
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Agentic Loop modal */}
+      <AgentLoop open={agenticLoopOpen} onClose={() => setAgenticLoopOpen(false)} />
 
       {/* Main chat area */}
       <main className="flex-1 flex flex-col min-w-0">

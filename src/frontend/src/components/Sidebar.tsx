@@ -26,13 +26,14 @@ interface Props {
   onDelete: (conv: Conversation) => void;
   onOpenSettings: () => void;
   onOpenSkills: () => void;
+  onOpenAgenticLoop: () => void;
   useCases: UseCase[];
   selectedUseCase: string;
   onSelectUseCase: (name: string) => void;
   onCloseMobile?: () => void;
 }
 
-export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, onOpenSettings, onOpenSkills, useCases, selectedUseCase, onSelectUseCase, onCloseMobile }: Props) {
+export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, onOpenSettings, onOpenSkills, onOpenAgenticLoop, useCases, selectedUseCase, onSelectUseCase, onCloseMobile }: Props) {
   const { theme, toggleTheme } = useTheme();
   return (
     <aside className="w-[300px] bg-navy-950 flex flex-col h-full border-r border-white/[0.06]">
@@ -189,6 +190,15 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
           </svg>
           BYOK Settings
+        </button>
+        <button
+          onClick={onOpenAgenticLoop}
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all duration-150"
+        >
+          <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+          </svg>
+          How It Works
         </button>
         <div className="pt-2 px-3 flex items-center justify-between">
             <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
