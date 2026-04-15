@@ -93,6 +93,8 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
 
             # Run the Copilot SDK agent
             assistant_content_parts: list[str] = []
+            collected_thoughts: list[str] = []
+            collected_tool_calls: list[dict] = []
 
             async for event in copilot_agent.run(
                 message=body.message,
@@ -100,10 +102,12 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 attachments=sdk_attachments,
             ):
                 if isinstance(event, ThoughtEvent):
+                    collected_thoughts.append(event.content)
                     yield {"event": "thought", "data": json.dumps(event.model_dump())}
                 elif isinstance(event, ToolCallEvent):
                     if event.status == "completed":
                         total_tool_calls += 1
+                    collected_tool_calls.append(event.model_dump())
                     yield {"event": "tool_call", "data": json.dumps(event.model_dump())}
                 elif isinstance(event, UsageEvent):
                     yield {"event": "usage", "data": json.dumps(event.model_dump())}
@@ -115,14 +119,30 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 elif isinstance(event, ErrorEvent):
                     yield {"event": "error", "data": json.dumps(event.model_dump())}
 
-            # Persist assistant response
+            # Persist assistant response with execution details
             full_response = "".join(assistant_content_parts)
+            stats = copilot_agent.get_run_stats(body.conversationId)
+            elapsed_ms = int((time.monotonic() - start_time) * 1000)
+            run_stats = {
+                "totalDurationMs": elapsed_ms,
+                "totalToolCalls": total_tool_calls,
+                "promptTokens": stats["prompt_tokens"],
+                "completionTokens": stats["completion_tokens"],
+                "reasoningTokens": stats.get("reasoning_tokens", 0),
+                "totalTokens": stats["total_tokens"],
+                "timeToFirstTokenMs": stats["time_to_first_token_ms"],
+                "modelLatencyMs": stats["model_latency_ms"],
+            }
             assistant_message = Message(
                 id=str(uuid.uuid4()),
                 conversationId=body.conversationId,
                 role=MessageRole.ASSISTANT,
                 content=full_response,
-                metadata={"tool_calls": total_tool_calls},
+                metadata={
+                    "thoughts": collected_thoughts,
+                    "toolCalls": collected_tool_calls,
+                    "runStats": run_stats,
+                },
                 createdAt=datetime.now(timezone.utc),
             )
             await cosmos.upsert_message(assistant_message)
@@ -137,17 +157,16 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 logger.debug("Follow-up generation skipped", exc_info=True)
 
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
-            stats = copilot_agent.get_run_stats(body.conversationId)
             done = DoneEvent(
                 conversationId=body.conversationId,
                 totalDurationMs=elapsed_ms,
                 totalToolCalls=total_tool_calls,
-                promptTokens=stats["prompt_tokens"],
-                completionTokens=stats["completion_tokens"],
-                reasoningTokens=stats.get("reasoning_tokens", 0),
-                totalTokens=stats["total_tokens"],
-                timeToFirstTokenMs=stats["time_to_first_token_ms"],
-                modelLatencyMs=stats["model_latency_ms"],
+                promptTokens=run_stats["promptTokens"],
+                completionTokens=run_stats["completionTokens"],
+                reasoningTokens=run_stats["reasoningTokens"],
+                totalTokens=run_stats["totalTokens"],
+                timeToFirstTokenMs=run_stats["timeToFirstTokenMs"],
+                modelLatencyMs=run_stats["modelLatencyMs"],
             )
             yield {"event": "done", "data": json.dumps(done.model_dump())}
 

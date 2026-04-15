@@ -14,6 +14,11 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCallInfo[];
   thoughts?: string[];
+  metadata?: {
+    thoughts?: string[];
+    toolCalls?: ToolCallInfo[];
+    runStats?: RunStats;
+  };
   attachments?: Attachment[];
   createdAt: string;
 }

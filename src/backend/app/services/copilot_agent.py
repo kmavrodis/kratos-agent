@@ -89,6 +89,42 @@ def prettyToolName(name: str) -> str:
     return " ".join(w.capitalize() for w in name.replace("-", "_").split("_"))
 
 
+def _extract_tool_value(obj) -> str:
+    """Extract a human-readable string from an SDK tool input/output object.
+
+    The SDK returns Result/dict/str objects whose __repr__ is ugly
+    (e.g. Result(content='{"text": …}', contents=None, …)).
+    This helper pulls out the actual content and formats it.
+    """
+    if obj is None:
+        return ""
+
+    # If the object has a .content attribute (SDK Result), use that
+    content = getattr(obj, "content", None)
+    if content is not None:
+        text = str(content)
+    elif isinstance(obj, dict):
+        try:
+            text = json.dumps(obj, indent=2, ensure_ascii=False)
+        except (TypeError, ValueError):
+            text = str(obj)
+    else:
+        text = str(obj)
+
+    # Try to pretty-print if it looks like JSON
+    if text.startswith("{") or text.startswith("["):
+        try:
+            parsed = json.loads(text)
+            # For objects with a single "text" key, just return the text
+            if isinstance(parsed, dict) and len(parsed) == 1 and "text" in parsed:
+                return parsed["text"]
+            return json.dumps(parsed, indent=2, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    return text
+
+
 SYSTEM_PROMPT = """You are Kratos, an enterprise AI assistant.
 
 You MUST use your available skills (tools) whenever they are relevant to the user's request.
@@ -672,7 +708,7 @@ class CopilotAgent:
                                 q.put_nowait(ToolCallEvent(
                                     skillName=tool_name,
                                     status="started",
-                                    input=str(getattr(event.data, "input", "")),
+                                    input=_extract_tool_value(getattr(event.data, "input", "")),
                                 ))
 
                             elif etype == "tool.execution_complete":
@@ -724,7 +760,7 @@ class CopilotAgent:
                                 q.put_nowait(ToolCallEvent(
                                     skillName=tool_name,
                                     status="completed" if success is not False else "failed",
-                                    output=str(getattr(event.data, "output", "") or getattr(event.data, "result", ""))[:500],
+                                    output=_extract_tool_value(getattr(event.data, "output", "") or getattr(event.data, "result", ""))[:2000],
                                     durationMs=duration_ms,
                                 ))
 

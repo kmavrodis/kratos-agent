@@ -58,6 +58,21 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
         );
         if (loaded.length > 0) {
           setMessages(loaded);
+
+          // Restore execution details from persisted metadata
+          const restoredStats: Record<string, { thoughts: string[]; toolCalls: ToolCallInfo[]; runStats: RunStats }> = {};
+          for (const m of loaded) {
+            if (m.role === "assistant" && m.metadata?.runStats) {
+              restoredStats[m.id] = {
+                thoughts: m.metadata.thoughts || [],
+                toolCalls: m.metadata.toolCalls || [],
+                runStats: m.metadata.runStats,
+              };
+            }
+          }
+          if (Object.keys(restoredStats).length > 0) {
+            setMessageStats(restoredStats);
+          }
         }
       })
       .catch(() => {
