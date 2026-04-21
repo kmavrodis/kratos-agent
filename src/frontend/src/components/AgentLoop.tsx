@@ -623,7 +623,7 @@ const STEPS: Step[] = [
     description:
       "The Copilot SDK streams the request to Microsoft Foundry via Managed Identity. No API keys stored or transmitted — auth is fully keyless.",
     detail:
-      "The SDK constructs a chat completions request with the full context: system prompt, conversation history, available tool definitions. The provider config points to your Foundry endpoint with Azure AD token authentication (ManagedIdentityCredential → AzureCLICredential chain). The model deployment is configurable (defaults to gpt-54mini). Responses stream back as token deltas through the Foundry endpoint.",
+      "The SDK constructs a chat completions request with the full context: system prompt, conversation history, available tool definitions. The provider config points to your Foundry endpoint with Azure AD token authentication (ManagedIdentityCredential → AzureCLICredential chain). The model deployment is configurable (defaults to gpt-54). Responses stream back as token deltas through the Foundry endpoint.",
   },
   {
     id: 9,
