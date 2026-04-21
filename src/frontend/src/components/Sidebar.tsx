@@ -54,12 +54,15 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Conversation | null>(null);
 
-  // Filter conversations by search query
+  // Filter conversations by selected persona and search query
+  const personaConversations = conversations.filter(
+    (c) => c.useCase === selectedUseCase
+  );
   const filteredConversations = searchQuery.trim()
-    ? conversations.filter((c) =>
+    ? personaConversations.filter((c) =>
         c.title.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : conversations;
+    : personaConversations;
 
   // Group conversations by date
   const grouped: { label: string; convs: Conversation[] }[] = [];
