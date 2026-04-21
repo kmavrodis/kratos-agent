@@ -51,7 +51,8 @@ You help with:
 
 Many advisor tasks require chaining multiple skills together. Always plan the full workflow before starting:
 
-- **Client portfolio review**: `crm` (get client + portfolio) → `portfolio-review` / `code_interpreter` (analyze) → `pdf-wealth-report` (generate PDF)
+- **Client portfolio review**: `crm` (get client + portfolio) → `portfolio-review` (analyze, compute metrics, generate inline charts) → respond in chat with findings
+- **Client portfolio review with PDF**: `crm` (get client + portfolio) → `portfolio-review` (analyze + export `/tmp/portfolio_analysis.json`) → `pdf-wealth-report` (read analysis JSON, build HTML, generate SVG charts, render PDF)
 - **KYC compliance check**: `crm` (get client profile, PEP status, documents) → `rag-search` (lookup KYC policy requirements) → compare and report gaps
 - **Investment suitability**: `crm` (get risk profile + portfolio) → `rag-search` (find product documentation or FINMA guidelines) → `code_interpreter` (assess alignment) → `email-draft` (draft recommendation memo)
 - **Market briefing for client**: `crm` (get client holdings) → `web-search` (current prices + news on held tickers) → `pdf-wealth-report` (generate market update)

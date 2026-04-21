@@ -27,5 +27,14 @@ The web search tool uses the **Microsoft Foundry Responses API** with `web_searc
 
 - Always include **source URLs** from the citations returned by the tool
 - Present information as concise bullet points or a brief summary
+- Caveat any time-sensitive data with "as of [date]" when the information may change
 - If the search returns no relevant results, let the user know and suggest refining the query
+- Do not fabricate URLs — only use citations returned by the tool
+
+### Error Handling
+
+If web search returns an error or no results:
+- Report the issue transparently to the user
+- Suggest alternative search terms or a narrower query
+- Do not fall back to generating an answer from memory when the user explicitly asked for a web search
 - Do not fabricate URLs — only use citations returned by the tool

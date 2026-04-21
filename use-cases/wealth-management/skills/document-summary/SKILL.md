@@ -77,6 +77,16 @@ This skill works best when combined with:
 - If the source is too short to meaningfully summarize, say so and return the original
 - For very long content (>10,000 words), summarize in chunks and then synthesize
 
+## Wealth Management Document Types
+
+When summarizing these common document types, apply domain-specific guidance:
+
+- **Research reports**: Preserve target prices, ratings, key metrics, and time horizons. Note the analyst and firm.
+- **FINMA circulars / regulatory docs**: Quote exact thresholds, deadlines, and requirements. Note the circular number and effective date.
+- **Fund prospectuses / KIDs**: Extract: investment objective, risk level (SRRI), fees (TER), benchmark, top holdings, performance history.
+- **CIO publications**: Highlight asset class views (overweight/underweight/neutral), conviction level, and time horizon.
+- **Client meeting notes**: Extract action items, decisions, and follow-ups with owners and deadlines.
+
 ## Examples
 
 **User**: "Summarize what's in our knowledge base about the onboarding process"

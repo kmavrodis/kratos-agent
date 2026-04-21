@@ -69,6 +69,9 @@ This skill uses the **Faker MCP server** (configured in `.mcp.json`) to generate
 - Response: "A PIN reset link has been sent to your registered email. You can also reset your PIN at any Olympus ATM using your current card and registered phone number for OTP verification."
 
 #### Report Unauthorized Transaction / Dispute
+
+**Note**: This is a draft/initiation workflow — it generates a dispute reference and records the request, but does not submit to an actual dispute processing system. The user should follow up with the bank's dispute department for formal resolution.
+
 1. Ask for transaction details (date, amount, merchant)
 2. Generate a dispute reference number
 3. Response: "Dispute **DSP-2026031842** has been filed for the $149.99 charge from [Merchant] on 03/12/2026. You'll receive a provisional credit within 3-5 business days while we investigate. Investigation may take up to 45 days."

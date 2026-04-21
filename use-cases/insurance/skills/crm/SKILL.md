@@ -1,6 +1,7 @@
 ---
 name: crm
 description: Search and retrieve insurance customer profiles and policy details from the CRM system
+enabled: true
 ---
 
 ## Instructions

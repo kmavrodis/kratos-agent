@@ -39,6 +39,16 @@ For best results with semantic search:
 - **For CIO / investment views** — use terms like "opportunities", "outlook", "growth", "recommendation", "asset allocation", "thematic", combined with the asset class or sector (e.g. "opportunities in AI investments", "currency and commodity outlook", "seeking growth in equities")
 - **Rephrase if needed** — if the first query returns low-relevance results, try an alternative phrasing or narrower scope
 
+**Quick-reference query examples:**
+
+| Topic | Example queries |
+|-------|----------------|
+| CIO views | `"CIO outlook technology sector 2026"`, `"house view emerging markets"`, `"recommended allocation defensive portfolio"` |
+| KYC / AML | `"KYC documentation requirements PEP"`, `"AML enhanced due diligence thresholds"` |
+| Mortgages | `"mortgage LTV limits lending criteria"`, `"residential mortgage affordability calculation"` |
+| Funds / ETFs | `"ETF selection criteria equity exposure"`, `"fund of funds fee structure"` |
+| FINMA | `"FINMA circular suitability requirements"`, `"cross-border advisory restrictions"` |
+
 ### 3. Interpret Search Results
 
 The `rag_search` tool returns a list of results, each containing:

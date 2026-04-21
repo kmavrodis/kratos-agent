@@ -37,3 +37,4 @@ The web search tool uses the **Microsoft Foundry Responses API** with `web_searc
 - Note the date/time of rate information — rates change frequently
 - If the search returns no relevant results, suggest refining the query
 - Do not fabricate URLs — only use citations returned by the tool
+- Include a disclaimer when presenting rate comparisons: "Rates shown are for informational purposes and may vary. Contact the institution for current rates and eligibility."

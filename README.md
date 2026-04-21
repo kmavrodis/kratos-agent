@@ -164,8 +164,7 @@ kratos-agent/
 ├── skills/                     # Built-in MCP skills
 │   ├── web-search/
 │   ├── rag-search/
-│   ├── code-interpreter/
-│   └── foundry-agent/
+│   └── code-interpreter/
 │
 └── .github/
     └── workflows/
@@ -183,7 +182,6 @@ kratos-agent/
 | **Web Search** | Real-time internet search via Bing API |
 | **RAG Search** | Azure AI Search knowledge base retrieval |
 | **Code Interpreter** | Sandboxed Python execution |
-| **Foundry Agent** | Delegate to Foundry sub-agents (eval, safety) |
 
 ### Adding a Custom Skill
 

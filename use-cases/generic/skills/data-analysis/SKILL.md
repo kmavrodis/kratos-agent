@@ -86,7 +86,7 @@ This skill works best when combined with:
 ## Constraints
 
 - Max execution time: 30 seconds per code block
-- Available libraries: pandas, numpy, matplotlib (pre-installed in sandbox)
+- Pre-installed libraries: pandas, numpy, matplotlib. Additional libraries can be installed at runtime via pip.
 - Files must be written to `/tmp`
 - Keep DataFrames under ~1M rows for responsive performance
 

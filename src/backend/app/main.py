@@ -78,12 +78,6 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     copilot_agent.set_registries(registries)
     copilot_agent.set_cosmos_service(cosmos_service)
 
-    # Load system prompt from Cosmos (falls back to default if not set)
-    prompt_doc = await cosmos_service.get_setting("system-prompt")
-    if prompt_doc:
-        copilot_agent.system_prompt = prompt_doc["content"]
-        logger.info("Loaded custom system prompt from Cosmos (%d chars)", len(prompt_doc["content"]))
-
     await copilot_agent.start()
     application.state.copilot_agent = copilot_agent
 

@@ -101,6 +101,12 @@ If the user wants a statement or export:
 
 ## Constraints
 
+- Maximum 90 days of transaction history available. If the user requests transactions older than 90 days, inform them that only the last 90 days are available online and suggest they visit a branch or contact customer service at 1-800-OLYMPUS to request a paper statement.
+- Always show most recent transactions first
+- Mask account numbers in exports (show only last 4 digits)
+
+## Constraints
+
 - All transactions are simulated via Faker
 - Always show most recent transactions first
 - Maximum 90 days of history per request

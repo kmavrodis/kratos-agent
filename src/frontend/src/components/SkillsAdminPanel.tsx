@@ -89,7 +89,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
     setPromptLoading(true);
     setError("");
     try {
-      const data = await getSystemPrompt();
+      const data = await getSystemPrompt(useCase);
       setPromptContent(data.content);
       setPromptDraft(data.content);
       setPromptIsDefault(data.isDefault);
@@ -257,7 +257,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
   const handleSavePrompt = async () => {
     setError("");
     try {
-      const data = await updateSystemPrompt(promptDraft);
+      const data = await updateSystemPrompt(promptDraft, useCase);
       setPromptContent(data.content);
       setPromptIsDefault(data.isDefault);
       setPromptDirty(false);
@@ -270,7 +270,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
     if (!confirm("Reset to the default system prompt? Your custom prompt will be deleted.")) return;
     setError("");
     try {
-      await resetSystemPrompt();
+      await resetSystemPrompt(useCase);
       await loadPrompt();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reset system prompt");

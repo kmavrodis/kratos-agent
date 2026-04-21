@@ -132,6 +132,8 @@ print(f"DTI Ratio: {dti}% — {status}")
 
 ### 6. Loan Types Reference
 
+**Note:** These rates are illustrative defaults from the `product-catalog` skill. For current rates, check `product_catalog` first or use `web_search`.
+
 | Loan Type | Typical APR | Terms | Max Amount |
 |-----------|-------------|-------|------------|
 | Personal Loan | 6.99%-17.99% | 12-60 months | $50,000 |
@@ -165,7 +167,7 @@ Always include:
 
 ## Constraints
 
-- All rates are illustrative — not live market rates
+- All rates shown are illustrative defaults — not live market rates. For current rates, chain with `web_search` or check `product_catalog`.
 - Never guarantee loan approval
 - Never ask for or store SSN, income details, or credit scores in chat
 - Always round monetary values to 2 decimal places

@@ -284,14 +284,16 @@ export async function deleteSkillFile(
 
 import type { SystemPrompt } from "@/types";
 
-export async function getSystemPrompt(): Promise<SystemPrompt> {
-  const response = await fetch(`${getApiUrl()}/api/admin/system-prompt`);
+export async function getSystemPrompt(useCase?: string): Promise<SystemPrompt> {
+  const params = useCase ? `?use_case=${encodeURIComponent(useCase)}` : "";
+  const response = await fetch(`${getApiUrl()}/api/admin/system-prompt${params}`);
   if (!response.ok) throw new Error(`Failed to get system prompt: ${response.status}`);
   return response.json();
 }
 
-export async function updateSystemPrompt(content: string): Promise<SystemPrompt> {
-  const response = await fetch(`${getApiUrl()}/api/admin/system-prompt`, {
+export async function updateSystemPrompt(content: string, useCase?: string): Promise<SystemPrompt> {
+  const params = useCase ? `?use_case=${encodeURIComponent(useCase)}` : "";
+  const response = await fetch(`${getApiUrl()}/api/admin/system-prompt${params}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
@@ -303,8 +305,9 @@ export async function updateSystemPrompt(content: string): Promise<SystemPrompt>
   return response.json();
 }
 
-export async function resetSystemPrompt(): Promise<void> {
-  const response = await fetch(`${getApiUrl()}/api/admin/system-prompt`, {
+export async function resetSystemPrompt(useCase?: string): Promise<void> {
+  const params = useCase ? `?use_case=${encodeURIComponent(useCase)}` : "";
+  const response = await fetch(`${getApiUrl()}/api/admin/system-prompt${params}`, {
     method: "DELETE",
   });
   if (!response.ok) {

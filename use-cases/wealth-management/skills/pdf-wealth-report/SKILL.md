@@ -18,6 +18,17 @@ enabled: true
 Generate professional PDF reports for private banking and wealth management using
 HTML templates with a navy-and-gold theme, then render via Playwright.
 
+## Data Sources
+
+Before building the report, gather the data you need:
+
+- **From `portfolio-review` handoff**: If a portfolio analysis was already run, read `/tmp/portfolio_analysis.json` for pre-computed metrics (allocations, risk flags, performance). This avoids re-doing the analysis.
+- **From CRM directly**: If no prior analysis exists, use `load_from_crm_by_client_fullname` / `get_client_portfolio` to get raw client and portfolio data, then compute the metrics yourself.
+- **From `web_search`**: For market outlook reports, fetch current market data and news.
+- **From `rag_search`**: For CIO views, house recommendations, and policy content.
+
+**Key principle**: This skill handles **formatting and rendering** — not analysis. Get the numbers from `portfolio-review` or compute them via `code_interpreter` first, then focus on building the HTML and generating charts.
+
 ## Workflow
 
 1. **Choose a template** from `assets/`:
@@ -134,6 +145,13 @@ Every report **must** include a footer with disclaimer. See `references/complian
 - Risk profile definitions
 
 ## Guidelines
+
+### When to Use This Skill
+
+- **Use for**: Formal client deliverables, quarterly portfolio reviews, market outlook publications, investment proposals, documented recommendations, and any content that needs to be a polished PDF.
+- **Do NOT use for**: Quick verbal portfolio summaries, simple Q&A about a client, ad-hoc calculations, or informal internal discussions. For those, respond inline in chat using `portfolio-review` or `code_interpreter` instead.
+
+### Report Standards
 
 - **One HTML file per report** — fully self-contained (charts are inline SVG)
 - **Serif for narrative** (Georgia), **sans-serif for data** (Segoe UI)

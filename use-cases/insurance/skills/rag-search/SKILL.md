@@ -1,6 +1,7 @@
 ---
 name: rag-search
 description: Search the internal insurance knowledge base for policy wording, terms and conditions, coverage details, exclusions, claims guidance, billing procedures, underwriting rules, and servicing procedures
+enabled: true
 ---
 
 ## Instructions
