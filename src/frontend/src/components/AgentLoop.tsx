@@ -51,6 +51,10 @@ const LAYER_LABELS: Record<string, string> = {
   azure: "Azure",
 };
 
+/* ─── Loop step indices (0-indexed) ──────────────────────────────── */
+const LOOP_START = 8;  // Step 9: Tool Decision
+const LOOP_END = 10;   // Step 11: Agentic Loop
+
 /* ─── Step Visualization Components ──────────────────────────────── */
 
 function VizChatInput() {
@@ -734,13 +738,28 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
     if (open) cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeStep, open]);
 
-  // Escape key to close
+  // Keyboard navigation: Escape to close, Arrow keys to navigate
   useEffect(() => {
     if (!open) return;
-    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (isPlaying) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveStep((s) => Math.max(s - 1, 0));
+      }
+      if (e.key === " ") {
+        e.preventDefault();
+        play();
+      }
+    };
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  }, [open, onClose, isPlaying, play]);
 
   // Stop autoplay when closing
   useEffect(() => {
@@ -777,27 +796,10 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 dark:text-white tracking-tight">
           Agentic Loop
         </h2>
-        <p className="text-slate-500 dark:text-slate-400 mt-3 text-base md:text-lg max-w-2xl leading-relaxed">
-          From chat message to streamed response — how the Copilot SDK agentic
-          pipeline processes every request through your Kratos Agent.
-        </p>
-      </div>
-
-      {/* ── Layer legend ── */}
-      <div className="flex flex-wrap gap-3 mb-8">
-        {(["frontend", "backend", "sdk", "azure"] as const).map((layer) => (
-          <span
-            key={layer}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border ${LAYER_COLORS[layer].badge}`}
-          >
-            <span className={`w-2 h-2 rounded-full ${LAYER_COLORS[layer].dot}`} />
-            {LAYER_LABELS[layer]}
-          </span>
-        ))}
       </div>
 
       {/* ── Timeline ── */}
-      <div className="relative mb-6">
+      <div className="relative mb-16 md:mb-20">
         {/* Track line */}
         <div className="absolute left-0 right-0 top-6 h-[2px] bg-slate-200 dark:bg-white/[0.06] rounded-full" />
         {/* Progress fill */}
@@ -806,34 +808,14 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
           style={{ width: `${(activeStep / (STEPS.length - 1)) * 100}%` }}
         />
 
-        {/* Loop indicator arc — curves above timeline from step 11 back to step 9 */}
-        <svg
-          className="absolute pointer-events-none hidden md:block"
-          style={{ top: -30, left: 0, width: "100%", height: 38 }}
-          viewBox="0 0 1200 38"
-          preserveAspectRatio="none"
-          aria-hidden
-        >
-          <path
-            d={`M ${(10 / 12) * 1200} 36 C ${(10 / 12) * 1200} 4, ${(8 / 12) * 1200} 4, ${(8 / 12) * 1200} 36`}
-            fill="none"
-            stroke="currentColor"
-            className="text-primary-400 dark:text-primary-400/40"
-            strokeWidth="2"
-            strokeDasharray="6 3"
-          />
-          <polygon
-            points={`${(8 / 12) * 1200 - 4},31 ${(8 / 12) * 1200},39 ${(8 / 12) * 1200 + 4},31`}
-            className="fill-primary-400 dark:fill-primary-400/40"
-          />
-        </svg>
-
         {/* Step nodes */}
         <div className="relative flex justify-between">
           {STEPS.map((s, i) => {
             const isActive = i === activeStep;
             const isPast = i < activeStep;
             const lc = LAYER_COLORS[s.layer];
+            const inLoop = i >= LOOP_START && i <= LOOP_END;
+            const isLoopActive = activeStep >= LOOP_START && activeStep <= LOOP_END;
 
             return (
               <button
@@ -855,7 +837,6 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
                       ? `bg-primary-50 dark:bg-primary-400/10 border-primary-100 dark:border-primary-400/20 ${lc.text}`
                       : "bg-white dark:bg-navy-850 border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-slate-500 group-hover:border-slate-300 dark:group-hover:border-white/[0.12] group-hover:shadow-card"
                     }
-                    ${s.isLoop ? `ring-1 ${lc.ring}` : ""}
                   `}
                 >
                   <span className={isActive ? lc.text : ""}>
@@ -863,10 +844,6 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
                       <span className="text-xs font-bold">{s.id}</span>
                     )}
                   </span>
-                  {/* Agentic loop badge dot */}
-                  {s.isLoop && (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-primary-400 border-2 border-white dark:border-navy-950" />
-                  )}
                 </div>
                 {/* Label */}
                 <span
@@ -877,10 +854,73 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
                 >
                   {s.label}
                 </span>
+                {/* Loop bracket connector — first loop step gets the label */}
+                {inLoop && (
+                  <div className="flex flex-col items-center mt-1.5">
+                    <div className={`w-[2px] h-2 rounded-full transition-colors duration-300 ${
+                      isLoopActive ? "bg-amber-400" : "bg-slate-200 dark:bg-white/[0.08]"
+                    }`} />
+                  </div>
+                )}
               </button>
             );
           })}
         </div>
+
+        {/* ── Agentic Loop bracket — rendered below the step nodes ── */}
+        {(() => {
+          // Calculate the horizontal positions based on step indices
+          const total = STEPS.length;
+          const leftPct = (LOOP_START / (total - 1)) * 100;
+          const rightPct = (LOOP_END / (total - 1)) * 100;
+          const widthPct = rightPct - leftPct;
+          const isLoopActive = activeStep >= LOOP_START && activeStep <= LOOP_END;
+          return (
+            <div
+              className="absolute hidden md:block pointer-events-none"
+              style={{ left: `${leftPct}%`, width: `${widthPct}%`, top: "calc(100% - 6px)" }}
+            >
+              {/* Bracket shape: ╰──────────╯ */}
+              <svg className="w-full" viewBox="0 0 200 28" preserveAspectRatio="none" fill="none" aria-hidden>
+                <path
+                  d="M 4 0 L 4 14 Q 4 22 12 22 L 188 22 Q 196 22 196 14 L 196 0"
+                  stroke="currentColor"
+                  className={`transition-colors duration-300 ${
+                    isLoopActive ? "text-amber-400" : "text-slate-200 dark:text-white/[0.08]"
+                  }`}
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+                {/* Small arrow at left end pointing up (return) */}
+                <path
+                  d="M 1 6 L 4 0 L 7 6"
+                  stroke="currentColor"
+                  className={`transition-colors duration-300 ${
+                    isLoopActive ? "text-amber-400" : "text-slate-200 dark:text-white/[0.08]"
+                  }`}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              </svg>
+              {/* Label centered under bracket */}
+              <div className="flex items-center justify-center gap-1.5 -mt-0.5">
+                <svg className={`w-3 h-3 transition-colors duration-300 ${
+                  isLoopActive ? "text-amber-500 dark:text-amber-400" : "text-slate-300 dark:text-slate-600"
+                }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
+                </svg>
+                <span className={`text-[10px] font-bold tracking-wider uppercase transition-colors duration-300 ${
+                  isLoopActive ? "text-amber-500 dark:text-amber-400" : "text-slate-300 dark:text-slate-600"
+                }`}>
+                  Agentic Loop
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Detail card ── */}
@@ -938,82 +978,6 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
             {step.detail}
           </p>
 
-          {/* ── Navigation controls ── */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-white/[0.06]">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => !isPlaying && activeStep > 0 && goTo(activeStep - 1)}
-                disabled={isPlaying || activeStep === 0}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 dark:border-white/[0.1] bg-white dark:bg-navy-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                aria-label="Previous step"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                </svg>
-              </button>
-              <button
-                onClick={play}
-                className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border transition-all ${
-                  isPlaying
-                    ? "bg-primary-500 text-white border-primary-600"
-                    : "border-slate-200 dark:border-white/[0.1] bg-white dark:bg-navy-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/[0.06]"
-                }`}
-                aria-label={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
-                ) : (
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                )}
-              </button>
-              <button
-                onClick={() => !isPlaying && activeStep < STEPS.length - 1 && goTo(activeStep + 1)}
-                disabled={isPlaying || activeStep === STEPS.length - 1}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 dark:border-white/[0.1] bg-white dark:bg-navy-800 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                aria-label="Next step"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
-              </button>
-            </div>
-            <span className="text-sm font-medium text-slate-400 dark:text-slate-500 tabular-nums">
-              {activeStep + 1} / {STEPS.length}
-            </span>
-            <div className="flex items-center gap-1">
-              {[0.5, 1, 2].map((speed) => (
-                <button
-                  key={speed}
-                  onClick={() => {
-                    if (timerRef.current) clearInterval(timerRef.current);
-                    if (isPlaying) {
-                      let i = activeStep;
-                      timerRef.current = setInterval(() => {
-                        i++;
-                        if (i >= STEPS.length) {
-                          if (timerRef.current) clearInterval(timerRef.current);
-                          setIsPlaying(false);
-                          return;
-                        }
-                        setActiveStep(i);
-                      }, 3000 / speed);
-                    }
-                  }}
-                  className="px-2 py-0.5 rounded-md text-xs font-medium text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
-                >
-                  {speed}x
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom progress */}
-        <div className="h-0.5 bg-slate-100 dark:bg-white/[0.04]">
-          <div
-            className="h-full bg-gradient-to-r from-primary-400 to-primary-500 transition-all duration-500 ease-out"
-            style={{ width: `${((activeStep + 1) / STEPS.length) * 100}%` }}
-          />
         </div>
       </div>
 
