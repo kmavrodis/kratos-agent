@@ -152,8 +152,8 @@ export function MessageBubble({ message }: Props) {
       {/* Assistant avatar */}
       {!isUser && (
         <div className="flex-shrink-0 mr-3 mt-1">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 flex items-center justify-center shadow-md shadow-primary-500/20 ring-2 ring-white/10">
-            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-primary-500/20 ring-1 ring-white/10">
+            <svg className="w-4 h-4 text-white drop-shadow-sm" viewBox="0 0 24 24" fill="currentColor">
               <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clipRule="evenodd" />
             </svg>
           </div>
@@ -163,8 +163,8 @@ export function MessageBubble({ message }: Props) {
       <div
         className={`max-w-[75%] ${
           isUser
-            ? "rounded-2xl rounded-br-sm px-4 py-3 bg-primary-600 text-white shadow-sm"
-            : "rounded-2xl rounded-bl-sm px-4 py-3 bg-white dark:bg-navy-900/80 border border-slate-100 dark:border-white/[0.06] text-slate-800 dark:text-slate-200"
+            ? "rounded-2xl rounded-br-sm px-4 py-3 bg-gradient-to-br from-primary-600 to-violet-600 text-white shadow-md shadow-primary-500/20"
+            : "rounded-2xl rounded-bl-sm px-4 py-3 bg-white dark:bg-navy-900/80 border border-slate-100 dark:border-white/[0.06] text-slate-800 dark:text-slate-200 shadow-sm shadow-slate-100/50 dark:shadow-black/10"
         }`}
       >
         {isUser ? (

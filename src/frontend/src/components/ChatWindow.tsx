@@ -344,7 +344,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   return (
     <div className="flex flex-col h-full bg-surface-50 dark:bg-navy-950">
       {/* Header */}
-      <header className="border-b border-slate-200/60 dark:border-white/[0.05] px-4 sm:px-6 py-3 bg-white/70 dark:bg-navy-900/70 backdrop-blur-xl sticky top-0 z-10">
+      <header className="border-b border-slate-200/60 dark:border-white/[0.05] px-4 sm:px-6 py-3 bg-white/80 dark:bg-navy-900/80 backdrop-blur-2xl sticky top-0 z-10 shadow-sm shadow-slate-100/50 dark:shadow-black/10">
         <div className="flex items-center gap-3 max-w-5xl mx-auto">
           {/* Mobile hamburger */}
           {onOpenSidebar && (
@@ -460,7 +460,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                 </div>
                 <span className="text-xs font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider">Continue exploring</span>
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 stagger-children">
                 {followUpQuestions.map((question, idx) => (
                   <button
                     key={idx}
@@ -468,7 +468,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                       setFollowUpQuestions([]);
                       handleSend(question);
                     }}
-                    className="group flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-left rounded-xl border border-transparent hover:bg-white dark:hover:bg-navy-900/80 hover:border-slate-200/60 dark:hover:border-white/[0.08] hover:shadow-sm transition-all duration-200"
+                    className="group flex items-center gap-3 px-3.5 py-2.5 text-[13px] text-left rounded-xl border border-transparent hover:bg-white dark:hover:bg-navy-900/80 hover:border-slate-200/60 dark:hover:border-white/[0.08] hover:shadow-sm transition-all duration-300 animate-slide-up-stagger active:scale-[0.98]"
                   >
                     <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-primary-500 transition-colors flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -516,7 +516,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
       {/* Input area */}
       <div className="px-3 sm:px-4 pb-4 sm:pb-5 pt-2">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-end gap-2 bg-white dark:bg-navy-900/80 rounded-2xl border border-slate-200/60 dark:border-white/[0.06] px-3 py-2 focus-within:border-primary-400/60 dark:focus-within:border-primary-500/40 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.08)] transition-all duration-200">
+          <div className="flex items-end gap-2 bg-white dark:bg-navy-900/80 rounded-2xl border border-slate-200/60 dark:border-white/[0.06] px-3 py-2 focus-within:border-primary-400/60 dark:focus-within:border-primary-500/40 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.1),0_4px_16px_rgba(0,0,0,0.04)] shadow-lg shadow-slate-200/40 dark:shadow-black/20 transition-all duration-300">
             <input
               ref={fileInputRef}
               type="file"
@@ -528,7 +528,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
               onClick={() => fileInputRef.current?.click()}
               disabled={isStreaming}
               title="Attach files"
-              className="p-2 text-slate-400 hover:text-primary-500 rounded-lg hover:bg-slate-50 dark:hover:bg-white/[0.06] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 text-slate-400 hover:text-primary-500 rounded-lg hover:bg-slate-50 dark:hover:bg-white/[0.06] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
@@ -553,7 +553,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
               onClick={() => handleSend()}
               disabled={isStreaming || !input.trim()}
               aria-label={isStreaming ? "Sending message" : "Send message"}
-              className="p-2.5 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-2.5 bg-gradient-to-r from-primary-600 to-violet-600 text-white rounded-xl hover:from-primary-700 hover:to-violet-700 transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-md shadow-primary-500/20 hover:shadow-lg hover:shadow-primary-500/30 active:scale-95"
             >
               {isStreaming ? (
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">

@@ -221,16 +221,17 @@ export default function Home() {
               <div className="w-full max-w-2xl animate-fade-in">
                 {/* Hero */}
                 <div className="text-center mb-10">
-                  <div className="relative mx-auto mb-6 w-16 h-16">
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 blur-xl opacity-30 animate-pulse-slow" />
-                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-primary-500/25 ring-1 ring-white/20">
-                      <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                  <div className="relative mx-auto mb-6 w-20 h-20">
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 blur-2xl opacity-30 animate-glow-pulse" />
+                    <div className="absolute inset-[-4px] rounded-[18px] bg-gradient-to-br from-violet-500/20 via-primary-500/20 to-cyan-400/20 animate-float" />
+                    <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600 via-primary-500 to-cyan-400 flex items-center justify-center shadow-xl shadow-primary-500/25 ring-1 ring-white/20 animate-float">
+                      <svg className="w-10 h-10 text-white drop-shadow-lg" viewBox="0 0 24 24" fill="currentColor">
                         <path fillRule="evenodd" d="M14.615 1.595a.75.75 0 01.359.852L12.982 9.75h7.268a.75.75 0 01.548 1.262l-10.5 11.25a.75.75 0 01-1.272-.71l1.992-7.302H3.75a.75.75 0 01-.548-1.262l10.5-11.25a.75.75 0 01.913-.143z" clipRule="evenodd" />
                       </svg>
                     </div>
                   </div>
 
-                  <h1 className="text-2xl sm:text-3xl font-bold mb-2 tracking-tight">
+                  <h1 className="text-3xl sm:text-4xl font-bold mb-3 tracking-tight">
                     <span className="gradient-text">
                       {useCases.find((uc) => uc.name === selectedUseCase)?.displayName || "Kratos Agent"}
                     </span>
@@ -244,7 +245,7 @@ export default function Home() {
 
                 {/* Chat input bar */}
                 <div className="relative mb-8">
-                  <div className="flex items-end gap-2 p-2 bg-white dark:bg-navy-900/80 border border-slate-200/60 dark:border-white/[0.06] rounded-2xl shadow-sm focus-within:border-primary-400/60 dark:focus-within:border-primary-500/40 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.08)] transition-all duration-300">
+                  <div className="flex items-end gap-2 p-2 bg-white dark:bg-navy-900/80 border border-slate-200/60 dark:border-white/[0.06] rounded-2xl shadow-lg shadow-slate-200/50 dark:shadow-black/30 focus-within:border-primary-400/60 dark:focus-within:border-primary-500/40 focus-within:shadow-[0_0_0_3px_rgba(99,102,241,0.1),0_8px_32px_rgba(0,0,0,0.06)] transition-all duration-300">
                     <textarea
                       ref={landingInputRef}
                       value={landingInput}
@@ -269,7 +270,7 @@ export default function Home() {
                       onClick={() => { if (landingInput.trim()) startConversation(landingInput.trim()); }}
                       disabled={!landingInput.trim()}
                       aria-label="Send message"
-                      className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
+                      className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-r from-primary-600 to-violet-600 text-white hover:from-primary-700 hover:to-violet-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-md shadow-primary-500/20 hover:shadow-lg hover:shadow-primary-500/30 active:scale-95"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
@@ -283,17 +284,19 @@ export default function Home() {
 
                 {/* Sample questions */}
                 {(useCases.find((uc) => uc.name === selectedUseCase)?.sampleQuestions ?? []).length > 0 && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 stagger-children">
                     {useCases.find((uc) => uc.name === selectedUseCase)!.sampleQuestions.map((q, i) => (
                       <button
                         key={i}
                         onClick={() => handleSampleQuestion(q)}
-                        className="group text-left px-4 py-3 rounded-xl border border-slate-200/80 dark:border-white/[0.06] bg-white/60 dark:bg-white/[0.02] hover:border-primary-300 dark:hover:border-primary-500/30 hover:bg-white dark:hover:bg-white/[0.04] transition-all duration-200 hover:shadow-sm"
+                        className="group text-left px-4 py-3.5 rounded-xl border border-slate-200/80 dark:border-white/[0.06] bg-white/70 dark:bg-white/[0.02] hover:border-primary-300 dark:hover:border-primary-500/30 hover:bg-white dark:hover:bg-white/[0.05] transition-all duration-300 hover:shadow-md hover:shadow-primary-500/[0.06] dark:hover:shadow-primary-500/[0.08] animate-slide-up-stagger active:scale-[0.98] backdrop-blur-sm"
                       >
                         <div className="flex items-start gap-3">
-                          <svg className="w-4 h-4 mt-0.5 text-primary-400 dark:text-primary-500 flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
-                          </svg>
+                          <div className="w-7 h-7 rounded-lg bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-primary-100 dark:group-hover:bg-primary-500/20 transition-colors">
+                            <svg className="w-3.5 h-3.5 text-primary-500 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+                            </svg>
+                          </div>
                           <span className="text-sm text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors leading-snug">{q}</span>
                         </div>
                       </button>
@@ -303,10 +306,10 @@ export default function Home() {
 
                 {/* Skill pills */}
                 {skills.filter((s) => s.enabled).length > 0 && (
-                  <div className="flex flex-wrap justify-center gap-2 px-4">
+                  <div className="flex flex-wrap justify-center gap-2 px-4 animate-fade-in">
                     {skills.filter((s) => s.enabled).map((s) => (
-                      <span key={s.name} className="inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-white/[0.04] rounded-full border border-slate-200/80 dark:border-white/[0.06]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 opacity-70" />
+                      <span key={s.name} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-white/[0.04] rounded-full border border-slate-200/80 dark:border-white/[0.06] hover:border-primary-300/50 dark:hover:border-primary-500/20 hover:text-primary-600 dark:hover:text-primary-400 transition-all duration-200 cursor-default backdrop-blur-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 dark:bg-emerald-500 animate-pulse-slow" />
                         {s.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
                       </span>
                     ))}

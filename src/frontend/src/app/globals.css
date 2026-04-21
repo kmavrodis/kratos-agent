@@ -63,10 +63,17 @@ body {
 
 /* Gradient text utility */
 .gradient-text {
-  background: linear-gradient(135deg, #6366f1 0%, #f97316 100%);
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 30%, #a855f7 70%, #6366f1 100%);
+  background-size: 200% 200%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  animation: gradientTextShift 4s ease-in-out infinite;
+}
+
+@keyframes gradientTextShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
 /* Markdown content styling */
@@ -124,16 +131,60 @@ body {
 }
 
 .mesh-bg {
-  background: linear-gradient(-45deg, #f8fafc, #eef2ff, #faf5ff, #f8fafc);
-  background-size: 400% 400%;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.05) 0%, transparent 60%),
+    linear-gradient(-45deg, #f8fafc, #eef2ff, #faf5ff, #f0f9ff, #f8fafc);
+  background-size: 100% 100%, 400% 400%;
   animation: gradientShift 15s ease infinite;
 }
 
 .dark .mesh-bg {
-  background: linear-gradient(-45deg, #090b16, #151929, #1a1f36, #090b16);
-  background-size: 400% 400%;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+    linear-gradient(-45deg, #090b16, #151929, #1a1f36, #0f1628, #090b16);
+  background-size: 100% 100%, 400% 400%;
   animation: gradientShift 15s ease infinite;
 }
+
+/* Interactive hover lift */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+.dark .hover-lift:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Shimmer loading effect */
+.shimmer-bg {
+  background: linear-gradient(90deg, transparent 0%, rgba(99, 102, 241, 0.04) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Focus ring utility */
+.focus-ring {
+  transition: box-shadow 0.15s ease;
+}
+.focus-ring:focus-within {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+/* Stagger animation delays for children */
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 300ms; }
 
 /* Dark mode prose overrides */
 .dark .prose code {

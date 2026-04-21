@@ -84,25 +84,32 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
     <aside className="w-[300px] bg-navy-950 flex flex-col h-full border-r border-white/[0.06]" aria-label="Conversation sidebar">
       {/* Delete confirmation dialog — portal to body to escape sidebar transform containment */}
       {deleteTarget && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-navy-900 border border-white/[0.1] rounded-2xl p-6 max-w-sm mx-4 shadow-2xl animate-slide-up">
-            <h3 className="text-sm font-semibold text-white mb-2">Delete conversation?</h3>
-            <p className="text-xs text-slate-400 mb-1 leading-relaxed">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-navy-900 border border-white/[0.1] rounded-2xl p-6 max-w-sm mx-4 shadow-2xl animate-scale-in ring-1 ring-white/[0.05]">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-semibold text-white">Delete conversation?</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-2 leading-relaxed">
               This will permanently delete:
             </p>
-            <p className="text-sm text-slate-200 font-medium truncate mb-4 px-2 py-1.5 bg-white/[0.04] rounded-lg">
+            <p className="text-sm text-slate-200 font-medium break-words mb-5 px-3 py-2 bg-white/[0.04] rounded-lg border border-white/[0.06]">
               {deleteTarget.title}
             </p>
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2.5 justify-end">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="px-3.5 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all"
+                className="px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.08] rounded-lg transition-all duration-200"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmDelete}
-                className="px-3.5 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-all shadow-sm"
+                className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-500 rounded-lg transition-all duration-200 shadow-lg shadow-red-500/20 active:scale-95"
               >
                 Delete
               </button>
@@ -139,19 +146,6 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
         </div>
       </div>
 
-      {/* New conversation button */}
-      <div className="px-3 pb-2">
-        <button
-          onClick={onNew}
-          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-200 bg-white/[0.06] border border-white/[0.1] rounded-xl hover:bg-white/[0.1] hover:border-white/[0.14] transition-all duration-150"
-        >
-          <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          New conversation
-        </button>
-      </div>
-
       {/* Use-case selector */}
       {useCases.length > 1 && (
         <div className="px-3 py-2">
@@ -179,6 +173,21 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
           </div>
         </div>
       )}
+
+      {/* New conversation button */}
+      <div className="px-3 pb-2">
+        <button
+          onClick={onNew}
+          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-slate-200 bg-gradient-to-r from-primary-600/10 to-violet-600/10 border border-primary-500/20 rounded-xl hover:from-primary-600/20 hover:to-violet-600/20 hover:border-primary-500/30 transition-all duration-300 active:scale-[0.98] group"
+        >
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-500 to-violet-500 flex items-center justify-center shadow-sm shadow-primary-500/20 group-hover:shadow-md group-hover:shadow-primary-500/30 transition-all">
+            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          New conversation
+        </button>
+      </div>
 
       {/* Divider */}
       <div className="mx-4 my-1 border-t border-white/[0.06]" />
@@ -238,10 +247,10 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
                 <ul className="space-y-0.5">
                   {group.convs.map((conv) => (
                     <li key={conv.id} className="animate-slide-in-left">
-                      <div className={`group flex items-center rounded-xl transition-all duration-200 ${
+                      <div className={`group flex items-center rounded-xl transition-all duration-300 ${
                         activeId === conv.id
-                          ? "bg-primary-500/[0.15] border border-primary-500/20"
-                          : "hover:bg-white/[0.06] border border-transparent"
+                          ? "bg-gradient-to-r from-primary-500/[0.15] to-violet-500/[0.10] border border-primary-500/25 shadow-sm shadow-primary-500/5"
+                          : "hover:bg-white/[0.06] border border-transparent hover:border-white/[0.06]"
                       }`}>
                         <button
                           onClick={() => onSelect(conv)}
@@ -293,7 +302,7 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
       <div className="px-2 py-3 border-t border-white/[0.06] space-y-0.5">
         <button
           onClick={onOpenSkills}
-          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all duration-150"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-200 group active:scale-[0.98]"
         >
           <svg className="w-4 h-4 text-accent-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
@@ -303,7 +312,7 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
         </button>
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all duration-150"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-200 group active:scale-[0.98]"
         >
           <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
@@ -312,7 +321,7 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
         </button>
         <button
           onClick={onOpenAgenticLoop}
-          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all duration-150"
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/[0.06] rounded-xl transition-all duration-200 group active:scale-[0.98]"
         >
           <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
