@@ -32,6 +32,15 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: initialize services on startup, cleanup on shutdown."""
     settings = get_settings()
 
+    # Fail fast if required settings are missing
+    _required = {
+        "foundry_endpoint": settings.foundry_endpoint,
+        "foundry_model_deployment": settings.foundry_model_deployment,
+    }
+    missing = [k for k, v in _required.items() if not v]
+    if missing:
+        raise RuntimeError(f"Missing required configuration: {', '.join(missing)}")
+
     # Setup OpenTelemetry (traces, metrics, logs/events exporters)
     setup_telemetry(settings)
 
@@ -99,11 +108,13 @@ app = FastAPI(
 instrument_fastapi_app(app)
 
 # CORS — configured for Static Web App frontend
+_cors_settings = get_settings()
+_cors_origins = [o.strip() for o in _cors_settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Narrowed in production via environment config
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

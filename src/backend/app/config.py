@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Microsoft Foundry (deployed by Bicep)
     foundry_endpoint: str = ""
-    foundry_model_deployment: str = "gpt-54mini"
+    foundry_model_deployment: str = ""
     foundry_project_name: str = ""
 
     # Azure Blob Storage for skills
@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"  # noqa: S104
     port: int = 8000
     environment: str = "development"
+
+    # CORS — comma-separated allowed origins; "*" for development only
+    allowed_origins: str = "*"
+
+    # Admin auth — set to "true" after configuring Easy Auth on Container Apps / SWA
+    admin_auth_enabled: str = "false"
 
     # Cosmos DB database
     cosmos_db_database: str = "kratos-agent"

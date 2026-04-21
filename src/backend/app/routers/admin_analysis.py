@@ -8,14 +8,15 @@ import time
 
 import httpx
 from azure.identity.aio import DefaultAzureCredential
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from app.auth import require_authenticated_user
 from app.services.skill_registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 _credential: DefaultAzureCredential | None = None
 _http_client: httpx.AsyncClient | None = None

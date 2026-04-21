@@ -2,14 +2,15 @@
 
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from app.auth import require_authenticated_user
 from app.models import SystemPromptResponse, SystemPromptUpdate
 from app.services.copilot_agent import DEFAULT_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 SETTING_ID = "system-prompt"
 

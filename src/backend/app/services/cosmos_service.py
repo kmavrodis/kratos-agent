@@ -5,15 +5,20 @@ Partition keys: conversations -> /userId, messages -> /conversationId, skills ->
 """
 
 import logging
+import time
 from typing import Any
 
 from azure.cosmos.aio import CosmosClient
+from azure.cosmos.exceptions import CosmosHttpResponseError
 from azure.identity.aio import DefaultAzureCredential
 
 from app.config import Settings
 from app.models import Conversation, Message
 
 logger = logging.getLogger(__name__)
+
+# Log a warning if a Cosmos operation takes longer than this (ms)
+_SLOW_OPERATION_THRESHOLD_MS = 500
 
 
 class CosmosService:
@@ -61,7 +66,16 @@ class CosmosService:
     async def upsert_conversation(self, conversation: Conversation) -> None:
         if not self._conversations_container:
             return
-        await self._conversations_container.upsert_item(conversation.model_dump(mode="json"))
+        start = time.monotonic()
+        try:
+            await self._conversations_container.upsert_item(conversation.model_dump(mode="json"))
+        except CosmosHttpResponseError as exc:
+            logger.error("Cosmos upsert_conversation failed: status=%s, message=%s", exc.status_code, exc.message)
+            raise
+        finally:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            if elapsed_ms > _SLOW_OPERATION_THRESHOLD_MS:
+                logger.warning("Slow Cosmos operation: upsert_conversation took %.0f ms", elapsed_ms)
 
     async def get_conversation(self, conversation_id: str, user_id: str) -> Conversation | None:
         if not self._conversations_container:
@@ -94,17 +108,31 @@ class CosmosService:
     async def upsert_message(self, message: Message) -> None:
         if not self._messages_container:
             return
-        await self._messages_container.upsert_item(message.model_dump(mode="json"))
+        start = time.monotonic()
+        try:
+            await self._messages_container.upsert_item(message.model_dump(mode="json"))
+        except CosmosHttpResponseError as exc:
+            logger.error("Cosmos upsert_message failed: status=%s, message=%s", exc.status_code, exc.message)
+            raise
+        finally:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            if elapsed_ms > _SLOW_OPERATION_THRESHOLD_MS:
+                logger.warning("Slow Cosmos operation: upsert_message took %.0f ms", elapsed_ms)
 
     async def list_messages(self, conversation_id: str) -> list[Message]:
         if not self._messages_container:
             return []
+        start = time.monotonic()
         query = "SELECT * FROM c WHERE c.conversationId = @cid ORDER BY c.createdAt ASC"
         params: list[dict[str, str]] = [{"name": "@cid", "value": conversation_id}]
         items = self._messages_container.query_items(
             query=query, parameters=params, partition_key=conversation_id
         )
-        return [Message(**item) async for item in items]
+        results = [Message(**item) async for item in items]
+        elapsed_ms = (time.monotonic() - start) * 1000
+        if elapsed_ms > _SLOW_OPERATION_THRESHOLD_MS:
+            logger.warning("Slow Cosmos operation: list_messages took %.0f ms (%d items)", elapsed_ms, len(results))
+        return results
 
     # ─── Settings ─────────────────────────────────────────────────────────────
 

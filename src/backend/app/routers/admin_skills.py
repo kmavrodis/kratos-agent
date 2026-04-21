@@ -3,14 +3,15 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from app.auth import require_authenticated_user
 from app.models import SkillCreate, SkillFile, SkillFileList, SkillFileUpsert, SkillList, SkillResponse, SkillUpdate
 from app.services.skill_registry import SkillMetadata, SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 
 def _get_registry(request: Request, use_case: str) -> SkillRegistry:

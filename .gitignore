@@ -60,7 +60,8 @@ secrets/
 # MCP
 .playwright-mcp/
 
-.github/
-tests/
+# Build artifacts that should not be committed
+*.egg-info/
+infra/main.json
 
 copilot-studio-openapi.yaml

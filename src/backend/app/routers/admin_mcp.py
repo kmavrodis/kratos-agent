@@ -2,13 +2,14 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.auth import require_authenticated_user
 from app.models import MCPConfigResponse, MCPConfigUpdate
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 
 @router.get("", response_model=MCPConfigResponse)

@@ -33,8 +33,8 @@ export function getApiUrl(): string {
     }
   }
 
-  // 3. Fallback for local development
-  _cachedApiUrl = "http://localhost:8000";
+  // 3. Same-origin fallback (works behind a proxy / APIM / SWA linked backend)
+  _cachedApiUrl = "";
   return _cachedApiUrl;
 }
 
