@@ -148,6 +148,14 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Skip to content link for accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -185,7 +193,7 @@ export default function Home() {
       <AgentLoop open={agenticLoopOpen} onClose={() => setAgenticLoopOpen(false)} />
 
       {/* Main chat area */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main id="main-content" className="flex-1 flex flex-col min-w-0">
         {activeConversation ? (
           <ChatWindow
             conversation={activeConversation}
@@ -260,6 +268,7 @@ export default function Home() {
                     <button
                       onClick={() => { if (landingInput.trim()) startConversation(landingInput.trim()); }}
                       disabled={!landingInput.trim()}
+                      aria-label="Send message"
                       className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">

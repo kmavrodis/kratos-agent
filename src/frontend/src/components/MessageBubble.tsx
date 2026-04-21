@@ -106,6 +106,7 @@ function PdfPreview({ href, filename }: { href: string; filename: string }) {
           <a
             href={href}
             download={filename}
+            rel="noopener noreferrer"
             className="p-1.5 text-slate-400 hover:text-primary-500 rounded-md hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-all"
             title="Download"
           >
@@ -210,6 +211,7 @@ export function MessageBubble({ message }: Props) {
                       <a
                         href={href}
                         download={urlFilename}
+                        rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-primary-600 hover:text-primary-700 underline decoration-primary-300 underline-offset-2 cursor-pointer bg-transparent border-none p-0 font-inherit text-inherit transition-colors"
                       >
                         <svg className="w-4 h-4 inline-block flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

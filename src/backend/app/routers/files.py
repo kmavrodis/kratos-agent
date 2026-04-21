@@ -50,6 +50,10 @@ async def download_file(
 
     resolved = os.path.realpath(path)
 
+    # Ensure the basename of the resolved path matches the requested filename
+    if os.path.basename(resolved) != filename:
+        raise HTTPException(status_code=400, detail="Filename mismatch")
+
     if not _is_safe_path(resolved):
         raise HTTPException(status_code=403, detail="Access denied")
 
