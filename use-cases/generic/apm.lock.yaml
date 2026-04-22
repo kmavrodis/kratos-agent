@@ -1,0 +1,30 @@
+lockfile_version: '1'
+generated_at: '2026-04-22T11:37:12.258162+00:00'
+apm_version: 0.9.0
+dependencies:
+- repo_url: anthropics/skills
+  host: github.com
+  resolved_commit: b9e19e6f44773509fbdd7001d77ff41a49a486c1
+  virtual_path: skills/frontend-design
+  is_virtual: true
+  package_type: claude_skill
+  deployed_files:
+  - .github/skills/frontend-design
+  content_hash: sha256:063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67
+- repo_url: anthropics/skills
+  host: github.com
+  resolved_commit: b9e19e6f44773509fbdd7001d77ff41a49a486c1
+  virtual_path: skills/slack-gif-creator
+  is_virtual: true
+  package_type: claude_skill
+  deployed_files:
+  - .github/skills/slack-gif-creator
+  content_hash: sha256:1aec3adac439874d75d3f61e988b4f1e8756ea11ad1bf9947491fa638f64de74
+mcp_servers:
+- microsoft-learn
+mcp_configs:
+  microsoft-learn:
+    name: microsoft-learn
+    transport: http
+    registry: false
+    url: https://learn.microsoft.com/api/mcp

@@ -3,6 +3,7 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from app.config import get_settings
 from app.observability import instrument_fastapi_app, setup_telemetry
 from app.routers import (
     admin_analysis,
+    admin_apm,
     admin_mcp,
     admin_prompt,
     admin_skills,
@@ -22,6 +24,7 @@ from app.routers import (
     settings,
     use_cases,
 )
+from app.services.apm_service import ApmError, ApmService
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
@@ -37,6 +40,37 @@ logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(l
 logging.getLogger("azure.identity").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+
+async def _apm_startup_sync(apm_service: ApmService, use_cases_root: str) -> tuple[int, int]:
+    """Run ``apm install`` for each local use-case that needs syncing.
+
+    Returns a ``(synced, total)`` tuple where ``total`` is the number of
+    use-case directories considered and ``synced`` the number that were
+    successfully installed. APM failures are logged as warnings and never
+    propagate — the app must still boot so local skills remain usable.
+    """
+    root = Path(use_cases_root)
+    if not root.is_dir():
+        logger.info("APM use-cases root %s does not exist — skipping startup sync", root)
+        return (0, 0)
+
+    synced = 0
+    total = 0
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir():
+            continue
+        use_case = entry.name
+        total += 1
+        try:
+            if not await apm_service.needs_sync(use_case):
+                continue
+            await apm_service.sync(use_case)
+            synced += 1
+            logger.info("APM sync succeeded for use-case '%s'", use_case)
+        except ApmError as exc:
+            logger.warning("APM sync failed for use-case '%s': %s", use_case, exc)
+    return (synced, total)
 
 
 @asynccontextmanager
@@ -66,6 +100,16 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await blob_skill_service.initialize()
     application.state.blob_skill_service = blob_skill_service
 
+    # Initialize APM service (shared across use-cases)
+    apm_service = ApmService(settings, blob_skill_service)
+    application.state.apm_service = apm_service
+
+    # Run APM startup sync for each local use-case directory so that
+    # apm_modules/ is materialised before the skill registries load.
+    if settings.apm_enabled and settings.apm_startup_sync:
+        synced, total = await _apm_startup_sync(apm_service, settings.apm_use_cases_root)
+        logger.info("APM startup sync complete: %d/%d use-cases synced", synced, total)
+
     # Load all use-case registries from blob storage
     registries: dict[str, SkillRegistry] = {}
     if not blob_skill_service.is_available:
@@ -80,7 +124,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
             use_case_names = await blob_skill_service.list_use_cases()
             for uc_name in use_case_names:
                 registry = SkillRegistry()
-                await registry.load(uc_name, blob_skill_service)
+                await registry.load(uc_name, blob_skill_service, apm_service=apm_service)
                 registries[uc_name] = registry
         except Exception:
             logger.exception("Failed to load use-cases from blob storage")
@@ -138,6 +182,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
 app.include_router(admin_mcp.router, prefix="/api/admin/mcp-servers", tags=["admin"])
+app.include_router(admin_apm.router, prefix="/api/admin/use-cases/{use_case}/apm", tags=["admin"])
 app.include_router(admin_analysis.router, prefix="/api/admin/analysis", tags=["admin"])
 app.include_router(use_cases.router, prefix="/api/use-cases", tags=["use-cases"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])

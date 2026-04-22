@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 
 _USE_CASES_PREFIX = "use-cases/"
 
+# Files that live at the root of a use-case directory (alongside SYSTEM_PROMPT.md)
+# and are mirrored between blob and the local filesystem.  APM-managed content
+# under `apm_modules/` and materialised output under `.github/` is NEVER stored
+# in blob — it is regenerated locally by `apm install`.
+_APM_MANIFEST_FILES: frozenset[str] = frozenset({"apm.yml", "apm.lock.yaml"})
+
 
 def _parse_account_name(conn_str: str) -> str:
     """Extract ``AccountName`` from an Azure Storage connection string.
@@ -243,6 +249,18 @@ class BlobSkillService:
     async def upload_mcp_config(self, use_case: str, content: bytes) -> None:
         """Upload the .mcp.json config for a use-case."""
         blob_path = f"{_USE_CASES_PREFIX}{use_case}/.mcp.json"
+        await self.upload_file(blob_path, content)
+
+    async def upload_apm_manifest(self, use_case: str, filename: str, content: bytes) -> None:
+        """Upload an APM manifest (``apm.yml`` or ``apm.lock.yaml``) for a use-case.
+
+        Only the root-level APM manifest files are synced to blob; materialised
+        output under ``apm_modules/`` and ``.github/`` is regenerated locally by
+        ``apm install`` and must never be persisted in blob storage.
+        """
+        if filename not in _APM_MANIFEST_FILES:
+            raise ValueError(f"Invalid APM manifest filename '{filename}'. Allowed: {sorted(_APM_MANIFEST_FILES)}")
+        blob_path = f"{_USE_CASES_PREFIX}{use_case}/{filename}"
         await self.upload_file(blob_path, content)
 
     # ─── Internal helpers ─────────────────────────────────────────────────

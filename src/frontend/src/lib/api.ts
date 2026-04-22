@@ -364,6 +364,141 @@ export async function analyzeConsistency(
 
 import type { AnalysisIssue, ApplyFixResult } from "@/types";
 
+// ─── APM Admin API ───
+
+import type { ApmStatusResponse, ApmCommandResponse } from "@/types";
+
+export async function getApmStatus(useCase: string): Promise<ApmStatusResponse> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/use-cases/${encodeURIComponent(useCase)}/apm`
+  );
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const detail = typeof err.detail === "string" ? err.detail : err.detail?.detail;
+    throw new Error(detail || `Failed to get APM status: ${response.status}`);
+  }
+  return response.json();
+}
+
+async function readApmError(response: Response, fallback: string): Promise<Error> {
+  const err = await response.json().catch(() => ({}));
+  // APM failure payloads are { detail: string, stderr?: string, returncode?: number }
+  // but FastAPI sometimes wraps object details as { detail: {...} }
+  const body = (err && typeof err === "object" ? err : {}) as Record<string, unknown>;
+  const detailField = body.detail;
+  let message: string;
+  let stderr: string | undefined;
+  let returncode: number | undefined;
+  if (detailField && typeof detailField === "object") {
+    const d = detailField as Record<string, unknown>;
+    message = (d.detail as string) ?? fallback;
+    stderr = d.stderr as string | undefined;
+    returncode = d.returncode as number | undefined;
+  } else if (typeof detailField === "string") {
+    message = detailField;
+  } else {
+    message = fallback;
+  }
+  const tail = stderr ? `\n${stderr.split("\n").slice(-10).join("\n")}` : "";
+  const rc = returncode !== undefined ? ` (rc=${returncode})` : "";
+  return new Error(`${message}${rc}${tail}`);
+}
+
+export async function installApmPackage(
+  useCase: string,
+  body: { package: string; ref?: string; dev?: boolean }
+): Promise<ApmCommandResponse> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/use-cases/${encodeURIComponent(useCase)}/apm/install`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!response.ok) throw await readApmError(response, `Failed to install package: ${response.status}`);
+  return response.json();
+}
+
+export async function uninstallApmPackage(
+  useCase: string,
+  pkg: string
+): Promise<ApmCommandResponse> {
+  // Backend route is DELETE /{package:path}, so slashes must be preserved.
+  // Encode each segment separately to avoid %2F while still escaping special chars.
+  const encodedPkg = pkg.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/use-cases/${encodeURIComponent(useCase)}/apm/${encodedPkg}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) throw await readApmError(response, `Failed to uninstall package: ${response.status}`);
+  return response.json();
+}
+
+export async function installApmMcpServer(
+  useCase: string,
+  body: {
+    name: string;
+    transport?: "stdio" | "http" | "sse";
+    command?: string;
+    args?: string[];
+    url?: string;
+    env?: Record<string, string>;
+  }
+): Promise<ApmCommandResponse> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/use-cases/${encodeURIComponent(useCase)}/apm/mcp`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!response.ok) throw await readApmError(response, `Failed to install MCP server: ${response.status}`);
+  return response.json();
+}
+
+export async function uninstallApmMcpServer(
+  useCase: string,
+  name: string
+): Promise<ApmCommandResponse> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/use-cases/${encodeURIComponent(useCase)}/apm/mcp/${encodeURIComponent(name)}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) throw await readApmError(response, `Failed to uninstall MCP server: ${response.status}`);
+  return response.json();
+}
+
+export async function syncApm(useCase: string): Promise<ApmCommandResponse> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/use-cases/${encodeURIComponent(useCase)}/apm/sync`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    }
+  );
+  if (!response.ok) throw await readApmError(response, `APM sync failed: ${response.status}`);
+  return response.json();
+}
+
+export async function updateApm(
+  useCase: string,
+  body: { package?: string } = {}
+): Promise<ApmCommandResponse> {
+  const response = await fetch(
+    `${getApiUrl()}/api/admin/use-cases/${encodeURIComponent(useCase)}/apm/update`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!response.ok) throw await readApmError(response, `APM update failed: ${response.status}`);
+  return response.json();
+}
+
 export async function applyAnalysisFix(
   issue: AnalysisIssue,
   useCase: string = "generic"

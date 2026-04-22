@@ -144,6 +144,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                 input: data.input as string,
                 output: data.output as string,
                 durationMs: data.durationMs as number,
+                source: (data.source as string | undefined) ?? undefined,
               };
               let next: ToolCallInfo[];
               if (toolCall.status !== "started") {
