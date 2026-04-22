@@ -109,6 +109,61 @@ npm run dev
 
 ---
 
+## Run locally without Azure
+
+You can run the full backend + frontend on your laptop with **zero Azure services**. A GitHub Copilot token replaces Microsoft Foundry, a SQLite file replaces Cosmos DB, and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) replaces Blob Storage. `LOCAL_MODE` auto-enables whenever `COSMOS_DB_ENDPOINT` is empty, so the same codebase works in both environments without edits.
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — runs the `azurite` + `backend` containers.
+- A **GitHub Copilot token** with the `Copilot` scope — create one at [github.com/settings/tokens](https://github.com/settings/tokens).
+- [Node.js 20+](https://nodejs.org/) — only if you want to run the frontend locally (it is not containerised).
+
+### Quick start
+
+```bash
+cp .env.local.example .env.local
+# Edit .env.local: set COPILOT_GITHUB_TOKEN=ghu_xxx
+./run-local.sh          # or .\run-local.ps1 on Windows
+```
+
+The helper scripts copy the env file and run `docker compose up --build`. If you prefer, you can skip them and run `docker compose up --build` directly.
+
+### What the helper starts
+
+| Service | URL | Purpose |
+|---|---|---|
+| backend | http://localhost:8000 | FastAPI + Copilot SDK |
+| azurite | http://localhost:10000 | Local Blob (skills + apm manifests) |
+| *(frontend, optional)* | http://localhost:3000 | `cd src/frontend && npm install && npm run dev` |
+
+### Data locations
+
+Everything persists on the host so restarts are cheap:
+
+- `.local/backend/kratos.db` — SQLite file with conversations, messages, settings, and session mappings.
+- `.local/azurite/` — emulated blob account (skill blobs).
+- `use-cases/` is bind-mounted into the backend container — edits on the host show up immediately.
+
+### Switching between local and Azure modes
+
+Auto-detection uses `COSMOS_DB_ENDPOINT` as the switch:
+
+- **Local:** leave `COSMOS_DB_ENDPOINT` empty (or set `LOCAL_MODE=true`).
+- **Azure:** set `LOCAL_MODE=false` (or just remove it) and populate `COSMOS_DB_ENDPOINT`, `FOUNDRY_ENDPOINT`, and `BLOB_STORAGE_ENDPOINT`.
+
+### What still works
+
+- **MCP servers** configured via `use-cases/{uc}/.mcp.json`.
+- **Skill enable/disable** and `SKILL.md` edits via `/api/admin/skills/*`.
+
+### Limitations
+
+- **App Insights / Foundry Traces** are disabled — telemetry still runs locally via the OTel console exporter.
+- **No Foundry guardrails** — the GitHub Copilot endpoint handles safety instead.
+
+---
+
 ## Project Structure
 
 ```

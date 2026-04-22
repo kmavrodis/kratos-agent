@@ -1,0 +1,35 @@
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: azurite --blobHost 0.0.0.0 --loose --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./.local/azurite:/data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('net').createConnection(10000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build:
+      context: .
+      dockerfile: src/backend/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      LOCAL_MODE: "true"
+      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN}
+      BLOB_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      BLOB_SKILLS_CONTAINER: skills
+      LOCAL_DATA_DIR: /data
+      ENVIRONMENT: development
+      APM_ENABLED: "true"
+    volumes:
+      - ./.local/backend:/data
+      - ./use-cases:/app/use-cases
+    depends_on:
+      azurite:
+        condition: service_healthy
