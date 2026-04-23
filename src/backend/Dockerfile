@@ -14,7 +14,7 @@ RUN npm install -g @github/copilot@latest faker-mcp-server@latest \
     && rm -rf /root/.npm /tmp/*
 
 # ── Layer 3: Playwright Chromium + system deps for PDF rendering ──
-RUN npx -y playwright install --with-deps chromium \
+RUN npx -y playwright install --with-deps chromium\
     && rm -rf /var/lib/apt/lists/* /tmp/*
 
 # ── Layer 4: Python dependencies (cached unless pyproject.toml changes) ──

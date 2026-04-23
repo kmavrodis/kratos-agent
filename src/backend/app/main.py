@@ -1,15 +1,27 @@
 """FastAPI application entry point."""
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import instrument_fastapi_app, setup_telemetry
-from app.routers import admin_analysis, admin_mcp, admin_prompt, admin_skills, agent, conversations, copilot_studio, files, health, settings, use_cases
+from app.routers import (
+    admin_analysis,
+    admin_mcp,
+    admin_prompt,
+    admin_skills,
+    agent,
+    conversations,
+    copilot_studio,
+    files,
+    health,
+    settings,
+    use_cases,
+)
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
@@ -17,7 +29,7 @@ from app.services.skill_registry import SkillRegistry
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 # Silence chatty Azure SDK HTTP loggers — they log full request/response headers at INFO
 logging.getLogger("azure.cosmos").setLevel(logging.WARNING)
@@ -60,6 +72,11 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         logger.error("Blob storage is not configured — no skills will be available")
     else:
         try:
+            # In local/dev mode Azurite starts empty — seed use-case folders
+            # from the repository so all personas show up in the UI.
+            seeded = await blob_skill_service.seed_from_local()
+            if seeded:
+                logger.info("Seeded %d use-case(s) into blob: %s", len(seeded), seeded)
             use_case_names = await blob_skill_service.list_use_cases()
             for uc_name in use_case_names:
                 registry = SkillRegistry()
@@ -87,6 +104,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # Cleanup
     await copilot_agent.stop()
     await blob_skill_service.close()
+    await cosmos_service.close()
     logger.info("Kratos Agent Service shutting down")
 
 

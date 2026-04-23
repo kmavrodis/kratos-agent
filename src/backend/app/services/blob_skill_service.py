@@ -13,6 +13,7 @@ can read SKILL.md files from disk.  The admin API writes back to blob.
 Uses Azure Managed Identity for passwordless authentication.
 """
 
+import contextlib
 import logging
 from pathlib import Path
 
@@ -26,6 +27,23 @@ logger = logging.getLogger(__name__)
 _USE_CASES_PREFIX = "use-cases/"
 
 
+def _parse_account_name(conn_str: str) -> str:
+    """Extract ``AccountName`` from an Azure Storage connection string.
+
+    Args:
+        conn_str: A Storage connection string (``key=value;`` pairs).
+
+    Returns:
+        The account name if present, otherwise ``"unknown"``. The account key
+        is never returned so it is safe to include in logs.
+    """
+    for part in conn_str.split(";"):
+        key, sep, value = part.partition("=")
+        if sep and key.strip().lower() == "accountname":
+            return value.strip()
+    return "unknown"
+
+
 class BlobSkillService:
     """Manages use-case and skill storage in Azure Blob Storage."""
 
@@ -36,20 +54,40 @@ class BlobSkillService:
         self._credential: DefaultAzureCredential | None = None
 
     async def initialize(self) -> None:
-        """Initialize the blob container client."""
+        """Initialize the blob container client.
+
+        Prefers ``blob_storage_connection_string`` (e.g. Azurite) when set.
+        Falls back to ``blob_storage_endpoint`` + ``DefaultAzureCredential``
+        (Managed Identity / dev Entra ID). If neither is configured the
+        service no-ops.
+        """
+        conn_str = self.settings.blob_storage_connection_string
         endpoint = self.settings.blob_storage_endpoint
         container = self.settings.blob_skills_container
-        if not endpoint:
-            logger.warning("Blob storage endpoint not configured — skill persistence disabled")
+
+        if conn_str:
+            self._container_client = ContainerClient.from_connection_string(conn_str, container_name=container)
+            account = _parse_account_name(conn_str)
+            logger.info(
+                "Blob skill service initialized (connection string, account=%s) container=%s",
+                account,
+                container,
+            )
+        elif endpoint:
+            self._credential = DefaultAzureCredential()
+            self._container_client = ContainerClient(
+                account_url=endpoint,
+                container_name=container,
+                credential=self._credential,
+            )
+            logger.info("Blob skill service initialized — endpoint=%s container=%s", endpoint, container)
+        else:
+            logger.warning("Blob storage not configured — skill persistence disabled")
             return
 
-        self._credential = DefaultAzureCredential()
-        self._container_client = ContainerClient(
-            account_url=endpoint,
-            container_name=container,
-            credential=self._credential,
-        )
-        logger.info("Blob skill service initialized — endpoint=%s container=%s", endpoint, container)
+        with contextlib.suppress(Exception):
+            await self._container_client.create_container()
+            # Container likely already exists
 
     @property
     def is_available(self) -> bool:
@@ -71,6 +109,40 @@ class BlobSkillService:
             if parts and parts[0]:
                 names.add(parts[0])
         return sorted(names)
+
+    async def seed_from_local(self) -> list[str]:
+        """Upload each local use-case folder to blob if it isn't already present.
+
+        Used in local/dev mode where Azurite starts empty but the repository
+        ships several use-case directories under ``use-cases/``. Only folders
+        that contain a ``SYSTEM_PROMPT.md`` are considered. Returns the list of
+        use-case names that were newly seeded.
+        """
+        if not self._container_client or not self.local_base_dir.is_dir():
+            return []
+        existing = set(await self.list_use_cases())
+        seeded: list[str] = []
+        # APM-materialised output must never leak into blob.
+        _skip_dir_parts = {"apm_modules", ".github", "__pycache__", ".pytest_cache"}
+        for uc_dir in sorted(self.local_base_dir.iterdir()):
+            if not uc_dir.is_dir() or uc_dir.name in existing:
+                continue
+            if not (uc_dir / "SYSTEM_PROMPT.md").is_file():
+                continue
+            uploaded = 0
+            for path in uc_dir.rglob("*"):
+                if not path.is_file():
+                    continue
+                rel_parts = path.relative_to(uc_dir).parts
+                if any(part in _skip_dir_parts for part in rel_parts[:-1]):
+                    continue
+                rel = "/".join(rel_parts)
+                blob_path = f"{_USE_CASES_PREFIX}{uc_dir.name}/{rel}"
+                await self.upload_file(blob_path, path.read_bytes())
+                uploaded += 1
+            logger.info("Seeded use-case '%s' to blob (%d files)", uc_dir.name, uploaded)
+            seeded.append(uc_dir.name)
+        return seeded
 
     async def download_system_prompt(self, use_case: str) -> str | None:
         """Download the SYSTEM_PROMPT.md for a use-case."""
@@ -163,11 +235,10 @@ class BlobSkillService:
         if not self._container_client:
             return
         blob_path = f"{_USE_CASES_PREFIX}{use_case}/skills/{skill_name}/{file_path}"
-        try:
+        with contextlib.suppress(Exception):
+            # Already deleted or doesn't exist
             blob = self._container_client.get_blob_client(blob_path)
             await blob.delete_blob()
-        except Exception:
-            pass  # Already deleted or doesn't exist
 
     async def upload_mcp_config(self, use_case: str, content: bytes) -> None:
         """Upload the .mcp.json config for a use-case."""

@@ -13,6 +13,7 @@ venv/
 env/
 .env
 .env.local
+.local/
 
 # Node.js / Next.js
 node_modules/
