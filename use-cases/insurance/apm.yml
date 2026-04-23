@@ -1,0 +1,10 @@
+name: kratos-insurance
+version: 1.0.0
+description: Kratos agent — insurance use-case APM manifest
+author: kratos-agent
+license: MIT
+target: copilot
+
+dependencies:
+  apm: []
+  mcp: []

@@ -4,8 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { listSkills, createSkill, updateSkill, deleteSkill, getSystemPrompt, updateSystemPrompt, resetSystemPrompt, listSkillFiles, upsertSkillFile, deleteSkillFile, getMCPConfig, updateMCPConfig, analyzeConsistency, applyAnalysisFix } from "@/lib/api";
 import type { AnalysisResult, AnalysisIssue, ApplyFixResult, MCPConfig, Skill, SkillFile, UseCase } from "@/types";
 import { useTheme } from "./ThemeProvider";
+import { ApmAdminPanel } from "./ApmAdminPanel";
+import { SourceBadge } from "./SourceBadge";
 
-type Tab = "skills" | "prompt" | "mcp" | "consistency";
+type Tab = "skills" | "prompt" | "mcp" | "consistency" | "apm";
 
 interface Props {
   onClose: () => void;
@@ -38,6 +40,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
 
   // MCP servers state
   const [mcpServers, setMcpServers] = useState<Record<string, MCPConfig["servers"][string]>>({});
+  const [mcpSources, setMcpSources] = useState<Record<string, string>>({});
   const [mcpLoading, setMcpLoading] = useState(false);
   const [mcpError, setMcpError] = useState("");
   const [editingMcp, setEditingMcp] = useState<{ name: string; config: MCPConfig["servers"][string] } | null>(null);
@@ -107,6 +110,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
     try {
       const data = await getMCPConfig(useCase);
       setMcpServers(data.servers);
+      setMcpSources(data.sources ?? {});
     } catch (err) {
       setMcpError(err instanceof Error ? err.message : "Failed to load MCP config");
     } finally {
@@ -172,6 +176,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
     try {
       const data = await updateMCPConfig(useCase, updated);
       setMcpServers(data.servers);
+      setMcpSources(data.sources ?? {});
       setEditingMcp(null);
       setShowMcpCreate(false);
       resetMcpForm();
@@ -188,6 +193,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
     try {
       const data = await updateMCPConfig(useCase, updated);
       setMcpServers(data.servers);
+      setMcpSources(data.sources ?? {});
     } catch (err) {
       setMcpError(err instanceof Error ? err.message : "Failed to delete MCP server");
     }
@@ -388,6 +394,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
     { id: "skills", label: "Skills", icon: "puzzle" },
     { id: "prompt", label: "System Prompt", icon: "document" },
     { id: "mcp", label: "MCP Servers", icon: "server" },
+    { id: "apm", label: "APM", icon: "package" },
     { id: "consistency", label: "Consistency", icon: "shield" },
   ];
 
@@ -397,6 +404,7 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
       case "document": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>;
       case "server": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" /></svg>;
       case "shield": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>;
+      case "package": return <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" /></svg>;
       default: return null;
     }
   };
@@ -566,10 +574,10 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
             </button>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                {tab === "skills" ? (showCreate ? "Create Skill" : "Skills") : tab === "prompt" ? "System Prompt" : tab === "consistency" ? "Consistency Analysis" : (editingMcp ? `Edit: ${editingMcp.name}` : showMcpCreate ? "Add MCP Server" : "MCP Servers")}
+                {tab === "skills" ? (showCreate ? "Create Skill" : "Skills") : tab === "prompt" ? "System Prompt" : tab === "consistency" ? "Consistency Analysis" : tab === "apm" ? "APM Packages" : (editingMcp ? `Edit: ${editingMcp.name}` : showMcpCreate ? "Add MCP Server" : "MCP Servers")}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {tab === "skills" ? `${skills.filter(s => s.enabled).length} of ${skills.length} active` : tab === "prompt" ? "Configure the system prompt for all conversations" : tab === "consistency" ? "Detect contradictions, overlaps, and gaps in your agent configuration" : `${Object.keys(mcpServers).length} server${Object.keys(mcpServers).length !== 1 ? "s" : ""} configured`}
+                {tab === "skills" ? `${skills.filter(s => s.enabled).length} of ${skills.length} active` : tab === "prompt" ? "Configure the system prompt for all conversations" : tab === "consistency" ? "Detect contradictions, overlaps, and gaps in your agent configuration" : tab === "apm" ? "Manage Agent Package Manager dependencies for this use-case" : `${Object.keys(mcpServers).length} server${Object.keys(mcpServers).length !== 1 ? "s" : ""} configured`}
               </p>
             </div>
             {/* Action buttons */}
@@ -766,7 +774,10 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
                           cfg.type === "local" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20" : "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
                         }`}>{cfg.type.toUpperCase()}</span>
                         <div className="flex-1 min-w-0">
-                          <span className="font-semibold text-sm text-slate-900 dark:text-white block">{name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">{name}</span>
+                            <SourceBadge source={mcpSources[name]} />
+                          </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 truncate font-mono mt-1">
                             {cfg.type === "local" ? cfg.command : cfg.url}
                           </p>
@@ -850,6 +861,11 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
                 </p>
               </div>
             )
+          ) : tab === "apm" ? (
+            /* ── APM tab ── */
+            <div className="max-w-4xl">
+              <ApmAdminPanel useCase={useCase} onMcpChange={loadMCPConfig} />
+            </div>
           ) : tab === "consistency" ? (
             /* ── Consistency Analysis tab ── */
             <div className="max-w-4xl space-y-6">
@@ -1296,7 +1312,10 @@ export function SkillsAdminPanel({ onClose, useCase = "generic", useCases = [], 
                             <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
                               {skill.description || "No description"}
                             </p>
-                            <p className="text-[10px] text-slate-400 font-mono mt-1.5">{skill.toolName}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <p className="text-[10px] text-slate-400 font-mono">{skill.toolName}</p>
+                              <SourceBadge source={skill.source} />
+                            </div>
                           </>
                         )}
                       </div>

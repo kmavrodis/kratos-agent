@@ -33,10 +33,11 @@ async def create_conversation(body: ConversationCreate, request: Request) -> Con
     # Re-sync the use-case's skills from blob storage so every new conversation
     # picks up the latest skills, prompts, and MCP config.
     blob_service = request.app.state.blob_skill_service
+    apm_service = getattr(request.app.state, "apm_service", None)
     if blob_service and blob_service.is_available:
         try:
             registry = SkillRegistry()
-            await registry.load(body.useCase, blob_service)
+            await registry.load(body.useCase, blob_service, apm_service=apm_service)
             registries: dict[str, SkillRegistry] = request.app.state.registries
             registries[body.useCase] = registry
             logger.info("Re-synced use-case '%s' from blob for new conversation", body.useCase)

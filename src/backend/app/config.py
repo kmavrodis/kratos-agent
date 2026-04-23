@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     # Cosmos DB database
     cosmos_db_database: str = "kratos-agent"
 
+    # APM (Agent Package Manager) — materialises remote skills / prompts /
+    # instructions / agents into each use-case via the `apm` CLI.
+    apm_enabled: bool = True
+    apm_binary: str = "apm"
+    apm_default_target: str = "copilot"
+    apm_use_cases_root: str = "use-cases"
+    apm_startup_sync: bool = True
+
     # Local mode — run the backend without any Azure services.
     #   * SQLite replaces Cosmos DB (persistence under ``local_data_dir``)
     #   * GitHub OAuth token replaces Foundry / Managed Identity for the model call

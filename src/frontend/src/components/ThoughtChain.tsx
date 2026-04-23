@@ -2,6 +2,7 @@
 
 import { ToolCallInfo, RunStats } from "@/types";
 import { useState } from "react";
+import { SourceBadge } from "./SourceBadge";
 
 interface Props {
   thoughts: string[];
@@ -57,6 +58,7 @@ function ToolPill({ tc }: { tc: ToolCallInfo }) {
         <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
       )}
       {prettyToolName(tc.skillName)}
+      <SourceBadge source={tc.source} />
       {!isRunning && tc.durationMs !== undefined && tc.durationMs > 0 && (
         <span className="opacity-50 font-mono text-[10px]">{formatDuration(tc.durationMs)}</span>
       )}

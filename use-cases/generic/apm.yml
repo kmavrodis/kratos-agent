@@ -1,0 +1,15 @@
+name: kratos-generic
+version: 1.0.0
+description: Kratos agent — generic use-case APM manifest
+author: kratos-agent
+license: MIT
+target: copilot
+dependencies:
+  apm:
+  - anthropics/skills/skills/frontend-design
+  - anthropics/skills/skills/slack-gif-creator
+  mcp:
+  - name: microsoft-learn
+    registry: false
+    transport: http
+    url: https://learn.microsoft.com/api/mcp

@@ -52,6 +52,7 @@ def _to_response(skill: SkillMetadata) -> SkillResponse:
         instructions=skill.instructions,
         toolName=skill.tool_name or skill.name.replace("-", "_"),
         fileCount=_count_skill_files(skill),
+        source=skill.source,
     )
 
 
