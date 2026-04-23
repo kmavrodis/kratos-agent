@@ -4,7 +4,7 @@ WORKDIR /app
 
 # ── Layer 1: System deps + Node.js 20 (cached unless base image changes) ──
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl git \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -24,6 +24,11 @@ RUN pip install --no-cache-dir .
 # ── Layer 5: Application code (changes frequently) ──
 COPY src/backend/ .
 
+# ── Layer 6: Use-case manifests (apm.yml, SYSTEM_PROMPT, skills) ──
+COPY use-cases/ use-cases/
+
 EXPOSE 8000
+
+ENV GIT_PYTHON_REFRESH=quiet
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

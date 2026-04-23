@@ -613,12 +613,25 @@ class ApmService:
         ``apm.yml`` already declares, so the authoritative copy in blob is
         unchanged.
 
+        If no ``apm.yml`` manifest exists in the use-case directory the
+        operation is a no-op and returns a synthetic success result.
+
         Raises:
             ApmError: if APM is disabled, the use-case is unknown, or the
                 subprocess fails.
         """
         self._ensure_enabled()
         uc_dir = self._use_case_dir(use_case)
+        manifest = uc_dir / _APM_MANIFEST
+        if not manifest.is_file():
+            logger.info("apm: no %s in %s — sync is a no-op", _APM_MANIFEST, uc_dir)
+            return ApmCommandResult(
+                command=["apm", "install"],
+                returncode=0,
+                stdout="No apm.yml found — nothing to sync.",
+                stderr="",
+                duration_ms=0.0,
+            )
         async with self._lock_for(use_case):
             return await self._run(["install"], cwd=uc_dir)
 
