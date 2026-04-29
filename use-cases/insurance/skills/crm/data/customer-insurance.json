@@ -24,7 +24,7 @@
                 "CoverageLevel": "Basis + Roadside Assistance",
                 "PolicyStatus": "Active",
                 "EffectiveDate": "2025-03-01 00:00:00.000",
-                "ExpiryDate": "2026-02-28 00:00:00.000",
+                "ExpiryDate": "2027-02-28 00:00:00.000",
                 "CancellationCosts": "5000 CHF",
                 "TravelInsurance": "Included",
                 "AlternativeTravel": "Included",
@@ -54,11 +54,11 @@
                 "PolicyNo": "C1234567",
                 "ProductType": "Zurich Motor Vehicle Insurance",
                 "VehicleType": "Passenger car",
-                "VehicleMake": "Volkswagen Golf",
+                "VehicleMake": "Honda Civic",
                 "LicensePlate": "ZH 345 678",
                 "PolicyStatus": "Active",
                 "EffectiveDate": "2024-09-01 00:00:00.000",
-                "ExpiryDate": "2025-08-31 00:00:00.000",
+                "ExpiryDate": "2027-08-31 00:00:00.000",
                 "ThirdPartyLiability": "Included",
                 "BonusProtection": "Yes",
                 "CoverageForGrossNegligence": "Yes",
@@ -158,6 +158,34 @@
                 "CoverageExtensionGuarantee": "Up to CHF 200000",
                 "Beneficiary": "Partner – Marco Bianchi"
             }
+        ],
+        "claims": [
+            {
+                "ClaimNo": "CLM-2026-00312",
+                "PolicyNo": "D2345678",
+                "ProductType": "Zurich Motor Vehicle Insurance",
+                "ClaimStatus": "In Progress",
+                "ClaimType": "motor",
+                "DateOfIncident": "2026-03-28 00:00:00.000",
+                "DateReported": "2026-03-29 00:00:00.000",
+                "IncidentDescription": "Rear-end collision at traffic light on Route de Chêne, Geneva. Third-party vehicle (Audi A4) struck insured vehicle from behind while stationary. Damage to rear bumper, tailgate, and rear-left tail light. No injuries reported.",
+                "IncidentLocation": "Route de Chêne 30, 1207 Geneva, Switzerland",
+                "PoliceReportFiled": true,
+                "PoliceReportNo": "GE-2026-04821",
+                "ThirdPartyInvolved": true,
+                "ThirdPartyDetails": "Audi A4, GE 987 321, driver admitted fault",
+                "EstimatedDamage": "8500 CHF",
+                "Deductible": "300 CHF",
+                "EvidenceSubmitted": ["4 photos of rear damage", "police report", "repair estimate from Tesla Service Center Geneva"],
+                "CurrentStep": "damage_assessment",
+                "TriageResult": {
+                    "claim_type": "motor",
+                    "urgency": "standard",
+                    "confidence": 0.95
+                },
+                "AssignedAdjuster": "Thomas Werber",
+                "LastUpdated": "2026-04-10 00:00:00.000"
+            }
         ]
     },
     {
@@ -255,6 +283,39 @@
                 "CoverageExtensionGuarantee": "Exhausted",
                 "Beneficiary": "Mortgage lender – Credit Suisse",
                 "Purpose": "Mortgage protection"
+            }
+        ],
+        "claims": [
+            {
+                "ClaimNo": "CLM-2025-01847",
+                "PolicyNo": "H3456789",
+                "ProductType": "Zurich Motor Vehicle Insurance",
+                "ClaimStatus": "Closed – Disbursed",
+                "ClaimType": "motor",
+                "DateOfIncident": "2025-11-15 00:00:00.000",
+                "DateReported": "2025-11-16 00:00:00.000",
+                "DateClosed": "2025-12-20 00:00:00.000",
+                "IncidentDescription": "Windshield cracked by stone impact on A1 motorway between Bern and Zurich. Single large crack across driver side. No collision, no other vehicles involved.",
+                "IncidentLocation": "A1 Motorway, km 124, direction Zurich",
+                "PoliceReportFiled": false,
+                "ThirdPartyInvolved": false,
+                "EstimatedDamage": "1850 CHF",
+                "ApprovedAmount": "1850 CHF",
+                "Deductible": "0 CHF (glass coverage — no deductible)",
+                "DisbursedAmount": "1850 CHF",
+                "DisbursementDate": "2025-12-22 00:00:00.000",
+                "PaymentMethod": "Bank transfer to IBAN CH93 0076 2011 6238 5295 7",
+                "EvidenceSubmitted": ["2 photos of windshield crack", "repair invoice from Carglass Bern"],
+                "TriageResult": {
+                    "claim_type": "motor",
+                    "urgency": "low",
+                    "confidence": 0.98
+                },
+                "FraudScore": 8,
+                "FraudRiskLevel": "low",
+                "PreAssessmentRecommendation": "approve",
+                "AssignedAdjuster": "Sandra Meier",
+                "LastUpdated": "2025-12-22 00:00:00.000"
             }
         ]
     }
