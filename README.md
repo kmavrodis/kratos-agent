@@ -109,6 +109,63 @@ npm run dev
 
 ---
 
+## Run locally without Azure
+
+You can run the full backend + frontend on your laptop with **zero Azure services**. A GitHub Copilot token replaces Microsoft Foundry, a SQLite file replaces Cosmos DB, and [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) replaces Blob Storage. `LOCAL_MODE` auto-enables whenever `COSMOS_DB_ENDPOINT` is empty, so the same codebase works in both environments without edits.
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — runs the `azurite` + `backend` containers.
+- A **GitHub Copilot token** with the `Copilot` scope — create one at [github.com/settings/tokens](https://github.com/settings/tokens).
+- [Node.js 20+](https://nodejs.org/) — only if you want to run the frontend locally (it is not containerised).
+
+### Quick start
+
+```bash
+cp .env.local.example .env.local
+# Edit .env.local: set COPILOT_GITHUB_TOKEN=ghu_xxx
+./run-local.sh          # or .\run-local.ps1 on Windows
+```
+
+The helper scripts copy the env file and run `docker compose up --build`. If you prefer, you can skip them and run `docker compose up --build` directly.
+
+### What the helper starts
+
+| Service | URL | Purpose |
+|---|---|---|
+| backend | http://localhost:8000 | FastAPI + Copilot SDK |
+| azurite | http://localhost:10000 | Local Blob (skills + apm manifests) |
+| *(frontend, optional)* | http://localhost:3000 | `cd src/frontend && npm install && npm run dev` |
+
+### Data locations
+
+Everything persists on the host so restarts are cheap:
+
+- `.local/backend/kratos.db` — SQLite file with conversations, messages, settings, and session mappings.
+- `.local/azurite/` — emulated blob account (skill blobs + APM manifests).
+- `use-cases/` is bind-mounted into the backend container — edits on the host show up immediately.
+
+### Switching between local and Azure modes
+
+Auto-detection uses `COSMOS_DB_ENDPOINT` as the switch:
+
+- **Local:** leave `COSMOS_DB_ENDPOINT` empty (or set `LOCAL_MODE=true`).
+- **Azure:** set `LOCAL_MODE=false` (or just remove it) and populate `COSMOS_DB_ENDPOINT`, `FOUNDRY_ENDPOINT`, and `BLOB_STORAGE_ENDPOINT`.
+
+### What still works
+
+- **APM** (`apm install`, admin API) — uses git + outbound HTTPS, nothing Azure.
+- **MCP servers** configured via `use-cases/{uc}/.mcp.json`.
+- **Skill enable/disable** and `SKILL.md` edits via `/api/admin/skills/*`.
+
+### Limitations
+
+- **App Insights / Foundry Traces** are disabled — telemetry still runs locally via the OTel console exporter.
+- **No Foundry guardrails** — the GitHub Copilot endpoint handles safety instead.
+- **Private git hosts for APM** still require credentials baked into the image (follow-up).
+
+---
+
 ## Project Structure
 
 ```
@@ -164,8 +221,7 @@ kratos-agent/
 ├── skills/                     # Built-in MCP skills
 │   ├── web-search/
 │   ├── rag-search/
-│   ├── code-interpreter/
-│   └── foundry-agent/
+│   └── code-interpreter/
 │
 └── .github/
     └── workflows/
@@ -183,7 +239,6 @@ kratos-agent/
 | **Web Search** | Real-time internet search via Bing API |
 | **RAG Search** | Azure AI Search knowledge base retrieval |
 | **Code Interpreter** | Sandboxed Python execution |
-| **Foundry Agent** | Delegate to Foundry sub-agents (eval, safety) |
 
 ### Adding a Custom Skill
 
@@ -221,6 +276,80 @@ No changes to core agent code required.
 | 1 — DISCOVER | `name` + `description` | ~50 tokens |
 | 2 — LOAD | Full `## Instructions` from SKILL.md | Variable |
 | 3 — EXECUTE | Scripts run on demand; results flow into the loop | Runtime only |
+
+---
+
+## APM (Agent Package Manager)
+
+[APM (microsoft/apm)](https://microsoft.github.io/apm/) is a dependency manager for AI-agent primitives — skills, prompts, instructions, agents, MCP servers and plugins — conceptually a `package.json` for agents. Kratos embeds the `apm` CLI in the backend image so each use-case can pull versioned **remote** plugins (GitHub, GitLab, Azure DevOps …) alongside its blob-authored local skills.
+
+### How it works in kratos-agent
+
+- Each use-case has its own manifest at `use-cases/{name}/apm.yml` declaring remote deps + a committed `apm.lock.yaml`.
+- Admins add/remove plugins at runtime via the admin API (see snippets below) — no redeploy needed.
+- `apm install` materialises packages into `use-cases/{name}/apm_modules/` and, with `--target copilot`, deploys skills into `use-cases/{name}/.github/skills/`, which the `SkillRegistry` merges on top of local skills.
+- **Local skills always win on name conflict.** Blob-authored `skills/` stay as today; APM manages only remote deps.
+
+### Real working remote sources
+
+| Source | APM reference | What it provides |
+|---|---|---|
+| `microsoft/apm-sample-package` | `microsoft/apm-sample-package#v1.0.0` | Reference APM package — design instructions + prompts |
+| `anthropics/skills` | `anthropics/skills/skills/frontend-design` | Claude Skill for frontend design review (virtual subdirectory) |
+| `github/awesome-copilot` | `github/awesome-copilot/plugins/context-engineering` | Copilot plugin for context engineering |
+| `microsoft/GitHub-Copilot-for-Azure` | `microsoft/GitHub-Copilot-for-Azure/plugin/skills/azure-compliance` | Azure compliance skill (virtual subdirectory) |
+
+Example `use-cases/generic/apm.yml`:
+
+```yaml
+name: kratos-generic
+version: 1.0.0
+description: Kratos agent — generic use-case APM manifest
+target: copilot
+dependencies:
+  apm:
+    - microsoft/apm-sample-package#v1.0.0
+    - anthropics/skills/skills/frontend-design
+    - github/awesome-copilot/plugins/context-engineering
+    - microsoft/GitHub-Copilot-for-Azure/plugin/skills/azure-compliance
+  mcp: []
+```
+
+Runtime admin API:
+
+```bash
+# Install a remote APM plugin at runtime (admin API)
+curl -X POST https://<agent-service>/admin/use-cases/generic/apm/install \
+  -H "Content-Type: application/json" \
+  -d '{"package": "anthropics/skills/skills/frontend-design"}'
+
+# Force a full resync from apm.yml
+curl -X POST https://<agent-service>/admin/use-cases/generic/apm/sync
+```
+
+Admin endpoints:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/admin/use-cases/{uc}/apm` | List dependencies + lockfile state |
+| `POST` | `/admin/use-cases/{uc}/apm/install` | Install a package (`{package, ref?}`) |
+| `DELETE` | `/admin/use-cases/{uc}/apm/{package}` | Uninstall a package |
+| `POST` | `/admin/use-cases/{uc}/apm/sync` | Run `apm install` from the current manifest |
+| `POST` | `/admin/use-cases/{uc}/apm/update` | Update lockfile to latest refs |
+
+### CLI usage inside the container
+
+The `apm` binary is baked into the backend image for debugging. Exec into the Container App and run it from a use-case directory:
+
+```bash
+cd /app/use-cases/generic
+apm list
+apm install microsoft/apm-sample-package#v1.0.0
+```
+
+### Supply-chain & security
+
+`apm install` runs a content audit (hidden Unicode detection, known-bad package hashes) before materialising any files, and the diagnostic summary is surfaced in the admin API response. Only public git hosts are supported today — **private repositories are a known follow-up** and require provisioning git credentials into the backend image.
 
 ---
 

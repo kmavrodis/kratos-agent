@@ -197,6 +197,7 @@ module agentService './modules/agent-service.bicep' = {
     foundryProjectName: aiFoundry.outputs.projectName
     bingSearchEndpoint: bingSearch.outputs.endpoint
     blobStorageEndpoint: blobStorage.outputs.endpoint
+    staticWebAppUrl: staticWebApp.outputs.url
   }
 }
 

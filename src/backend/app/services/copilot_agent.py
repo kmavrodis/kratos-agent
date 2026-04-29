@@ -6,14 +6,15 @@ Uses DefaultAzureCredential for keyless auth to Microsoft Foundry.
 """
 
 import asyncio
-from importlib.metadata import version
 import json
 import logging
 import os
 import re
 import time
 import uuid
-from typing import TYPE_CHECKING, AsyncGenerator
+from collections.abc import AsyncGenerator
+from importlib.metadata import version
+from typing import TYPE_CHECKING
 
 from azure.identity.aio import ManagedIdentityCredential, get_bearer_token_provider
 from copilot import CopilotClient, PermissionRequestResult
@@ -24,6 +25,8 @@ try:
     _HAS_CLI_CREDENTIAL = True
 except ImportError:
     _HAS_CLI_CREDENTIAL = False
+import contextlib
+
 from opentelemetry import context as otel_context
 from opentelemetry import trace
 
@@ -84,9 +87,45 @@ def _resolve_skill_display_name(event_data, fallback: str = "skill") -> str:
     return fallback
 
 
-def prettyToolName(name: str) -> str:
+def pretty_tool_name(name: str) -> str:
     """Convert tool_name to 'Tool Name' for display."""
     return " ".join(w.capitalize() for w in name.replace("-", "_").split("_"))
+
+
+def _extract_tool_value(obj) -> str:
+    """Extract a human-readable string from an SDK tool input/output object.
+
+    The SDK returns Result/dict/str objects whose __repr__ is ugly
+    (e.g. Result(content='{"text": …}', contents=None, …)).
+    This helper pulls out the actual content and formats it.
+    """
+    if obj is None:
+        return ""
+
+    # If the object has a .content attribute (SDK Result), use that
+    content = getattr(obj, "content", None)
+    if content is not None:
+        text = str(content)
+    elif isinstance(obj, dict):
+        try:
+            text = json.dumps(obj, indent=2, ensure_ascii=False)
+        except (TypeError, ValueError):
+            text = str(obj)
+    else:
+        text = str(obj)
+
+    # Try to pretty-print if it looks like JSON
+    if text.startswith("{") or text.startswith("["):
+        try:
+            parsed = json.loads(text)
+            # For objects with a single "text" key, just return the text
+            if isinstance(parsed, dict) and len(parsed) == 1 and "text" in parsed:
+                return parsed["text"]
+            return json.dumps(parsed, indent=2, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    return text
 
 
 SYSTEM_PROMPT = """You are Kratos, an enterprise AI assistant.
@@ -120,7 +159,7 @@ class CopilotAgent:
         self.settings = settings
         self._client: CopilotClient | None = None
         self._registries: dict[str, object] = {}  # use_case -> SkillRegistry
-        self._cosmos_service: "CosmosService | None" = None
+        self._cosmos_service: CosmosService | None = None
         self._sessions: dict[str, object] = {}
         self._conversation_use_cases: dict[str, str] = {}  # conv_id -> use_case
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
@@ -187,6 +226,28 @@ class CopilotAgent:
         use_case = self._conversation_use_cases.get(conversation_id, DEFAULT_USE_CASE)
         return self._registries.get(use_case)
 
+    def get_enabled_skill_names(self, conversation_id: str) -> list[str] | None:
+        """Return the enabled skill/tool names for a conversation's use-case, or None."""
+        registry = self._get_registry(conversation_id)
+        if registry is not None and hasattr(registry, "get_enabled_tool_names"):
+            return registry.get_enabled_tool_names()
+        return None
+
+    def _resolve_skill_source(self, conversation_id: str, tool_name: str) -> str:
+        """Best-effort lookup of ``Skill.source`` for a given tool/skill name.
+
+        Returns an empty string when the registry is unavailable or no matching
+        skill is found (e.g. builtin tools that predate the registry).
+        """
+        registry = self._get_registry(conversation_id)
+        if registry is None:
+            return ""
+        skills = getattr(registry, "skills", None) or {}
+        for skill in skills.values():
+            if getattr(skill, "tool_name", None) == tool_name or getattr(skill, "name", None) == tool_name:
+                return getattr(skill, "source", "") or ""
+        return ""
+
     def _get_system_prompt(self, conversation_id: str) -> str:
         """Get the system prompt for a conversation's use-case."""
         registry = self._get_registry(conversation_id)
@@ -195,7 +256,7 @@ class CopilotAgent:
             prompt = registry.system_prompt
             m = re.match(r"^---\s*\n.*?\n---\s*\n?", prompt, re.DOTALL)
             if m:
-                prompt = prompt[m.end():].strip()
+                prompt = prompt[m.end() :].strip()
             return prompt
         return self._system_prompt
 
@@ -211,10 +272,8 @@ class CopilotAgent:
         are removed, preventing resume attempts for sessions that used the old prompt.
         """
         for session in self._sessions.values():
-            try:
+            with contextlib.suppress(Exception):
                 await session.disconnect()
-            except Exception:
-                pass
         self._system_prompt = value
         self._sessions.clear()
         self._registered_handlers.clear()
@@ -232,10 +291,8 @@ class CopilotAgent:
         for cid in conv_ids:
             session = self._sessions.pop(cid, None)
             if session:
-                try:
+                with contextlib.suppress(Exception):
                     await session.disconnect()
-                except Exception:
-                    pass
             self._registered_handlers.discard(cid)
             self._queues.pop(cid, None)
             if self._cosmos_service:
@@ -245,27 +302,38 @@ class CopilotAgent:
     async def start(self) -> None:
         """Initialize the Copilot CLI client. Called once on app startup.
 
-        Uses ManagedIdentityCredential (prod) with AzureCLICredential fallback (dev)
-        instead of DefaultAzureCredential, which probes many credential sources
-        sequentially and adds significant latency on each token acquisition.
-        """
-        if _HAS_CLI_CREDENTIAL:
-            self._credential = ChainedTokenCredential(
-                ManagedIdentityCredential(),
-                AzureCLICredential(),
-            )
-        else:
-            self._credential = ManagedIdentityCredential()
-        scope = "https://cognitiveservices.azure.com/.default"
-        self._token_provider = get_bearer_token_provider(self._credential, scope)
+        In cloud mode, uses ManagedIdentityCredential (prod) with AzureCLICredential
+        fallback (dev) instead of DefaultAzureCredential, which probes many credential
+        sources sequentially and adds significant latency on each token acquisition.
 
-        # Pre-warm: acquire the first token now so user requests don't pay the cost
-        try:
-            t0 = time.monotonic()
-            await self._credential.get_token(scope)
-            logger.info("Token pre-warmed successfully in %.1fms", (time.monotonic() - t0) * 1000)
-        except Exception:
-            logger.warning("Token pre-warm failed — first request will be slower", exc_info=True)
+        In local mode (``settings.is_local_mode``), skips Azure credential setup and
+        relies on the Copilot SDK's default GitHub-hosted model. A ``GITHUB_TOKEN``
+        environment variable is exported from ``settings.copilot_github_token`` when
+        set (and not already present in the environment) so the SDK can authenticate.
+        """
+        local_mode = self.settings.is_local_mode
+
+        if local_mode:
+            if self.settings.copilot_github_token and not os.environ.get("GITHUB_TOKEN"):
+                os.environ["GITHUB_TOKEN"] = self.settings.copilot_github_token
+        else:
+            if _HAS_CLI_CREDENTIAL:
+                self._credential = ChainedTokenCredential(
+                    ManagedIdentityCredential(),
+                    AzureCLICredential(),
+                )
+            else:
+                self._credential = ManagedIdentityCredential()
+            scope = "https://cognitiveservices.azure.com/.default"
+            self._token_provider = get_bearer_token_provider(self._credential, scope)
+
+            # Pre-warm: acquire the first token now so user requests don't pay the cost
+            try:
+                t0 = time.monotonic()
+                await self._credential.get_token(scope)
+                logger.info("Token pre-warmed successfully in %.1fms", (time.monotonic() - t0) * 1000)
+            except Exception:
+                logger.warning("Token pre-warm failed — first request will be slower", exc_info=True)
 
         self._client = CopilotClient()
         await self._client.start()
@@ -273,36 +341,46 @@ class CopilotAgent:
         # Emit a create_agent span so Foundry Traces tab can discover this agent.
         # Foundry looks for plural gen_ai.agents.id / gen_ai.agents.name;
         # OTel spec uses singular gen_ai.agent.id — emit both.
+        span_attrs: dict = {
+            "gen_ai.operation.name": "create_agent",
+            "gen_ai.request.model": self.settings.foundry_model_deployment,
+            "gen_ai.agent.id": "kratos-agent",
+            "gen_ai.agent.name": "kratos-agent",
+            "gen_ai.agents.id": "kratos-agent",
+            "gen_ai.agents.name": "kratos-agent",
+            "gen_ai.agent.version": "0.1.0",
+        }
+        if local_mode:
+            span_attrs["gen_ai.system"] = "github"
+            span_attrs["gen_ai.provider.name"] = "github"
+            span_attrs["server.address"] = "api.githubcopilot.com"
+        else:
+            span_attrs["gen_ai.system"] = "openai"
+            span_attrs["gen_ai.provider.name"] = "azure.ai.openai"
+            span_attrs["server.address"] = self.settings.foundry_endpoint
         with tracer.start_as_current_span(
             "create_agent kratos-agent",
             kind=trace.SpanKind.CLIENT,
-            attributes={
-                "gen_ai.operation.name": "create_agent",
-                "gen_ai.system": "openai",
-                "gen_ai.provider.name": "azure.ai.openai",
-                "gen_ai.request.model": self.settings.foundry_model_deployment,
-                "gen_ai.agent.id": "kratos-agent",
-                "gen_ai.agent.name": "kratos-agent",
-                "gen_ai.agents.id": "kratos-agent",
-                "gen_ai.agents.name": "kratos-agent",
-                "gen_ai.agent.version": "0.1.0",
-                "server.address": self.settings.foundry_endpoint,
-            },
+            attributes=span_attrs,
         ):
             pass
 
-        logger.info(
-            "CopilotClient started (Managed Identity auth, sdk_version=%s)",
-            version("github-copilot-sdk"),
-        )
+        if local_mode:
+            logger.info(
+                "CopilotClient started (local mode — GitHub token auth, sdk_version=%s)",
+                version("github-copilot-sdk"),
+            )
+        else:
+            logger.info(
+                "CopilotClient started (Managed Identity auth, sdk_version=%s)",
+                version("github-copilot-sdk"),
+            )
 
     async def stop(self) -> None:
         """Shutdown all sessions and the CLI client. Called on app shutdown."""
         for session in self._sessions.values():
-            try:
+            with contextlib.suppress(Exception):
                 await session.disconnect()
-            except Exception:
-                pass
         self._sessions.clear()
         self._registered_handlers.clear()
         self._queues.clear()
@@ -327,10 +405,8 @@ class CopilotAgent:
 
         # Drop all existing sessions so they get recreated with the new config
         for session in self._sessions.values():
-            try:
+            with contextlib.suppress(Exception):
                 await session.disconnect()
-            except Exception:
-                pass
         self._sessions.clear()
         self._registered_handlers.clear()
         self._queues.clear()
@@ -342,7 +418,32 @@ class CopilotAgent:
             await self._cosmos_service.delete_all_session_mappings()
         logger.info("Config updated — all sessions reset")
 
-    def _build_session_config(self, enabled_tools: list, skill_dirs: list, system_prompt: str, mcp_servers: dict | None = None) -> dict:
+    def _build_provider_config(self) -> dict | None:
+        """Return the Azure provider dict for cloud mode, or ``None`` in local mode.
+
+        In local mode the Copilot SDK falls back to its default GitHub-hosted model
+        and authenticates via the ``GITHUB_TOKEN`` / ``COPILOT_GITHUB_TOKEN`` env var.
+
+        Returns:
+            A provider configuration dict suitable for ``CopilotClient`` sessions
+            when running against Azure OpenAI, or ``None`` when running in local
+            (GitHub-hosted) mode.
+        """
+        if self.settings.is_local_mode:
+            return None
+        return {
+            "type": "azure",
+            "base_url": f"{self.settings.foundry_endpoint.rstrip('/')}/openai/deployments/{self.settings.foundry_model_deployment}",  # noqa: E501
+            "token_provider": self._token_provider,
+            "wire_api": "completions",
+            "azure": {
+                "api_version": "2024-10-21",
+            },
+        }
+
+    def _build_session_config(
+        self, enabled_tools: list, skill_dirs: list, system_prompt: str, mcp_servers: dict | None = None
+    ) -> dict:
         """Build the shared session config dict used for both create and resume."""
         config = {
             "model": self.settings.foundry_model_deployment,
@@ -353,18 +454,12 @@ class CopilotAgent:
                 "mode": "replace",
                 "content": system_prompt,
             },
-            "provider": {
-                "type": "azure",
-                "base_url": f"{self.settings.foundry_endpoint.rstrip('/')}/openai/deployments/{self.settings.foundry_model_deployment}",
-                "token_provider": self._token_provider,
-                "wire_api": "completions",
-                "azure": {
-                    "api_version": "2024-10-21",
-                },
-            },
             "on_permission_request": lambda req, ctx: PermissionRequestResult(kind="approved"),
             "on_user_input_request": self._handle_user_input_request,
         }
+        provider = self._build_provider_config()
+        if provider is not None:
+            config["provider"] = provider
         if mcp_servers:
             config["mcp_servers"] = mcp_servers
         return config
@@ -386,17 +481,19 @@ class CopilotAgent:
         # Push the request event to the SSE queue
         q = self._queues.get(conversation_id)
         if q:
-            q.put_nowait(UserInputRequestEvent(
-                requestId=request_id,
-                question=request.get("question", ""),
-                choices=request.get("choices", []),
-                allowFreeform=request.get("allowFreeform", True),
-            ))
+            q.put_nowait(
+                UserInputRequestEvent(
+                    requestId=request_id,
+                    question=request.get("question", ""),
+                    choices=request.get("choices", []),
+                    allowFreeform=request.get("allowFreeform", True),
+                )
+            )
 
         # Wait for the user to respond (timeout 5 minutes)
         try:
             answer = await asyncio.wait_for(future, timeout=300.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._user_input_futures.pop(request_id, None)
             return {"answer": "No response provided", "wasFreeform": True}
         finally:
@@ -431,8 +528,10 @@ class CopilotAgent:
 
         logger.info(
             "Session config for conversation=%s: mcp_servers=%s skill_dirs=%d tools=%d",
-            conversation_id, list(mcp_servers.keys()) if mcp_servers else "none",
-            len(skill_dirs), len(enabled_tools),
+            conversation_id,
+            list(mcp_servers.keys()) if mcp_servers else "none",
+            len(skill_dirs),
+            len(enabled_tools),
         )
 
         system_prompt = self._get_system_prompt(conversation_id)
@@ -452,12 +551,16 @@ class CopilotAgent:
                 elapsed_ms = (time.monotonic() - t0) * 1000
                 logger.info(
                     "Resumed SDK session=%s for conversation=%s elapsed=%.0fms",
-                    sdk_session_id, conversation_id, elapsed_ms,
+                    sdk_session_id,
+                    conversation_id,
+                    elapsed_ms,
                 )
             except Exception:
                 logger.warning(
                     "Failed to resume SDK session=%s for conversation=%s — creating new",
-                    sdk_session_id, conversation_id, exc_info=True,
+                    sdk_session_id,
+                    conversation_id,
+                    exc_info=True,
                 )
                 session = None
 
@@ -468,9 +571,7 @@ class CopilotAgent:
 
             # Persist the new SDK session ID to Cosmos DB
             if self._cosmos_service and hasattr(session, "session_id"):
-                await self._cosmos_service.upsert_session_mapping(
-                    conversation_id, session.session_id
-                )
+                await self._cosmos_service.upsert_session_mapping(conversation_id, session.session_id)
 
             logger.info(
                 "Created SDK session=%s for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
@@ -491,27 +592,28 @@ class CopilotAgent:
     ) -> AsyncGenerator[ThoughtEvent | ToolCallEvent | ContentEvent | ErrorEvent | UserInputRequestEvent, None]:
         """Send a message and stream SDK events as typed SSE events."""
 
-        _content_recording = os.environ.get(
-            "AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", ""
-        ).lower() == "true" or os.environ.get(
-            "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", ""
-        ).lower() == "true"
+        _content_recording = (
+            os.environ.get("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "").lower() == "true"
+            or os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "").lower() == "true"
+        )
 
+        _local_mode = self.settings.is_local_mode
+        _invoke_span_attrs: dict = {
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.system": "github" if _local_mode else "openai",
+            "gen_ai.provider.name": "github" if _local_mode else "azure.ai.openai",
+            "gen_ai.request.model": self.settings.foundry_model_deployment,
+            "gen_ai.agent.id": "kratos-agent",
+            "gen_ai.agent.name": "kratos-agent",
+            "gen_ai.agents.id": "kratos-agent",
+            "gen_ai.agents.name": "kratos-agent",
+            "gen_ai.agent.version": "0.1.0",
+            "gen_ai.conversation.id": conversation_id,
+            "server.address": "api.githubcopilot.com" if _local_mode else self.settings.foundry_endpoint,
+        }
         with tracer.start_as_current_span(
             "invoke_agent kratos-agent",
-            attributes={
-                "gen_ai.operation.name": "invoke_agent",
-                "gen_ai.system": "openai",
-                "gen_ai.provider.name": "azure.ai.openai",
-                "gen_ai.request.model": self.settings.foundry_model_deployment,
-                "gen_ai.agent.id": "kratos-agent",
-                "gen_ai.agent.name": "kratos-agent",
-                "gen_ai.agents.id": "kratos-agent",
-                "gen_ai.agents.name": "kratos-agent",
-                "gen_ai.agent.version": "0.1.0",
-                "gen_ai.conversation.id": conversation_id,
-                "server.address": self.settings.foundry_endpoint,
-            },
+            attributes=_invoke_span_attrs,
         ) as span:
             queue: asyncio.Queue = asyncio.Queue()
             self._queues[conversation_id] = queue
@@ -586,8 +688,12 @@ class CopilotAgent:
                             elif etype in ("assistant.usage", "session.usage_info"):
                                 # Capture token usage from the model
                                 data = event.data
-                                prompt_t = int(getattr(data, "prompt_tokens", 0) or getattr(data, "input_tokens", 0) or 0)
-                                completion_t = int(getattr(data, "completion_tokens", 0) or getattr(data, "output_tokens", 0) or 0)
+                                prompt_t = int(
+                                    getattr(data, "prompt_tokens", 0) or getattr(data, "input_tokens", 0) or 0
+                                )
+                                completion_t = int(
+                                    getattr(data, "completion_tokens", 0) or getattr(data, "output_tokens", 0) or 0
+                                )
                                 total_t = int(getattr(data, "total_tokens", 0) or 0) or (prompt_t + completion_t)
 
                                 # Extract reasoning tokens from completion_tokens_details
@@ -605,30 +711,54 @@ class CopilotAgent:
                                 usage["total"] += total_t
                                 self._usage[cid] = usage
                                 logger.info(
-                                    "Usage conversation=%s prompt_tokens=%d completion_tokens=%d reasoning_tokens=%d total=%d",
-                                    cid, prompt_t, completion_t, reasoning_t, total_t,
+                                    "Usage conversation=%s prompt_tokens=%d completion_tokens=%d reasoning_tokens=%d total=%d",  # noqa: E501
+                                    cid,
+                                    prompt_t,
+                                    completion_t,
+                                    reasoning_t,
+                                    total_t,
                                 )
                                 if total_t > 0:
-                                    q.put_nowait(UsageEvent(
-                                        promptTokens=usage["prompt"],
-                                        completionTokens=usage["completion"],
-                                        reasoningTokens=usage["reasoning"],
-                                        totalTokens=usage["total"],
-                                    ))
+                                    q.put_nowait(
+                                        UsageEvent(
+                                            promptTokens=usage["prompt"],
+                                            completionTokens=usage["completion"],
+                                            reasoningTokens=usage["reasoning"],
+                                            totalTokens=usage["total"],
+                                        )
+                                    )
 
                             elif etype == "tool.execution_start":
-                                tool_name = getattr(event.data, "tool_name", None) or getattr(event.data, "name", None) or "unknown"
+                                tool_name = (
+                                    getattr(event.data, "tool_name", None)
+                                    or getattr(event.data, "name", None)
+                                    or "unknown"
+                                )
                                 # Resolve actual skill name for the generic "skill" meta-tool
                                 if tool_name == "skill":
                                     tool_name = _resolve_skill_display_name(event.data, fallback="skill")
-                                    logger.info("Resolved skill display name: %s (attrs=%s)", tool_name, {a: repr(getattr(event.data, a, None)) for a in dir(event.data) if not a.startswith('_')})
+                                    logger.info(
+                                        "Resolved skill display name: %s (attrs=%s)",
+                                        tool_name,
+                                        {
+                                            a: repr(getattr(event.data, a, None))
+                                            for a in dir(event.data)
+                                            if not a.startswith("_")
+                                        },
+                                    )
                                 self._tool_counters[cid] = self._tool_counters.get(cid, 0) + 1
                                 _pending_tools.append(tool_name)
-                                logger.info("Tool start conversation=%s tool=%s pending=%s", cid, tool_name, _pending_tools)
+                                logger.info(
+                                    "Tool start conversation=%s tool=%s pending=%s", cid, tool_name, _pending_tools
+                                )
 
                                 # Create a child span nested under the invoke_agent span
                                 raw_input_str = str(getattr(event.data, "input", "") or "")
-                                tool_call_id = getattr(event.data, "call_id", None) or getattr(event.data, "id", None) or str(uuid.uuid4())[:12]
+                                tool_call_id = (
+                                    getattr(event.data, "call_id", None)
+                                    or getattr(event.data, "id", None)
+                                    or str(uuid.uuid4())[:12]
+                                )
                                 parent_ctx = self._span_contexts.get(cid)
                                 tool_span = tracer.start_span(
                                     f"execute_tool {tool_name}",
@@ -645,7 +775,7 @@ class CopilotAgent:
                                 _tool_spans[tool_name] = tool_span
                                 _tool_span_stack.append((tool_name, tool_span))
                                 # Emit descriptive thought (not just "Calling tool: X")
-                                display = prettyToolName(tool_name)
+                                display = pretty_tool_name(tool_name)
                                 raw_input = getattr(event.data, "input", None)
                                 detail = ""
                                 if raw_input:
@@ -653,20 +783,26 @@ class CopilotAgent:
                                     # Try to extract a query or key param for context
                                     for key in ("query", "code", "prompt", "message", "text"):
                                         import re as _re
+
                                         m = _re.search(rf'["\']?{key}["\']?\s*[:=]\s*["\']([^"\']+)["\']', input_str)
                                         if m:
                                             snippet = m.group(1)[:80]
                                             detail = f": {snippet}{'…' if len(m.group(1)) > 80 else ''}"
                                             break
-                                q.put_nowait(ThoughtEvent(
-                                    content=f"{display}{detail}",
-                                    iteration=0,
-                                ))
-                                q.put_nowait(ToolCallEvent(
-                                    skillName=tool_name,
-                                    status="started",
-                                    input=str(getattr(event.data, "input", "")),
-                                ))
+                                q.put_nowait(
+                                    ThoughtEvent(
+                                        content=f"{display}{detail}",
+                                        iteration=0,
+                                    )
+                                )
+                                q.put_nowait(
+                                    ToolCallEvent(
+                                        skillName=tool_name,
+                                        status="started",
+                                        input=_extract_tool_value(getattr(event.data, "input", "")),
+                                        source=self._resolve_skill_source(cid, tool_name),
+                                    )
+                                )
 
                             elif etype == "tool.execution_complete":
                                 # SDK often doesn't include tool_name on complete events,
@@ -687,12 +823,18 @@ class CopilotAgent:
                                     tool_name = _pending_tools.pop(0)
                                 else:
                                     tool_name = "unknown"
-                                duration_ms = int(getattr(event.data, "duration_ms", 0) or getattr(event.data, "duration", 0) or 0)
+                                duration_ms = int(
+                                    getattr(event.data, "duration_ms", 0) or getattr(event.data, "duration", 0) or 0
+                                )
                                 success = getattr(event.data, "success", None)
                                 error = getattr(event.data, "error", None)
                                 logger.info(
                                     "Tool complete conversation=%s tool=%s success=%r duration_ms=%s error=%r",
-                                    cid, tool_name, success, duration_ms, error,
+                                    cid,
+                                    tool_name,
+                                    success,
+                                    duration_ms,
+                                    error,
                                 )
 
                                 # End the corresponding tool span
@@ -703,10 +845,15 @@ class CopilotAgent:
                                 if tool_span is not None:
                                     # Remove from stack by identity
                                     _tool_span_stack[:] = [(n, s) for n, s in _tool_span_stack if s is not tool_span]
-                                    output_str = str(getattr(event.data, "output", "") or getattr(event.data, "result", ""))[:2000]
+                                    output_str = str(
+                                        getattr(event.data, "output", "") or getattr(event.data, "result", "")
+                                    )[:2000]
                                     tool_span.set_attribute("gen_ai.tool.call.result", output_str)
                                     if error:
-                                        tool_span.set_attribute("error.type", type(error).__name__ if not isinstance(error, str) else "tool_error")
+                                        tool_span.set_attribute(
+                                            "error.type",
+                                            type(error).__name__ if not isinstance(error, str) else "tool_error",
+                                        )
                                         tool_span.set_status(trace.StatusCode.ERROR, str(error))
                                     elif success is False:
                                         tool_span.set_attribute("error.type", "tool_execution_failed")
@@ -714,12 +861,17 @@ class CopilotAgent:
                                     else:
                                         tool_span.set_status(trace.StatusCode.OK)
                                     tool_span.end()
-                                q.put_nowait(ToolCallEvent(
-                                    skillName=tool_name,
-                                    status="completed" if success is not False else "failed",
-                                    output=str(getattr(event.data, "output", "") or getattr(event.data, "result", ""))[:500],
-                                    durationMs=duration_ms,
-                                ))
+                                q.put_nowait(
+                                    ToolCallEvent(
+                                        skillName=tool_name,
+                                        status="completed" if success is not False else "failed",
+                                        output=_extract_tool_value(
+                                            getattr(event.data, "output", "") or getattr(event.data, "result", "")
+                                        )[:2000],
+                                        durationMs=duration_ms,
+                                        source=self._resolve_skill_source(cid, tool_name),
+                                    )
+                                )
 
                             elif etype == "session.idle":
                                 # End any orphaned tool spans
@@ -735,8 +887,12 @@ class CopilotAgent:
                                 model_start = self._model_response_start.get(cid)
                                 model_latency = int((time.monotonic() - model_start) * 1000) if model_start else 0
                                 logger.info(
-                                    "Session idle conversation=%s tool_events=%s tokens=%s ttft=%dms model_latency=%dms",
-                                    cid, tc, usage, ttft, model_latency,
+                                    "Session idle conversation=%s tool_events=%s tokens=%s ttft=%dms model_latency=%dms",  # noqa: E501
+                                    cid,
+                                    tc,
+                                    usage,
+                                    ttft,
+                                    model_latency,
                                 )
                                 q.put_nowait(None)  # sentinel — stream is done
 
@@ -753,18 +909,27 @@ class CopilotAgent:
                                     cid,
                                     str(getattr(event.data, "message", "Unknown error")),
                                 )
-                                q.put_nowait(ErrorEvent(
-                                    message=str(getattr(event.data, "message", "Unknown error")),
-                                    code="SDK_ERROR",
-                                ))
+                                q.put_nowait(
+                                    ErrorEvent(
+                                        message=str(getattr(event.data, "message", "Unknown error")),
+                                        code="SDK_ERROR",
+                                    )
+                                )
                                 q.put_nowait(None)
 
                             else:
                                 # Log unhandled events so we can discover new event types
                                 logger.info(
                                     "Unhandled SDK event type=%s conversation=%s data_attrs=%s",
-                                    etype, cid,
-                                    {a: repr(getattr(event.data, a, None))[:100] for a in dir(event.data) if not a.startswith('_')} if event.data else "no_data",
+                                    etype,
+                                    cid,
+                                    {
+                                        a: repr(getattr(event.data, a, None))[:100]
+                                        for a in dir(event.data)
+                                        if not a.startswith("_")
+                                    }
+                                    if event.data
+                                    else "no_data",
                                 )
                         except Exception:
                             logger.exception("Error in session event handler conversation=%s", cid)
@@ -815,7 +980,15 @@ class CopilotAgent:
                     full_response = "".join(self._response_parts.get(conversation_id, []))
                     span.set_attribute(
                         "gen_ai.output.messages",
-                        json.dumps([{"role": "assistant", "parts": [{"type": "text", "content": full_response[:4000]}], "finish_reason": "stop"}]),
+                        json.dumps(
+                            [
+                                {
+                                    "role": "assistant",
+                                    "parts": [{"type": "text", "content": full_response[:4000]}],
+                                    "finish_reason": "stop",
+                                }
+                            ]
+                        ),
                     )
                 if tool_events == 0:
                     logger.warning(
@@ -827,9 +1000,9 @@ class CopilotAgent:
                 # Record GenAI metrics (token usage + operation duration)
                 _metric_attrs = {
                     "gen_ai.operation.name": "invoke_agent",
-                    "gen_ai.provider.name": "azure.ai.openai",
+                    "gen_ai.provider.name": "github" if _local_mode else "azure.ai.openai",
                     "gen_ai.request.model": self.settings.foundry_model_deployment,
-                    "server.address": self.settings.foundry_endpoint,
+                    "server.address": "api.githubcopilot.com" if _local_mode else self.settings.foundry_endpoint,
                 }
                 if usage.get("prompt", 0):
                     token_usage_histogram.record(usage["prompt"], {**_metric_attrs, "gen_ai.token.type": "input"})
@@ -838,7 +1011,7 @@ class CopilotAgent:
                 elapsed_s = time.monotonic() - self._send_time
                 operation_duration_histogram.record(elapsed_s, _metric_attrs)
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 span.set_attribute("error.type", "timeout")
                 span.set_status(trace.StatusCode.ERROR, "Agent timed out")
                 logger.warning("Agent timed out for conversation=%s", conversation_id)

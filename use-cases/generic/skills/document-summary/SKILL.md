@@ -15,6 +15,10 @@ Content can come from multiple places:
 - **Retrieved via `rag_search`** from the knowledge base
 - **From a file** in `/tmp` (read it via `code_interpreter`)
 - **From a URL** via `web_search` (fetch and extract key content)
+- **Uploaded files** (PDF, DOCX, TXT) — use `code_interpreter` to extract text first:
+  - PDF: `pip install PyPDF2` then read with `PdfReader`
+  - DOCX: `pip install python-docx` then iterate paragraphs
+  - Other text formats: read directly with Python
 
 If the user references a topic without providing text, use `rag_search` or `web_search` to retrieve relevant content first.
 

@@ -3,6 +3,7 @@
 import logging
 import mimetypes
 import os
+import re
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -13,6 +14,22 @@ router = APIRouter()
 
 # Directories the agent is allowed to write to and we are allowed to serve from.
 _ALLOWED_ROOTS = ("/tmp",)
+
+# MIME types allowed for inline (browser preview) serving.
+# All other types are forced to attachment (download) to prevent reflected-content attacks.
+_INLINE_ALLOWED_TYPES = frozenset({
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+    "text/plain",
+    "text/csv",
+})
+
+# Filename validation: alphanumeric, hyphens, underscores, dots only
+_SAFE_FILENAME_RE = re.compile(r"^[\w\-. ]+$")
 
 
 def _is_safe_path(requested: str) -> bool:
@@ -28,7 +45,14 @@ async def download_file(
     inline: bool = Query(False, description="Serve inline for browser preview instead of download"),
 ) -> FileResponse:
     """Serve a file the agent created so the user can download / preview it."""
+    if not _SAFE_FILENAME_RE.match(filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     resolved = os.path.realpath(path)
+
+    # Ensure the basename of the resolved path matches the requested filename
+    if os.path.basename(resolved) != filename:
+        raise HTTPException(status_code=400, detail="Filename mismatch")
 
     if not _is_safe_path(resolved):
         raise HTTPException(status_code=403, detail="Access denied")
@@ -38,6 +62,11 @@ async def download_file(
 
     media_type = mimetypes.guess_type(resolved)[0] or "application/octet-stream"
     safe_name = os.path.basename(resolved)
+
+    # Only allow inline for safe MIME types; force download for everything else
+    if inline and media_type not in _INLINE_ALLOWED_TYPES:
+        inline = False
+
     disposition = "inline" if inline else "attachment"
 
     return FileResponse(

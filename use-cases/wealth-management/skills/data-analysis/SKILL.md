@@ -86,9 +86,29 @@ This skill works best when combined with:
 ## Constraints
 
 - Max execution time: 30 seconds per code block
-- Available libraries: pandas, numpy, matplotlib (pre-installed in sandbox)
+- Pre-installed libraries: pandas, numpy, matplotlib. Additional libraries can be installed at runtime via pip.
 - Files must be written to `/tmp`
 - Keep DataFrames under ~1M rows for responsive performance
+
+## Wealth Management Analysis Patterns
+
+When analyzing financial or portfolio data, consider these domain-specific techniques.
+
+**Note:** For client-specific portfolio reviews (where the user references a client by name or ID), prefer the **portfolio-review** skill which integrates directly with the CRM and provides a structured review format. Use **data-analysis** for:
+- General-purpose financial calculations not tied to a specific CRM client
+- Ad-hoc quantitative analysis requested by the user
+- Data the user provides directly (CSV, inline, uploaded file)
+- Advanced statistical techniques beyond what portfolio-review covers
+
+Techniques:
+
+- **Risk-adjusted returns**: Sharpe ratio = (portfolio_return - risk_free_rate) / portfolio_std_dev
+- **Alpha / Beta**: Compute portfolio beta against benchmark; alpha = actual_return - (risk_free + beta × (benchmark_return - risk_free))
+- **Sector/asset class attribution**: Break down returns by sector contribution
+- **Correlation matrix**: Cross-asset correlations using a heatmap
+- **Drawdown analysis**: Maximum peak-to-trough decline
+- **Monte Carlo simulation**: Use `numpy.random` for forward-looking return distributions (always disclaim as illustrative)
+- **Stress testing**: Apply historical scenarios (e.g., 2008 GFC, 2020 COVID) to current holdings
 
 ## Example
 

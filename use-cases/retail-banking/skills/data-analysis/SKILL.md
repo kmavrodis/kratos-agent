@@ -12,7 +12,7 @@ When the user asks for spending analysis, budget breakdown, savings projections,
 
 - If the user has transaction data from `transaction-history`, use that as input
 - If the user provides CSV/JSON data inline, write it to `/tmp` first
-- If no data is available, use the **Faker MCP server** to generate realistic sample banking data (transactions, balances, spending patterns)
+- If no data is available, use the **Faker MCP server** to generate realistic sample banking data (transactions, balances, spending patterns). Prefer calling Faker MCP tools directly (e.g., `faker_date_between`, `faker_random_element`, `faker_pyfloat`) over writing inline Python with the faker library.
 
 ### 2. Banking-Specific Analyses
 
@@ -106,6 +106,6 @@ Provide insights based on the data:
 
 ## Constraints
 
-- Available libraries: pandas, numpy, matplotlib, faker
+- Pre-installed libraries: pandas, numpy, matplotlib, faker. Additional libraries can be installed at runtime via pip.
 - Files must be written to `/tmp`
 - Max execution time: 30 seconds per code block

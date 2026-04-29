@@ -2,13 +2,14 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from app.auth import require_authenticated_user
 from app.models import MCPConfigResponse, MCPConfigUpdate
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_authenticated_user)])
 
 
 @router.get("", response_model=MCPConfigResponse)
@@ -18,7 +19,10 @@ async def get_mcp_config(use_case: str, request: Request) -> MCPConfigResponse:
     registry = registries.get(use_case)
     if registry is None:
         raise HTTPException(status_code=404, detail=f"Use-case '{use_case}' not found")
-    return MCPConfigResponse(servers=registry.mcp_servers)
+    return MCPConfigResponse(
+        servers=registry.mcp_servers,
+        sources=getattr(registry, "mcp_sources", {}),
+    )
 
 
 @router.put("", response_model=MCPConfigResponse)
@@ -36,4 +40,7 @@ async def update_mcp_config(use_case: str, body: MCPConfigUpdate, request: Reque
     await copilot_agent.reset_sessions_for_use_case(use_case)
 
     logger.info("MCP config updated for use-case '%s': %d servers", use_case, len(body.servers))
-    return MCPConfigResponse(servers=body.servers)
+    return MCPConfigResponse(
+        servers=body.servers,
+        sources=getattr(registry, "mcp_sources", {}),
+    )

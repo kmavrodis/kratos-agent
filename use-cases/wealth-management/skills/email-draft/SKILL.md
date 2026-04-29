@@ -59,6 +59,68 @@ Subject: <concise, actionable subject line>
 
 If the user asks for multiple options, provide 2-3 versions with different tones (e.g. formal vs. friendly) and let them pick.
 
+### 5a. Wealth Management Templates
+
+#### Client Meeting Follow-Up
+```
+Subject: Follow-Up — Portfolio Review Meeting [Date]
+
+Dear [Client Name],
+
+Thank you for taking the time to meet [today/yesterday]. Below is a summary of the key points we discussed:
+
+- [Portfolio performance overview]
+- [Rebalancing actions agreed upon]
+- [Next steps and timeline]
+
+I will [action item] by [date]. In the meantime, please don't hesitate to reach out if you have any questions.
+
+Best regards,
+[Advisor Name]
+[Title] | [Firm Name]
+```
+
+#### Portfolio Rebalancing Notification
+```
+Subject: Portfolio Rebalancing — [Client Name / Portfolio ID]
+
+Dear [Client Name],
+
+As discussed, we are proceeding with the following adjustments to your portfolio:
+
+| Action | Security | Amount/Units |
+|--------|----------|-------------|
+| [Buy/Sell] | [Ticker — Name] | [Units/Amount] |
+
+Rationale: [brief explanation aligned with risk profile and investment objectives].
+
+These changes will be executed within [timeframe]. You will receive a confirmation statement once completed.
+
+Please confirm your approval by [date], or contact me with any questions.
+
+Best regards,
+[Advisor Name]
+```
+
+#### Quarterly Performance Summary Cover Letter
+```
+Subject: Q[N] [Year] Portfolio Review — [Client Name]
+
+Dear [Client Name],
+
+Please find attached your quarterly portfolio review for Q[N] [Year].
+
+Key highlights:
+- Portfolio return: [X]% (benchmark: [Y]%)
+- [Notable change or achievement]
+- [Upcoming action or recommendation]
+
+I recommend we schedule a call to discuss [specific topic]. Please let me know your availability.
+
+Best regards,
+[Advisor Name]
+```
+
 ### 6. Follow-ups
 
 If the user asks to revise, adjust tone, shorten, or expand — iterate on the previous draft rather than starting from scratch.

@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 # ─── Enums ───
 
 class MessageRole(str, Enum):
@@ -104,6 +103,7 @@ class ToolCallEvent(BaseModel):
     input: str = ""
     output: str = ""
     durationMs: int = 0
+    source: str = ""  # "local" | "blob" | "apm:<package>" — populated best-effort from the registry
 
 
 class ThoughtEvent(BaseModel):
@@ -147,6 +147,12 @@ class ErrorEvent(BaseModel):
     type: str = "error"
     message: str
     code: str = "UNKNOWN_ERROR"
+
+
+class FollowUpQuestionsEvent(BaseModel):
+    """Streamed event with suggested follow-up questions."""
+    type: str = "follow_up_questions"
+    questions: list[str] = Field(default_factory=list)
 
 
 class UserInputRequestEvent(BaseModel):
@@ -224,6 +230,7 @@ class SkillResponse(BaseModel):
     instructions: str = ""
     toolName: str = ""
     fileCount: int = 0
+    source: str = "local"  # "local" | "blob" | "apm:<package>"
 
 
 class SkillCreate(BaseModel):
@@ -278,6 +285,7 @@ class SystemPromptUpdate(BaseModel):
 class MCPConfigResponse(BaseModel):
     """MCP servers config as returned by the admin API."""
     servers: dict
+    sources: dict[str, str] = {}
 
 
 class MCPConfigUpdate(BaseModel):

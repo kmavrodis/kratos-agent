@@ -9,7 +9,7 @@ enabled: true
 1. Accept a Python code block or computation request from the agent.
 2. Execute the code in a sandboxed environment:
    - No file system access beyond /tmp
-   - No network access
+   - Network access limited to package installation (pip install)
    - Memory limited to 256 MB
    - Execution timeout: 30 seconds
 3. Capture and return:

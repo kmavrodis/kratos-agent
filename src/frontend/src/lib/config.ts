@@ -26,14 +26,15 @@ export function getApiUrl(): string {
   // 2. Runtime config injected into window by config.json / script tag
   if (typeof window !== "undefined" && (window as unknown as Record<string, unknown>).__KRATOS_CONFIG__) {
     const cfg = (window as unknown as Record<string, unknown>).__KRATOS_CONFIG__ as Record<string, string>;
-    if (cfg.apiUrl) {
-      _cachedApiUrl = cfg.apiUrl.replace(/\/+$/, "");
+    const url = cfg.apiUrl || cfg.apiBaseUrl;
+    if (url) {
+      _cachedApiUrl = url.replace(/\/+$/, "");
       return _cachedApiUrl;
     }
   }
 
-  // 3. Fallback for local development
-  _cachedApiUrl = "http://localhost:8000";
+  // 3. Same-origin fallback (works behind a proxy / APIM / SWA linked backend)
+  _cachedApiUrl = "";
   return _cachedApiUrl;
 }
 

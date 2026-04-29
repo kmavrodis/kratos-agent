@@ -2,6 +2,7 @@
 
 import { ToolCallInfo, RunStats } from "@/types";
 import { useState } from "react";
+import { SourceBadge } from "./SourceBadge";
 
 interface Props {
   thoughts: string[];
@@ -57,11 +58,73 @@ function ToolPill({ tc }: { tc: ToolCallInfo }) {
         <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
       )}
       {prettyToolName(tc.skillName)}
+      <SourceBadge source={tc.source} />
       {!isRunning && tc.durationMs !== undefined && tc.durationMs > 0 && (
         <span className="opacity-50 font-mono text-[10px]">{formatDuration(tc.durationMs)}</span>
       )}
     </span>
   );
+}
+
+/** Clean up raw Python SDK output/input strings for display.
+ *  - Strips Result(...) wrappers and extracts content field
+ *  - Pretty-prints valid JSON
+ *  - Converts Python-style dicts to readable key: value lines
+ */
+function formatToolText(raw: string): string {
+  let text = raw.trim();
+
+  // Strip Python Result(...) wrapper — extract the content field
+const resultMatch = text.match(/^Result\(content=['"]([\s\S]*?)['"],\s*contents=/);
+  if (resultMatch) {
+    text = resultMatch[1];
+    // Unescape Python string escapes
+    text = text.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\'/g, "'").replace(/\\"/g, '"');
+  }
+
+  // If the remaining text is empty or "None", try extracting detailed_content
+  if (!text || text === "None" || text === "null") {
+    const detailedMatch = raw.match(/detailed_content=['"]([^'"]*)['"]/)
+    if (detailedMatch && detailedMatch[1] && detailedMatch[1] !== "None") {
+      text = detailedMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t");
+    } else {
+      return text || raw;
+    }
+  }
+
+  // Try to parse as JSON and pretty-print
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === "object" && parsed !== null) {
+      // For objects with a "text" field (common in web_search etc.), show just the text
+      if (typeof parsed.text === "string") {
+        return parsed.text;
+      }
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // Not JSON — continue
+  }
+
+  // Try to parse Python dict-like strings: {'key': 'value', ...}
+  if (text.startsWith("{") && text.includes("':")) {
+    try {
+      // Convert Python-style to JSON-style: single quotes to double, True/False/None
+      const jsonLike = text
+        .replace(/'/g, '"')
+        .replace(/\bTrue\b/g, "true")
+        .replace(/\bFalse\b/g, "false")
+        .replace(/\bNone\b/g, "null");
+      const parsed = JSON.parse(jsonLike);
+      if (typeof parsed === "object") {
+        return JSON.stringify(parsed, null, 2);
+      }
+    } catch {
+      // Not convertible — return as-is
+    }
+  }
+
+  return text;
 }
 
 function ToolDetail({ tc }: { tc: ToolCallInfo }) {
@@ -71,6 +134,9 @@ function ToolDetail({ tc }: { tc: ToolCallInfo }) {
     (tc.output && tc.output !== "None" && tc.output !== "");
 
   if (!hasDetails) return null;
+
+  const formattedInput = tc.input && tc.input !== "None" && tc.input !== "" ? formatToolText(tc.input) : null;
+  const formattedOutput = tc.output && tc.output !== "None" && tc.output !== "" ? formatToolText(tc.output) : null;
 
   return (
     <div className="rounded-xl border border-slate-100 dark:border-white/[0.06] bg-white dark:bg-navy-800 overflow-hidden shadow-sm dark:shadow-none">
@@ -93,19 +159,19 @@ function ToolDetail({ tc }: { tc: ToolCallInfo }) {
       </button>
       {expanded && (
         <div className="border-t border-slate-100 dark:border-white/[0.06] px-3.5 py-2.5 space-y-2.5">
-          {tc.input && tc.input !== "None" && tc.input !== "" && (
+          {formattedInput && (
             <div>
               <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Input</div>
               <pre className="text-xs bg-slate-50 dark:bg-white/[0.04] rounded-lg p-2.5 whitespace-pre-wrap break-all text-slate-600 dark:text-slate-300 max-h-32 overflow-y-auto font-mono border border-slate-100 dark:border-white/[0.06]">
-                {tc.input}
+                {formattedInput}
               </pre>
             </div>
           )}
-          {tc.output && tc.output !== "None" && tc.output !== "" && (
+          {formattedOutput && (
             <div>
               <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Output</div>
               <pre className="text-xs bg-slate-50 dark:bg-white/[0.04] rounded-lg p-2.5 whitespace-pre-wrap break-all text-slate-600 dark:text-slate-300 max-h-32 overflow-y-auto font-mono border border-slate-100 dark:border-white/[0.06]">
-                {tc.output}
+                {formattedOutput}
               </pre>
             </div>
           )}
@@ -190,10 +256,6 @@ export function ThoughtChain({
   const completedTools = uniqueTools.filter((t) => t.status === "completed").length;
   const totalTools = uniqueTools.length;
 
-  const completedOrFailedCalls = toolCalls
-    .filter((t) => t.status !== "started")
-    .map((tc) => ({ ...tc, skillName: resolveSkillName(tc) }));
-
   return (
     <div className="space-y-2 animate-fade-in">
       {/* Tool pills — always visible */}
@@ -214,7 +276,7 @@ export function ThoughtChain({
       )}
 
       {/* Expandable details section */}
-      {(completedOrFailedCalls.length > 0 || thoughts.length > 0 || (runStats && !isStreaming)) && (
+      {(uniqueTools.length > 0 || thoughts.length > 0 || (runStats && !isStreaming)) && (
         <div className="rounded-xl border border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-navy-800 shadow-card dark:shadow-none overflow-hidden text-sm">
           <button
             onClick={() => setShowDetails(!showDetails)}
@@ -272,11 +334,11 @@ export function ThoughtChain({
               {thoughts.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Execution flow</div>
-                  <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                  <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
                     {thoughts.map((thought, i) => (
                       <span key={i} className="inline-flex items-center gap-1">
-                        {i > 0 && <span className="text-slate-300">&rarr;</span>}
-                        <span className="text-slate-600">{thought}</span>
+                        {i > 0 && <span className="text-slate-300 dark:text-slate-600">&rarr;</span>}
+                        <span className="text-slate-600 dark:text-slate-300">{thought}</span>
                       </span>
                     ))}
                   </div>
@@ -284,10 +346,10 @@ export function ThoughtChain({
               )}
 
               {/* Tool call I/O details */}
-              {completedOrFailedCalls.length > 0 && (
+              {uniqueTools.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Tool details</div>
-                  {completedOrFailedCalls.map((tc, i) => (
+                  {uniqueTools.map((tc, i) => (
                     <ToolDetail key={i} tc={tc} />
                   ))}
                 </div>

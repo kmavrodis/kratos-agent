@@ -1,0 +1,10 @@
+name: kratos-retail-banking
+version: 1.0.0
+description: Kratos agent — retail-banking use-case APM manifest
+author: kratos-agent
+license: MIT
+target: copilot
+
+dependencies:
+  apm: []
+  mcp: []

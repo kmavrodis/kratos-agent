@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Microsoft Foundry (deployed by Bicep)
     foundry_endpoint: str = ""
-    foundry_model_deployment: str = "gpt-54mini"
+    foundry_model_deployment: str = ""
     foundry_project_name: str = ""
 
     # Azure Blob Storage for skills
@@ -34,8 +34,39 @@ class Settings(BaseSettings):
     port: int = 8000
     environment: str = "development"
 
+    # CORS — comma-separated allowed origins; "*" for development only
+    allowed_origins: str = "*"
+
+    # Admin auth — set to "true" after configuring Easy Auth on Container Apps / SWA
+    admin_auth_enabled: str = "false"
+
     # Cosmos DB database
     cosmos_db_database: str = "kratos-agent"
+
+    # APM (Agent Package Manager) — materialises remote skills / prompts /
+    # instructions / agents into each use-case via the `apm` CLI.
+    apm_enabled: bool = True
+    apm_binary: str = "apm"
+    apm_default_target: str = "copilot"
+    apm_use_cases_root: str = "use-cases"
+    apm_startup_sync: bool = True
+
+    # Local mode — run the backend without any Azure services.
+    #   * SQLite replaces Cosmos DB (persistence under ``local_data_dir``)
+    #   * GitHub OAuth token replaces Foundry / Managed Identity for the model call
+    #   * Azurite (or any blob connection string) replaces MSI-backed blob
+    # ``local_mode`` defaults to True when ``cosmos_db_endpoint`` is empty.
+    local_mode: bool | None = None  # None → auto-detect; True/False → explicit override
+    copilot_github_token: str = ""
+    local_data_dir: str = ".local"
+    blob_storage_connection_string: str = ""  # set for Azurite / local emulators
+
+    @property
+    def is_local_mode(self) -> bool:
+        """True when the backend should run without Azure services."""
+        if self.local_mode is not None:
+            return self.local_mode
+        return not self.cosmos_db_endpoint
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

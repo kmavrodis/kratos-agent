@@ -25,6 +25,14 @@ Any file type can be shared. Common examples:
 - **Code**: `.py`, `.js`, `.ts`, `.sql`
 - **Archives**: `.zip`, `.tar.gz`
 
+### Wealth Management File Types
+
+- **Portfolio exports** (.csv) — holdings, allocation breakdowns, performance data
+- **Client reports** (.pdf) — generated via `pdf-wealth-report` skill
+- **Analysis outputs** (.csv, .xlsx) — risk metrics, return calculations, stress test results
+- **Charts and visualizations** (.png, .svg) — allocation charts, performance graphs
+- **Compliance exports** (.csv, .md) — KYC checklists, audit findings, regulatory summaries
+
 ## Constraints
 
 - Files must be written to `/tmp` — no other directory is served by the download endpoint.

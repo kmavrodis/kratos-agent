@@ -14,6 +14,11 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ToolCallInfo[];
   thoughts?: string[];
+  metadata?: {
+    thoughts?: string[];
+    toolCalls?: ToolCallInfo[];
+    runStats?: RunStats;
+  };
   attachments?: Attachment[];
   createdAt: string;
 }
@@ -24,6 +29,7 @@ export interface ToolCallInfo {
   input?: string;
   output?: string;
   durationMs?: number;
+  source?: string; // "local" | "blob" | "apm:<package>" | ""
 }
 
 // SSE Event types from the backend
@@ -40,6 +46,7 @@ export interface ToolCallEvent {
   input: string;
   output: string;
   durationMs: number;
+  source?: string;
 }
 
 export interface ContentEvent {
@@ -80,6 +87,11 @@ export interface UserInputRequestEvent {
   question: string;
   choices: string[];
   allowFreeform: boolean;
+}
+
+export interface FollowUpQuestionsEvent {
+  type: "follow_up_questions";
+  questions: string[];
 }
 
 // ─── Attachments ───
@@ -124,7 +136,8 @@ export type AgentEvent =
   | UsageEvent
   | DoneEvent
   | ErrorEvent
-  | UserInputRequestEvent;
+  | UserInputRequestEvent
+  | FollowUpQuestionsEvent;
 
 // ─── Skills Admin ───
 
@@ -141,6 +154,7 @@ export interface Skill {
   instructions: string;
   toolName: string;
   fileCount?: number;
+  source?: string; // "local" | "blob" | "apm:<package>"
 }
 
 export interface SkillCreate {
@@ -196,6 +210,7 @@ export type MCPServerConfig = MCPLocalServer | MCPRemoteServer;
 
 export interface MCPConfig {
   servers: Record<string, MCPServerConfig>;
+  sources?: Record<string, string>;
 }
 
 // ─── Consistency Analysis ───
@@ -229,4 +244,39 @@ export interface ApplyFixResult {
   success: boolean;
   changes: FixChange[];
   error: string;
+}
+
+// ─── APM (Agent Package Manager) Admin ───
+
+export interface ApmDependency {
+  name: string;
+  ref: string | null;
+  resolved: string | null;
+  source: string;
+}
+
+export interface ApmMcpServer {
+  name: string;
+  transport: string;
+  command?: string | null;
+  args?: string[];
+  url?: string | null;
+  env?: Record<string, string>;
+  registry?: boolean;
+}
+
+export interface ApmStatusResponse {
+  dependencies: ApmDependency[];
+  materialised_skill_dirs: string[];
+  mcp_servers?: ApmMcpServer[];
+  version: string;
+}
+
+export interface ApmCommandResponse {
+  success: boolean;
+  returncode: number;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
+  dependencies: ApmDependency[];
 }

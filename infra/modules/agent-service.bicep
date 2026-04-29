@@ -40,6 +40,9 @@ param foundryProjectName string
 @description('Azure Blob Storage endpoint for skills')
 param blobStorageEndpoint string
 
+@description('Static Web App URL for CORS (e.g. https://xxx.azurestaticapps.net)')
+param staticWebAppUrl string = ''
+
 // ─── ACR pull identity ───
 // A User-Assigned Managed Identity is created for ACR access so that the
 // AcrPull role assignment exists BEFORE the Container App tries to validate
@@ -96,7 +99,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 8000
         transport: 'http'
         corsPolicy: {
-          allowedOrigins: ['*']
+          allowedOrigins: empty(staticWebAppUrl) ? ['*'] : [staticWebAppUrl]
           allowedMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
           allowedHeaders: ['*']
           maxAge: 3600
@@ -125,6 +128,8 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'OTEL_SERVICE_NAME', value: 'kratos-agent-service' }
             { name: 'AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED', value: 'true' }
             { name: 'OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT', value: 'true' }
+            { name: 'ENVIRONMENT', value: 'production' }
+            { name: 'ALLOWED_ORIGINS', value: empty(staticWebAppUrl) ? '*' : staticWebAppUrl }
           ]
         }
       ]

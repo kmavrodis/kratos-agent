@@ -2,23 +2,33 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies including Node.js 20 (required for Copilot CLI and MCP servers)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    nodejs \
-    npm \
-    && npm install -g @github/copilot faker-mcp-server \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# ── Layer 1: System deps + Node.js 20 (cached unless base image changes) ──
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl git \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Playwright Chromium and its system dependencies for PDF rendering
-RUN npx -y playwright install --with-deps chromium
+# ── Layer 2: Global npm packages (pinned for reproducibility) ──
+RUN npm install -g @github/copilot@latest faker-mcp-server@latest \
+    && rm -rf /root/.npm /tmp/*
 
-# Copy backend application
-COPY src/backend/ .
+# ── Layer 3: Playwright Chromium + system deps for PDF rendering ──
+RUN npx -y playwright install --with-deps chromium\
+    && rm -rf /var/lib/apt/lists/* /tmp/*
 
-# Install dependencies
+# ── Layer 4: Python dependencies (cached unless pyproject.toml changes) ──
+COPY src/backend/pyproject.toml .
 RUN pip install --no-cache-dir .
 
+# ── Layer 5: Application code (changes frequently) ──
+COPY src/backend/ .
+
+# ── Layer 6: Use-case manifests (apm.yml, SYSTEM_PROMPT, skills) ──
+COPY use-cases/ use-cases/
+
 EXPOSE 8000
+
+ENV GIT_PYTHON_REFRESH=quiet
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -92,6 +92,13 @@ When working with user-provided data, normalize into a DataFrame with at least t
 
 ### 3. Performance Analysis
 
+**IMPORTANT — Current Market Prices**: The CRM provides `average_cost` (cost basis) but NOT current market prices. To compute current portfolio value, unrealized P&L, and accurate returns:
+1. Use `web_search` to fetch current prices for each ticker in the portfolio
+2. Join the current prices with the CRM cost-basis data
+3. Calculate: current_value = current_price × units, unrealized_pnl = current_value - cost_basis
+
+This is a **mandatory step** for any meaningful portfolio review — do not skip it.
+
 Calculate and present:
 - **Total cost basis** from cost per position (for CRM: `average_cost × units`; for generic: from the provided data)
 - **Cost-basis allocation** — each position as % of total cost basis
@@ -166,6 +173,34 @@ Structure the response as a professional portfolio review:
 ### 7. Compliance Note
 
 Always include: "This analysis is for informational purposes only and does not constitute investment advice. Past performance does not guarantee future results."
+
+### 8. Handoff to PDF Report
+
+If the user wants a formal PDF (or you're chaining into `pdf-wealth-report`), **export structured data** that the PDF skill can consume. After completing the analysis, save a summary JSON to `/tmp`:
+
+```python
+import json
+
+report_data = {
+    "client_name": client_name,
+    "client_id": client_id,
+    "risk_profile": risk_profile,
+    "performance_ytd": performance_ytd,
+    "performance_inception": performance_inception,
+    "total_cost_basis": total_cost_basis,
+    "positions": df[["ticker", "companyName", "sector", "assetClass", "cost_basis", "units"]].to_dict(orient="records"),
+    "sector_allocation": sector_alloc.to_dict(),  # {"Technology": 42.5, ...}
+    "asset_class_allocation": asset_class_alloc.to_dict(),
+    "top_holdings": top5.to_dict(),
+    "risk_flags": risk_flags,  # list of strings
+}
+
+with open("/tmp/portfolio_analysis.json", "w") as f:
+    json.dump(report_data, f, indent=2)
+print("Analysis data saved: /tmp/portfolio_analysis.json")
+```
+
+**Important**: Do NOT re-generate charts for the PDF. The `pdf-wealth-report` skill has its own SVG chart pipeline (`generate-charts.js`) that produces theme-matched charts for the PDF layout. The matplotlib charts from this skill are for **inline chat display only**.
 
 ## Constraints
 

@@ -1,15 +1,30 @@
 """FastAPI application entry point."""
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import instrument_fastapi_app, setup_telemetry
-from app.routers import admin_analysis, admin_mcp, admin_prompt, admin_skills, agent, conversations, copilot_studio, files, health, settings, use_cases
+from app.routers import (
+    admin_analysis,
+    admin_apm,
+    admin_mcp,
+    admin_prompt,
+    admin_skills,
+    agent,
+    conversations,
+    copilot_studio,
+    files,
+    health,
+    settings,
+    use_cases,
+)
+from app.services.apm_service import ApmError, ApmService
 from app.services.blob_skill_service import BlobSkillService
 from app.services.copilot_agent import CopilotAgent
 from app.services.cosmos_service import CosmosService
@@ -17,7 +32,7 @@ from app.services.skill_registry import SkillRegistry
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 # Silence chatty Azure SDK HTTP loggers — they log full request/response headers at INFO
 logging.getLogger("azure.cosmos").setLevel(logging.WARNING)
@@ -27,10 +42,50 @@ logging.getLogger("azure.identity").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
+async def _apm_startup_sync(apm_service: ApmService, use_cases_root: str) -> tuple[int, int]:
+    """Run ``apm install`` for each local use-case that needs syncing.
+
+    Returns a ``(synced, total)`` tuple where ``total`` is the number of
+    use-case directories considered and ``synced`` the number that were
+    successfully installed. APM failures are logged as warnings and never
+    propagate — the app must still boot so local skills remain usable.
+    """
+    root = Path(use_cases_root)
+    if not root.is_dir():
+        logger.info("APM use-cases root %s does not exist — skipping startup sync", root)
+        return (0, 0)
+
+    synced = 0
+    total = 0
+    for entry in sorted(root.iterdir()):
+        if not entry.is_dir():
+            continue
+        use_case = entry.name
+        total += 1
+        try:
+            if not await apm_service.needs_sync(use_case):
+                continue
+            await apm_service.sync(use_case)
+            synced += 1
+            logger.info("APM sync succeeded for use-case '%s'", use_case)
+        except ApmError as exc:
+            logger.warning("APM sync failed for use-case '%s': %s", use_case, exc)
+    return (synced, total)
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan: initialize services on startup, cleanup on shutdown."""
     settings = get_settings()
+
+    # Fail fast if required settings are missing
+    _required = {
+        "foundry_endpoint": settings.foundry_endpoint,
+        "foundry_model_deployment": settings.foundry_model_deployment,
+    }
+    missing = [k for k, v in _required.items() if not v]
+    if missing:
+        raise RuntimeError(f"Missing required configuration: {', '.join(missing)}")
 
     # Setup OpenTelemetry (traces, metrics, logs/events exporters)
     setup_telemetry(settings)
@@ -45,16 +100,31 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     await blob_skill_service.initialize()
     application.state.blob_skill_service = blob_skill_service
 
+    # Initialize APM service (shared across use-cases)
+    apm_service = ApmService(settings, blob_skill_service)
+    application.state.apm_service = apm_service
+
+    # Run APM startup sync for each local use-case directory so that
+    # apm_modules/ is materialised before the skill registries load.
+    if settings.apm_enabled and settings.apm_startup_sync:
+        synced, total = await _apm_startup_sync(apm_service, settings.apm_use_cases_root)
+        logger.info("APM startup sync complete: %d/%d use-cases synced", synced, total)
+
     # Load all use-case registries from blob storage
     registries: dict[str, SkillRegistry] = {}
     if not blob_skill_service.is_available:
         logger.error("Blob storage is not configured — no skills will be available")
     else:
         try:
+            # In local/dev mode Azurite starts empty — seed use-case folders
+            # from the repository so all personas show up in the UI.
+            seeded = await blob_skill_service.seed_from_local()
+            if seeded:
+                logger.info("Seeded %d use-case(s) into blob: %s", len(seeded), seeded)
             use_case_names = await blob_skill_service.list_use_cases()
             for uc_name in use_case_names:
                 registry = SkillRegistry()
-                await registry.load(uc_name, blob_skill_service)
+                await registry.load(uc_name, blob_skill_service, apm_service=apm_service)
                 registries[uc_name] = registry
         except Exception:
             logger.exception("Failed to load use-cases from blob storage")
@@ -69,12 +139,6 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     copilot_agent.set_registries(registries)
     copilot_agent.set_cosmos_service(cosmos_service)
 
-    # Load system prompt from Cosmos (falls back to default if not set)
-    prompt_doc = await cosmos_service.get_setting("system-prompt")
-    if prompt_doc:
-        copilot_agent.system_prompt = prompt_doc["content"]
-        logger.info("Loaded custom system prompt from Cosmos (%d chars)", len(prompt_doc["content"]))
-
     await copilot_agent.start()
     application.state.copilot_agent = copilot_agent
 
@@ -84,6 +148,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     # Cleanup
     await copilot_agent.stop()
     await blob_skill_service.close()
+    await cosmos_service.close()
     logger.info("Kratos Agent Service shutting down")
 
 
@@ -99,11 +164,13 @@ app = FastAPI(
 instrument_fastapi_app(app)
 
 # CORS — configured for Static Web App frontend
+_cors_settings = get_settings()
+_cors_origins = [o.strip() for o in _cors_settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Narrowed in production via environment config
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -115,6 +182,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(admin_skills.router, prefix="/api/admin/skills", tags=["admin"])
 app.include_router(admin_prompt.router, prefix="/api/admin/system-prompt", tags=["admin"])
 app.include_router(admin_mcp.router, prefix="/api/admin/mcp-servers", tags=["admin"])
+app.include_router(admin_apm.router, prefix="/api/admin/use-cases/{use_case}/apm", tags=["admin"])
 app.include_router(admin_analysis.router, prefix="/api/admin/analysis", tags=["admin"])
 app.include_router(use_cases.router, prefix="/api/use-cases", tags=["use-cases"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
