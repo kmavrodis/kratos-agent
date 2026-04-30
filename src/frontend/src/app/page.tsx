@@ -177,7 +177,7 @@ export default function Home() {
           onSelect={handleSelectConversation}
           onDelete={handleDeleteConversation}
           onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false); }}
-          onOpenSkills={() => { setSkillsOpen(true); setSidebarOpen(false); }}
+          onOpenSkills={() => { setSkillsOpen(true); setSidebarOpen(false); setPendingMessage(null); }}
           onOpenAgenticLoop={() => { setAgenticLoopOpen(true); setSidebarOpen(false); }}
           useCases={useCases}
           selectedUseCase={selectedUseCase}

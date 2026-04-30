@@ -287,12 +287,12 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   handleSendRef.current = handleSend;
   const initialMessageSentRef = useRef<string | null>(null);
   useEffect(() => {
-    if (initialMessage && initialMessageSentRef.current !== `${conversation.id}:${initialMessage}`) {
+    if (initialMessage && initialMessageSentRef.current !== `${conversation.id}:${initialMessage}` && messages.length === 0) {
       initialMessageSentRef.current = `${conversation.id}:${initialMessage}`;
       const timer = setTimeout(() => handleSendRef.current(initialMessage), 150);
       return () => clearTimeout(timer);
     }
-  }, [conversation.id, initialMessage]);
+  }, [conversation.id, initialMessage, messages.length]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
