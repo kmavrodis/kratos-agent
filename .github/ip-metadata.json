@@ -1,0 +1,62 @@
+{
+  "name": "Kratos Agent — Production-Ready AI Agent Reference Architecture on Azure",
+  "description": "Extensible AI agent platform with modular skill system, multi-use-case support (retail banking, insurance, wealth management), and one-command Azure deployment. Built on GitHub Copilot SDK and Microsoft Foundry with a Next.js frontend, FastAPI backend, MCP-based skills, and declarative use-case configuration.",
+  "maturity": "Silver",
+  "region": "EMEA",
+  "industry": "Cross",
+  "owner": "kmavrodis",
+  "pattern": [
+    "AI/ML",
+    "Application Innovation",
+    "Cloud Native"
+  ],
+  "services": [
+    "Azure OpenAI",
+    "Azure AI Foundry",
+    "Azure AI Search",
+    "Azure API Management",
+    "Azure Container Apps",
+    "Azure Cosmos DB",
+    "Azure Container Registry",
+    "Azure Key Vault",
+    "Azure Storage",
+    "Azure Monitor",
+    "Azure Application Insights",
+    "Azure Log Analytics",
+    "Azure Static Web Apps",
+    "Azure Virtual Network",
+    "Bing Search"
+  ],
+  "tags": [
+    "multi-agent",
+    "copilot-sdk",
+    "mcp",
+    "skills",
+    "fastapi",
+    "nextjs",
+    "container-apps",
+    "foundry",
+    "hosted-agent",
+    "opentelemetry",
+    "sse-streaming",
+    "cosmos-db",
+    "managed-identity",
+    "azd",
+    "reference-architecture"
+  ],
+  "version": "1.0.0",
+  "createdDate": "2025-01-15",
+  "lastUpdated": "2026-05-13",
+  "license": "MIT",
+  "repository": {
+    "url": "https://github.com/kmavrodis/kratos-agent",
+    "branch": "main"
+  },
+  "documentation": {
+    "readme": "https://github.com/kmavrodis/kratos-agent/blob/main/README.md"
+  },
+  "contacts": {
+    "technical": ["kmavrodis"],
+    "business": ["kmavrodis"]
+  }
+}
