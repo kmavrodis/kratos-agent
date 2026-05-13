@@ -18,6 +18,34 @@ One-command deploy (`azd up`) provisions 15+ Azure services, builds containers, 
 
 ---
 
+## Screenshots
+
+<div align="center">
+
+### Chat Interface
+Conversational UI with persona switching, suggested prompts, and live skill indicators.
+
+<img src="docs/static/img/chat-ui.png" alt="Chat Interface" width="800">
+
+### Agent Manager — Skills
+Configure, toggle, and manage MCP skills per agent persona — no redeploy needed.
+
+<img src="docs/static/img/agent-manager-skills.png" alt="Agent Manager — Skills" width="800">
+
+### Agent Manager — APM Packages
+Install remote skill packages and MCP servers from the curated registry with one click.
+
+<img src="docs/static/img/agent-manager-apm.png" alt="Agent Manager — APM Packages" width="800">
+
+### PDF Wealth Report Generation *(example)*
+One example of what the agent can produce: the wealth management persona generates branded, multi-page PDF reports with charts — rendered via Playwright and served as downloadable files.
+
+<img src="docs/static/img/wealth-report.png" alt="PDF Wealth Report Generation" width="800">
+
+</div>
+
+---
+
 ## Architecture
 
 ```
