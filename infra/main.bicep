@@ -189,6 +189,7 @@ module agentService './modules/agent-service.bicep' = {
     containerAppsEnvId: containerAppsEnv.outputs.id
     containerRegistryName: containerRegistry.outputs.name
     appInsightsConnectionString: appInsights.outputs.connectionString
+    appInsightsResourceId: appInsights.outputs.id
     cosmosDbEndpoint: cosmosDb.outputs.endpoint
     aiSearchEndpoint: aiSearch.outputs.endpoint
     keyVaultUri: keyVault.outputs.uri
@@ -238,6 +239,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     aiServicesName: aiFoundry.outputs.name
     keyVaultName: keyVault.outputs.name
     storageAccountName: blobStorage.outputs.name
+    appInsightsName: appInsights.outputs.name
     principalId: principalId
   }
 }

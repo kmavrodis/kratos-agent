@@ -1,0 +1,14 @@
+{
+  "name": "claim-intake-no-evidence",
+  "category": "edge_case",
+  "description": "New claim without supporting documents — agent must triage then pause to request evidence before running damage/fraud/pre-assessment.",
+  "input_message": "Maria Schneider was in a collision yesterday and wants to file an auto claim.",
+  "input_data": {
+    "customer": "Maria Schneider",
+    "claim_type": "auto_collision",
+    "documents_attached": 0
+  },
+  "expected_behavior": "Loads customer via crm. Calls claims-mgmt and runs Triage. When evidence check finds zero documents, pauses the pipeline and asks Maria to upload photos / police report / repair estimate before continuing. Does NOT proceed to damage assessment, fraud, or pre-assessment without evidence.",
+  "expected_tool_calls": ["crm", "claims-mgmt"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "catastrophe-event-guidance",
+  "category": "standard",
+  "description": "Active storm guidance — agent should combine rag-search for internal procedures with web-search for current event details.",
+  "input_message": "Check the latest storm guidance affecting auto and property claims in Texas.",
+  "input_data": {
+    "region": "Texas",
+    "event_type": "storm"
+  },
+  "expected_behavior": "Calls rag-search for internal catastrophe procedures and web-search for current storm details. Cites both internal guidance and external sources, distinguishing them clearly.",
+  "expected_tool_calls": ["rag-search", "web-search"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

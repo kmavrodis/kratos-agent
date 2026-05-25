@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from opentelemetry import trace
 from sse_starlette.sse import EventSourceResponse
 
 from app.models import (
@@ -62,6 +63,18 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
     cosmos = request.app.state.cosmos_service
     foundry_proxy = request.app.state.foundry_proxy
 
+    # Stamp kratos attributes on the current (HTTP) span so every request is
+    # filterable by use-case, conversation, and optional eval run.
+    eval_run_id = request.headers.get("x-kratos-eval-run-id") or ""
+    request.state.eval_run_id = eval_run_id
+    _span = trace.get_current_span()
+    if body.useCase:
+        _span.set_attribute("kratos.use_case", str(body.useCase))
+    if body.conversationId:
+        _span.set_attribute("kratos.conversation_id", str(body.conversationId))
+    if eval_run_id:
+        _span.set_attribute("kratos.eval_run_id", eval_run_id)
+
     async def event_generator():  # noqa: ANN202
         start_time = time.monotonic()
         total_tool_calls = 0
@@ -100,6 +113,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 use_case=body.useCase,
                 system_prompt=system_prompt,
                 agent_session_id=agent_session_id,
+                eval_run_id=eval_run_id or None,
             ):
                 event_name = event_dict.get("event")
                 event_data = event_dict.get("data", {})

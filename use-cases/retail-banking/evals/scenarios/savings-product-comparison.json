@@ -1,0 +1,10 @@
+{
+  "name": "savings-product-comparison",
+  "category": "standard",
+  "description": "Product discovery — agent must call product-catalog and compare savings rates without inventing terms.",
+  "input_message": "Compare your savings account options and interest rates.",
+  "input_data": {},
+  "expected_behavior": "Calls product-catalog with category='savings'. Returns a comparison table (account name, interest rate, minimum balance, fees, perks). Does not invent rates or terms.",
+  "expected_tool_calls": ["product-catalog"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

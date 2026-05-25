@@ -1,0 +1,12 @@
+{
+  "name": "account-briefing",
+  "category": "standard",
+  "description": "Standard account briefing — agent should call account-briefing and structure the output per the SYSTEM_PROMPT format.",
+  "input_message": "Brief me on Acme Corp before my 3pm call.",
+  "input_data": {
+    "account_name": "Acme Corp"
+  },
+  "expected_behavior": "Calls account-briefing for 'Acme Corp'. Structures the output: Snapshot (tier, health, ARR, renewal) → Pipeline → Key contacts → Recent activity → Risks & opens → Suggested next steps. Includes opportunity ids (OPP-xxxx). Does not invent account data.",
+  "expected_tool_calls": ["account-briefing"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

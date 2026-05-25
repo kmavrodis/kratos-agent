@@ -1,0 +1,10 @@
+{
+  "name": "web-search-ai-trends",
+  "category": "standard",
+  "description": "Open-ended web research — agent must call web-search and cite sources.",
+  "input_message": "Search the web for the latest AI trends in 2026 and summarize the top 5.",
+  "input_data": {},
+  "expected_behavior": "Calls web-search. Returns the top 5 trends as a numbered list with a one-line description and a citation per item. Does not fabricate trends.",
+  "expected_tool_calls": ["web-search"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

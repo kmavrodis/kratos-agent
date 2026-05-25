@@ -439,6 +439,72 @@ The UI shows real-time execution details per message:
 
 ---
 
+## Evals & Tracing
+
+Per-use-case evaluation harness and an App-Insights waterfall trace inspector — both surfaced as admin tabs in the UI and exposed via CLI for CI.
+
+### Per-Use-Case Eval Scenarios
+
+Each use-case carries its own eval suite under `use-cases/<name>/evals/`:
+
+```
+use-cases/insurance/evals/
+  eval_config.json          ← evaluator list + judge model
+  scenarios/                ← committed JSON scenarios
+    load-customer-profile.json
+    policy-wording-lookup.json
+    ...
+  results/                  ← run output (gitignored)
+```
+
+Each scenario declares an `input_message`, `expected_behavior`, `expected_tool_calls`, and the Foundry evaluator set to apply (e.g. `Relevance`, `Coherence`, `TaskAdherence`, `IntentResolution`, `ToolCallAccuracy`).
+
+### Two Eval Modes
+
+| Mode | Pattern | Speed | Use |
+|------|---------|-------|-----|
+| **validation** | In-process: invoke agent sequentially → score locally with `azure-ai-evaluation` evaluators | Seconds | Fast feedback loop, CI smoke |
+| **foundry** | Full Foundry eval pipeline (same evaluators, hosted scoring) | Minutes | Pre-release runs, shareable Foundry portal links |
+
+Both modes follow the **two-phase invoke + score** pattern from the `foundry-evals` awesome-gbb skill: Phase 1 invokes the hosted agent via `AIProjectClient(...).get_openai_client(agent_name=...)` with a warmup retry loop for cold starts; Phase 2 scores the recorded turns with the evaluators configured in `eval_config.json`.
+
+### LLM-Generated Scenarios
+
+The "Generate Scenarios" modal (or `POST /api/use-cases/{uc}/evals/scenarios/generate`) reads the use-case `SYSTEM_PROMPT.md` and the loaded skill catalog and asks the judge model to draft realistic conversations that exercise the agent. Each draft is hand-reviewable before commit. Industry-realism canons from `threadlight-demo-data-factory` are injected for FSI-shaped use-cases (`insurance`, `retail-banking`, `wealth-management`) so generated data feels plausible.
+
+### Traces Panel
+
+The "Traces" admin tab queries App Insights via `LogsQueryClient` (resource-scoped) and renders a per-operation waterfall classified into `llm / agent / tool / skill / http / platform / error` spans. Filterable by `use_case`, `conversation_id`, `run_id`, and lookback window. Identical UX to `threadlight-vnext`.
+
+Spans carry three custom attributes for the filter:
+
+- `kratos.use_case`
+- `kratos.conversation_id`
+- `kratos.eval_run_id` (only set during eval runs)
+
+These are stamped in `copilot_agent.py` and forwarded to the hosted agent via `x-kratos-*` headers from `foundry_agent_proxy.py`.
+
+### CLI
+
+For CI / scripting:
+
+```bash
+# Generate (and optionally save) scenarios
+BACKEND_URL=https://kratos-be.example.com \
+  python scripts/generate_evals.py --use-case insurance --count 5 --save
+
+# Run validation evals
+python scripts/run_evals.py --use-case insurance --mode validation
+
+# Run hosted Foundry evals
+python scripts/run_evals.py --use-case insurance --mode foundry
+
+# Inspect traces
+python scripts/fetch_traces.py --conversation-id abc123
+```
+
+---
+
 ## Security
 
 | Control | Implementation |

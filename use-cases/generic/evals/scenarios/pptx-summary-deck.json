@@ -1,0 +1,13 @@
+{
+  "name": "pptx-summary-deck",
+  "category": "standard",
+  "description": "Generate a short slide deck — agent should chain web-search → pptx-editor and save to /tmp.",
+  "input_message": "Build a 5-slide deck summarising the current state of multi-agent LLM frameworks (intro, top 3 frameworks, takeaway).",
+  "input_data": {
+    "slide_count": 5,
+    "topic": "multi-agent LLM frameworks"
+  },
+  "expected_behavior": "Calls web-search to gather current framework names + facts. Calls pptx-editor (or docx-editor as fallback) to produce a 5-slide deck. Saves to /tmp and references the path. Does not fabricate framework names.",
+  "expected_tool_calls": ["web-search", "pptx-editor"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

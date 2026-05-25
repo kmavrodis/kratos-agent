@@ -1,0 +1,13 @@
+{
+  "name": "lost-card-block",
+  "category": "edge_case",
+  "description": "Lost-card emergency — agent must call card-services with block intent and confirm next steps. Sensitive data must be masked.",
+  "input_message": "I lost my debit card on the train, can you block it immediately?",
+  "input_data": {
+    "card_type": "debit",
+    "lost_location": "train"
+  },
+  "expected_behavior": "Calls card-services to block the debit card. Confirms the block to the user, explains how a replacement is sent, never displays the full card number (masks to last 4 digits). Suggests reviewing recent transactions for fraud.",
+  "expected_tool_calls": ["card-services"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

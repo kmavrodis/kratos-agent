@@ -1,0 +1,13 @@
+{
+  "name": "transaction-history",
+  "category": "standard",
+  "description": "Last 10 transactions — agent calls transaction-history skill and renders the list.",
+  "input_message": "Show me my last 10 transactions for this month.",
+  "input_data": {
+    "limit": 10,
+    "period": "this_month"
+  },
+  "expected_behavior": "Calls transaction-history with limit=10 and a month-to-date period. Returns the transactions ordered by date with amount, merchant, and category. Does not invent transactions.",
+  "expected_tool_calls": ["transaction-history"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

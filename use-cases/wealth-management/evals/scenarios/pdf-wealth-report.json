@@ -1,0 +1,14 @@
+{
+  "name": "pdf-wealth-report",
+  "category": "standard",
+  "description": "Generate a branded PDF wealth report — agent should chain crm → portfolio-review → pdf-wealth-report.",
+  "input_message": "Generate a PDF Wealth Report for my customer Pete Mitchell. Include charts.",
+  "input_data": {
+    "client_name": "Pete Mitchell",
+    "format": "pdf",
+    "include_charts": true
+  },
+  "expected_behavior": "Loads client via crm, fetches portfolio, runs portfolio-review for performance and risk metrics, then calls pdf-wealth-report to produce a branded multi-page PDF. References the file path in the response so the user can download it.",
+  "expected_tool_calls": ["crm", "portfolio-review", "pdf-wealth-report"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

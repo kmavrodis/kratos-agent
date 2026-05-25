@@ -1,0 +1,12 @@
+{
+  "name": "load-customer-profile",
+  "category": "standard",
+  "description": "Standard CRM lookup — agent should call the crm skill to fetch a customer profile and summarize active policies.",
+  "input_message": "Load the profile for customer John Doe and summarize his active policies.",
+  "input_data": {
+    "expected_customer": "John Doe"
+  },
+  "expected_behavior": "Calls crm skill with the customer name and domain='insurance', then summarizes the returned policies (type, coverage period, premium, status). Does not invent any policy data.",
+  "expected_tool_calls": ["crm"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

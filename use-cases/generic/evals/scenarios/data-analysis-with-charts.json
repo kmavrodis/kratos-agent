@@ -1,0 +1,10 @@
+{
+  "name": "data-analysis-with-charts",
+  "category": "standard",
+  "description": "Combine web-search + code-interpreter to analyse real data and produce a chart.",
+  "input_message": "Find and analyse recent data on global cloud spending trends this year and produce a chart.",
+  "input_data": {},
+  "expected_behavior": "Calls web-search to gather recent cloud-spending figures, then code-interpreter to chart them. Saves the chart to /tmp and references the path. Includes a short written summary of the trend.",
+  "expected_tool_calls": ["web-search", "code-interpreter"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

@@ -33,7 +33,7 @@ from opentelemetry import trace
 from app.config import Settings
 from app.models import ContentEvent, ErrorEvent, ThoughtEvent, ToolCallEvent, UsageEvent, UserInputRequestEvent
 from app.observability import operation_duration_histogram, token_usage_histogram
-from app.services.skill_tools import ALL_TOOLS
+from app.services.skill_tools import ALL_TOOLS, _ctx_conversation_id, _ctx_eval_run_id, _ctx_use_case
 
 if TYPE_CHECKING:
     from app.services.cosmos_service import CosmosService
@@ -595,8 +595,17 @@ class CopilotAgent:
         conversation_id: str,
         attachments: list[dict] | None = None,
         sdk_session_id: str | None = None,
+        use_case: str = "",
+        eval_run_id: str | None = None,
     ) -> AsyncGenerator[ThoughtEvent | ToolCallEvent | ContentEvent | ErrorEvent | UserInputRequestEvent, None]:
         """Send a message and stream SDK events as typed SSE events."""
+
+        # Propagate kratos context into tool spans via ContextVars
+        _ctx_conversation_id.set(conversation_id)
+        if use_case:
+            _ctx_use_case.set(use_case)
+        if eval_run_id:
+            _ctx_eval_run_id.set(eval_run_id)
 
         _content_recording = (
             os.environ.get("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "").lower() == "true"
@@ -615,12 +624,17 @@ class CopilotAgent:
             "gen_ai.agents.name": "kratos-agent",
             "gen_ai.agent.version": "0.1.0",
             "gen_ai.conversation.id": conversation_id,
+            "kratos.conversation_id": conversation_id,
             "server.address": "api.githubcopilot.com" if _local_mode else self.settings.foundry_endpoint,
         }
         with tracer.start_as_current_span(
             "invoke_agent kratos-agent",
             attributes=_invoke_span_attrs,
         ) as span:
+            if use_case:
+                span.set_attribute("kratos.use_case", str(use_case))
+            if eval_run_id:
+                span.set_attribute("kratos.eval_run_id", str(eval_run_id))
             queue: asyncio.Queue = asyncio.Queue()
             self._queues[conversation_id] = queue
             self._tool_counters[conversation_id] = 0
@@ -776,8 +790,13 @@ class CopilotAgent:
                                         "gen_ai.tool.call.id": str(tool_call_id),
                                         "gen_ai.tool.type": "function",
                                         "gen_ai.tool.call.arguments": raw_input_str[:2000],
+                                        "kratos.conversation_id": cid,
                                     },
                                 )
+                                if use_case:
+                                    tool_span.set_attribute("kratos.use_case", str(use_case))
+                                if eval_run_id:
+                                    tool_span.set_attribute("kratos.eval_run_id", str(eval_run_id))
                                 _tool_spans[tool_name] = tool_span
                                 _tool_span_stack.append((tool_name, tool_span))
                                 # Emit descriptive thought (not just "Calling tool: X")

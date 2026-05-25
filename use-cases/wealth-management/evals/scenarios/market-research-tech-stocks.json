@@ -1,0 +1,13 @@
+{
+  "name": "market-research-tech-stocks",
+  "category": "standard",
+  "description": "Real-time market data via web-search — agent should NOT invent stock performance numbers.",
+  "input_message": "What are the top performing tech stocks this quarter? Give me a quick brief I can take into a client meeting.",
+  "input_data": {
+    "sector": "technology",
+    "period": "current_quarter"
+  },
+  "expected_behavior": "Calls web-search for current quarter tech sector performance. Returns a short list of top performers with the source. Adds a brief commentary suitable for a client meeting (1-2 sentences per name). Does not fabricate prices or returns.",
+  "expected_tool_calls": ["web-search"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

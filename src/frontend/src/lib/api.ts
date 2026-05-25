@@ -1,5 +1,12 @@
 import { getApiUrl } from "@/lib/config";
-import type { Attachment } from "@/types";
+import type {
+  Attachment,
+  EvalScenario,
+  EvalRun,
+  EvalMode,
+  TraceList,
+  TraceOperation,
+} from "@/types";
 
 /**
  * Send a message to the agent and receive streaming SSE events.
@@ -522,4 +529,122 @@ export async function applyAnalysisFix(
     throw new Error(err.detail || `Apply fix failed: ${response.status}`);
   }
   return response.json();
+}
+
+// ─── Evals ─────────────────────────────────────────────────────────────────
+
+async function readJson<T>(response: Response, errPrefix: string): Promise<T> {
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`${errPrefix} (${response.status})${body ? `: ${body}` : ""}`);
+  }
+  return response.json();
+}
+
+export async function listEvalScenarios(useCase: string): Promise<EvalScenario[]> {
+  const r = await fetch(
+    `${getApiUrl()}/api/use-cases/${encodeURIComponent(useCase)}/evals/scenarios`,
+  );
+  const data = await readJson<{ scenarios: EvalScenario[] }>(r, "List scenarios failed");
+  return data.scenarios ?? [];
+}
+
+export async function generateEvalScenarios(
+  useCase: string,
+  body: { count?: number; persist?: boolean; instructions?: string } = {},
+): Promise<{ scenarios: EvalScenario[]; persisted: boolean }> {
+  const r = await fetch(
+    `${getApiUrl()}/api/use-cases/${encodeURIComponent(useCase)}/evals/scenarios/generate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ count: 10, persist: false, instructions: "", ...body }),
+    },
+  );
+  return readJson(r, "Generate scenarios failed");
+}
+
+export async function upsertEvalScenario(
+  useCase: string,
+  scenario: EvalScenario,
+): Promise<EvalScenario> {
+  const r = await fetch(
+    `${getApiUrl()}/api/use-cases/${encodeURIComponent(useCase)}/evals/scenarios/${encodeURIComponent(scenario.name)}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(scenario),
+    },
+  );
+  return readJson(r, "Save scenario failed");
+}
+
+export async function deleteEvalScenario(useCase: string, name: string): Promise<void> {
+  const r = await fetch(
+    `${getApiUrl()}/api/use-cases/${encodeURIComponent(useCase)}/evals/scenarios/${encodeURIComponent(name)}`,
+    { method: "DELETE" },
+  );
+  if (!r.ok && r.status !== 404) {
+    throw new Error(`Delete scenario failed: ${r.status}`);
+  }
+}
+
+export async function startEvalRun(
+  useCase: string,
+  body: { mode: EvalMode; scenarios?: string[] },
+): Promise<EvalRun> {
+  const r = await fetch(
+    `${getApiUrl()}/api/use-cases/${encodeURIComponent(useCase)}/evals/run`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return readJson(r, "Start eval run failed");
+}
+
+export async function listEvalRuns(useCase: string): Promise<EvalRun[]> {
+  const r = await fetch(
+    `${getApiUrl()}/api/use-cases/${encodeURIComponent(useCase)}/evals/runs`,
+  );
+  const data = await readJson<{ runs: EvalRun[] }>(r, "List runs failed");
+  return data.runs ?? [];
+}
+
+export async function getEvalRun(useCase: string, runId: string): Promise<EvalRun> {
+  const r = await fetch(
+    `${getApiUrl()}/api/use-cases/${encodeURIComponent(useCase)}/evals/runs/${encodeURIComponent(runId)}`,
+  );
+  return readJson(r, "Get run failed");
+}
+
+// ─── Traces ────────────────────────────────────────────────────────────────
+
+export async function listTraceOperations(filters: {
+  useCase?: string;
+  conversationId?: string;
+  evalRunId?: string;
+  lookbackHours?: number;
+  maxOperations?: number;
+}): Promise<TraceList> {
+  const params = new URLSearchParams();
+  if (filters.useCase) params.set("use_case", filters.useCase);
+  if (filters.conversationId) params.set("conversation_id", filters.conversationId);
+  if (filters.evalRunId) params.set("eval_run_id", filters.evalRunId);
+  if (filters.lookbackHours) params.set("hours", String(filters.lookbackHours));
+  if (filters.maxOperations) params.set("limit", String(filters.maxOperations));
+  const qs = params.toString();
+  const r = await fetch(`${getApiUrl()}/api/traces/operations${qs ? `?${qs}` : ""}`);
+  return readJson(r, "List trace operations failed");
+}
+
+export async function getTraceOperation(
+  operationId: string,
+  lookbackHours = 168,
+): Promise<TraceOperation> {
+  const r = await fetch(
+    `${getApiUrl()}/api/traces/operations/${encodeURIComponent(operationId)}?hours=${lookbackHours}`,
+  );
+  return readJson(r, "Get trace operation failed");
 }

@@ -16,6 +16,9 @@ param keyVaultName string
 @description('Storage Account name for skills blob storage')
 param storageAccountName string
 
+@description('Application Insights resource name (for Monitoring Reader RBAC)')
+param appInsightsName string = ''
+
 @description('Deploying user principal ID')
 param principalId string = ''
 
@@ -28,6 +31,7 @@ var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var azureAIDeveloper = '64702f94-c441-49e6-a78b-ef80e0188fee'
 var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var monitoringReader = '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
 
 // ─── References ───
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' existing = {
@@ -48,6 +52,10 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' existing =
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: storageAccountName
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = if (!empty(appInsightsName)) {
+  name: appInsightsName
 }
 
 // ─── Agent Service → Cosmos DB ───
@@ -137,6 +145,17 @@ resource aiServicesStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
     principalId: aiServices.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ─── Agent Service → Application Insights (Monitoring Reader for Traces panel KQL) ───
+resource agentAppInsightsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(appInsightsName)) {
+  name: guid(appInsights.id, agentServicePrincipalId, monitoringReader)
+  scope: appInsights
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', monitoringReader)
+    principalId: agentServicePrincipalId
     principalType: 'ServicePrincipal'
   }
 }

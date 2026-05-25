@@ -1,0 +1,10 @@
+{
+  "name": "account-balance-lookup",
+  "category": "standard",
+  "description": "Standard checking-account balance lookup via account-lookup skill.",
+  "input_message": "What is my current checking account balance?",
+  "input_data": {},
+  "expected_behavior": "Calls account-lookup skill. Returns the balance with currency, formatted clearly. Masks account number if displayed. Never fabricates balance.",
+  "expected_tool_calls": ["account-lookup"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

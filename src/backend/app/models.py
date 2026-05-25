@@ -291,3 +291,175 @@ class MCPConfigResponse(BaseModel):
 class MCPConfigUpdate(BaseModel):
     """Payload for updating the MCP servers config."""
     servers: dict
+
+
+# ─── Evals ───────────────────────────────────────────────────────────────────
+
+
+class ScenarioCategory(str, Enum):
+    """Category of evaluation scenario — mirrors the threadlight-vnext taxonomy."""
+
+    STANDARD = "standard"
+    EDGE_CASE = "edge_case"
+    ERROR_HANDLING = "error_handling"
+    BOUNDARY = "boundary"
+    COMPLIANCE = "compliance"
+
+
+class EvalScenario(BaseModel):
+    """A single evaluation scenario for a use-case."""
+
+    name: str = Field(..., description="Unique slug, used as filename (lowercase, hyphenated)")
+    category: ScenarioCategory = ScenarioCategory.STANDARD
+    description: str = Field(default="", description="What this scenario tests")
+    input_message: str = Field(..., description="The user message sent to the agent")
+    input_data: dict[str, Any] = Field(default_factory=dict, description="Optional structured context")
+    expected_behavior: str = Field(default="", description="Plain-language expected behavior")
+    expected_tool_calls: list[str] = Field(
+        default_factory=list,
+        description="Tool names the agent is expected to call (without the mcp-tools- prefix)",
+    )
+    evaluators: list[str] = Field(
+        default_factory=lambda: ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"],
+        description="Evaluator names to apply",
+    )
+
+
+class EvalScenarioList(BaseModel):
+    scenarios: list[EvalScenario]
+
+
+class GenerateScenariosRequest(BaseModel):
+    """Body for the LLM-generation endpoint."""
+    count: int = Field(default=10, ge=1, le=24, description="Number of scenarios to draft")
+    persist: bool = Field(default=False, description="When True, persist the generated scenarios to blob")
+    instructions: str = Field(
+        default="",
+        description="Optional extra guidance to inject into the generator prompt",
+        max_length=4000,
+    )
+
+
+class GenerateScenariosResponse(BaseModel):
+    scenarios: list[EvalScenario]
+    persisted: bool = False
+
+
+class EvalMode(str, Enum):
+    """Eval execution mode."""
+
+    VALIDATION = "validation"  # in-process invoke only, no Foundry evaluators
+    FOUNDRY = "foundry"        # two-phase invoke + score via Foundry evaluators
+
+
+class EvalRunStatus(str, Enum):
+    PENDING = "pending"
+    INVOKING = "invoking"
+    SCORING = "scoring"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class EvalRunRequest(BaseModel):
+    """Body to start an eval run."""
+    mode: EvalMode = EvalMode.VALIDATION
+    scenarios: list[str] = Field(
+        default_factory=list,
+        description="Subset of scenario names to run. Empty = all scenarios for the use-case.",
+    )
+
+
+class ScenarioResult(BaseModel):
+    """Per-scenario invocation + score record."""
+    scenario: str
+    query: str
+    response: str = ""
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    status: str = "completed"
+    error: str = ""
+    duration_ms: int = 0
+    scores: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class FoundryEvalSummary(BaseModel):
+    """Summary block from Foundry evaluators."""
+    eval_id: str = ""
+    eval_run_id: str = ""
+    run_status: str = ""
+    result_counts: dict[str, int] = Field(default_factory=dict)
+    per_testing_criteria_results: list[dict[str, Any]] = Field(default_factory=list)
+    output_items: list[dict[str, Any]] = Field(default_factory=list)
+    report_url: str = ""
+
+
+class EvalRun(BaseModel):
+    """An eval run record."""
+    run_id: str
+    use_case: str
+    mode: EvalMode
+    status: EvalRunStatus
+    scenarios: list[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+    started_by: str = ""
+    progress: str = ""
+    error: str = ""
+    results: list[ScenarioResult] = Field(default_factory=list)
+    foundry: FoundryEvalSummary | None = None
+
+
+class EvalRunList(BaseModel):
+    runs: list[EvalRun]
+
+
+# ─── Traces ──────────────────────────────────────────────────────────────────
+
+
+class TraceSpan(BaseModel):
+    """A single span in an operation waterfall."""
+    id: str
+    parent_id: str = ""
+    name: str
+    duration_ms: float = 0
+    offset_ms: float = 0
+    timestamp: str = ""
+    success: bool = True
+    result_code: str = ""
+    type: str = ""
+    cloud_role: str = ""
+    category: str = "other"  # llm | agent | agent_internal | tool | skill | http | platform | error | other
+    depth: int = 0
+    attributes: dict[str, str | int | float] = Field(default_factory=dict)
+
+
+class TraceLog(BaseModel):
+    timestamp: str = ""
+    message: str = ""
+    severity: int = 0
+    cloud_role: str = ""
+
+
+class TraceOperation(BaseModel):
+    """One operation (root span + its descendants)."""
+    operation_id: str
+    timestamp: str = ""
+    total_duration_ms: float = 0
+    span_count: int = 0
+    use_case: str = ""
+    conversation_id: str = ""
+    eval_run_id: str = ""
+    spans: list[TraceSpan] = Field(default_factory=list)
+    logs: list[TraceLog] = Field(default_factory=list)
+
+
+class TraceSummary(BaseModel):
+    total_operations: int = 0
+    avg_latency_ms: float = 0
+    total_tokens: int = 0
+    models_used: list[str] = Field(default_factory=list)
+    error: str = ""
+
+
+class TraceList(BaseModel):
+    operations: list[TraceOperation]
+    summary: TraceSummary

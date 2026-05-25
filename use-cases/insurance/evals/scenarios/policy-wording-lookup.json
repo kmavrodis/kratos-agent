@@ -1,0 +1,12 @@
+{
+  "name": "policy-wording-lookup",
+  "category": "standard",
+  "description": "RAG search for internal policy wording — agent should call rag-search to retrieve coverage terms.",
+  "input_message": "What does our homeowners policy say about water damage exclusions?",
+  "input_data": {
+    "topic": "water damage exclusions"
+  },
+  "expected_behavior": "Calls rag-search with index_name='ins-knowledge-base'. Quotes specific policy language and cites the source document. Does not improvise legal interpretations.",
+  "expected_tool_calls": ["rag-search"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

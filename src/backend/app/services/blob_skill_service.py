@@ -129,7 +129,7 @@ class BlobSkillService:
         existing = set(await self.list_use_cases())
         seeded: list[str] = []
         # APM-materialised output must never leak into blob.
-        _skip_dir_parts = {"apm_modules", ".github", "__pycache__", ".pytest_cache"}
+        _skip_dir_parts = {"apm_modules", ".github", "__pycache__", ".pytest_cache", "results"}
         for uc_dir in sorted(self.local_base_dir.iterdir()):
             if not uc_dir.is_dir() or uc_dir.name in existing:
                 continue
