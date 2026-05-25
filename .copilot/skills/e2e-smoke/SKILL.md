@@ -30,6 +30,7 @@ load per use-case, chat round-trips, evals API, and traces API.
 | `04-evals.spec.ts` | `/api/use-cases/{uc}/evals/runs` | At least one completed validation run exists; per-run detail returns scenarios array |
 | `05-traces.spec.ts` | `/api/traces/operations` | ≥1 operation in lookback window; per-operation detail returns spans |
 | `06-ui.spec.ts` | browser | Frontend loads, use-case picker is interactive, EvalsAdminPanel + TracesAdminPanel tabs render without JS errors |
+| `07-regression.spec.ts` | pre-existing core | `/api/use-cases` schema + all 5 use-cases present, `/api/settings` Foundry config, conversation CRUD round-trip, `/api/admin/skills` catalogue + detail, `/api/admin/system-prompt` content. Guards against regressions in surfaces the evals/tracing branch did NOT touch |
 
 ## Inputs (env vars)
 
