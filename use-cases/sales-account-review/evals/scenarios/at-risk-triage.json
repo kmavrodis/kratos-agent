@@ -1,0 +1,10 @@
+{
+  "name": "at-risk-triage",
+  "category": "standard",
+  "description": "At-risk account triage — agent calls at-risk-signals and prioritizes per the SYSTEM_PROMPT rules.",
+  "input_message": "Which of my accounts are at risk right now and why?",
+  "input_data": {},
+  "expected_behavior": "Asks for user id once if not in context. Calls at-risk-signals for the owner. Prioritizes: Red health first, then Yellow with renewal <90 days, then any account with open P1 cases. For each at-risk account, gives the reason explicitly (don't soften) and suggests 1-3 next steps.",
+  "expected_tool_calls": ["at-risk-signals"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

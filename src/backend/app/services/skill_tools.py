@@ -9,6 +9,7 @@ import logging
 import os
 import subprocess
 import time
+from contextvars import ContextVar
 from pathlib import Path
 
 import httpx
@@ -21,6 +22,26 @@ from opentelemetry import trace
 from pydantic import BaseModel, Field
 
 tracer = trace.get_tracer(__name__)
+
+# ─── Kratos context vars — set by copilot_agent.run() so tool spans carry the ─
+# ─── same kratos attributes as the parent invoke_agent span.               ─────
+
+_ctx_use_case: ContextVar[str] = ContextVar("kratos_use_case", default="")
+_ctx_conversation_id: ContextVar[str] = ContextVar("kratos_conversation_id", default="")
+_ctx_eval_run_id: ContextVar[str] = ContextVar("kratos_eval_run_id", default="")
+
+
+def _set_kratos_attrs(span: trace.Span) -> None:
+    """Stamp kratos.* attributes on *span* from the active context vars."""
+    use_case = _ctx_use_case.get()
+    if use_case:
+        span.set_attribute("kratos.use_case", use_case)
+    conv_id = _ctx_conversation_id.get()
+    if conv_id:
+        span.set_attribute("kratos.conversation_id", conv_id)
+    eval_run_id = _ctx_eval_run_id.get()
+    if eval_run_id:
+        span.set_attribute("kratos.eval_run_id", eval_run_id)
 
 # ─── Shared singletons — avoid recreating expensive objects on every tool call ─
 
@@ -52,7 +73,8 @@ class WebSearchParams(BaseModel):
 @define_tool(description="Real-time internet search for current information and market data")
 async def web_search(params: WebSearchParams) -> dict:
     """Search the internet using Foundry web_search_preview tool."""
-    with tracer.start_as_current_span("skill.web_search"):
+    with tracer.start_as_current_span("skill.web_search") as span:
+        _set_kratos_attrs(span)
         t0 = time.monotonic()
         query = params.query
         logger.info("web_search called: query=%r", query)
@@ -135,7 +157,8 @@ class RAGSearchParams(BaseModel):
 @define_tool(description="Azure AI Search knowledge base for grounded answers from internal documents")
 async def rag_search(params: RAGSearchParams) -> dict:
     """Search the Azure AI Search knowledge base."""
-    with tracer.start_as_current_span("skill.rag_search"):
+    with tracer.start_as_current_span("skill.rag_search") as span:
+        _set_kratos_attrs(span)
         ai_search_endpoint = os.environ.get("AZURE_AI_SEARCH_ENDPOINT", "")
         if not ai_search_endpoint:
             return {"error": "AZURE_AI_SEARCH_ENDPOINT not configured"}
@@ -177,7 +200,8 @@ class CodeInterpreterParams(BaseModel):
 @define_tool(description="Sandboxed Python execution for computation, data analysis, and code generation")
 async def code_interpreter(params: CodeInterpreterParams) -> dict:
     """Execute Python code in a sandboxed subprocess."""
-    with tracer.start_as_current_span("skill.code_interpreter"):
+    with tracer.start_as_current_span("skill.code_interpreter") as span:
+        _set_kratos_attrs(span)
         try:
             result = subprocess.run(
                 ["python", "-c", params.code],
@@ -209,7 +233,8 @@ class FoundryAgentParams(BaseModel):
 @define_tool(description="Delegate complex or specialized tasks to Microsoft Foundry sub-agents")
 async def foundry_agent(params: FoundryAgentParams) -> dict:
     """Delegate a task to a Microsoft Foundry specialized sub-agent."""
-    with tracer.start_as_current_span("skill.foundry_agent"):
+    with tracer.start_as_current_span("skill.foundry_agent") as span:
+        _set_kratos_attrs(span)
         foundry_endpoint = os.environ.get("FOUNDRY_ENDPOINT", "")
         if not foundry_endpoint:
             return {"error": "FOUNDRY_ENDPOINT not configured"}
@@ -341,7 +366,8 @@ class CRMParams(BaseModel):
 @define_tool(description="Search and retrieve wealth-management or insurance customer profiles and holdings from the CRM system")
 async def crm(params: CRMParams) -> dict:
     """CRM lookup for wealth-management clients or insurance customers."""
-    with tracer.start_as_current_span("skill.crm"):
+    with tracer.start_as_current_span("skill.crm") as span:
+        _set_kratos_attrs(span)
         domain = params.domain.strip().lower()
         action = params.action.strip().lower()
         query = params.query.strip()

@@ -1,0 +1,12 @@
+{
+  "name": "client-profile-summary",
+  "category": "standard",
+  "description": "CRM lookup — agent should call crm to load the client profile and summarize.",
+  "input_message": "Pull up the profile for client Pete Mitchell and summarize his risk appetite and holdings.",
+  "input_data": {
+    "client_name": "Pete Mitchell"
+  },
+  "expected_behavior": "Calls crm.load_from_crm_by_client_fullname with 'Pete Mitchell'. Then crm.get_client_portfolio. Summarizes risk profile (e.g. conservative/balanced/aggressive), total AUM, asset allocation, and notable concentrations. Does not invent positions.",
+  "expected_tool_calls": ["crm"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

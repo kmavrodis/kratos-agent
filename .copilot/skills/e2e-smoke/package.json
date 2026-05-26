@@ -1,0 +1,18 @@
+{
+  "name": "kratos-e2e-smoke",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright e2e smoke tests for kratos-agent (frontend + API + chat + evals + traces)",
+  "type": "module",
+  "scripts": {
+    "install:browsers": "playwright install chromium",
+    "test": "playwright test",
+    "test:api": "SKIP_BROWSER=1 playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

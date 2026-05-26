@@ -67,6 +67,20 @@ class Settings(BaseSettings):
     local_data_dir: str = ".local"
     blob_storage_connection_string: str = ""  # set for Azurite / local emulators
 
+    # ── Evals ────────────────────────────────────────────────────────────
+    # Optional override for the judge model used by azure-ai-evaluation
+    # (defaults to ``gpt-4.1`` per the foundry-evals skill recommendation —
+    # azure-ai-evaluation still expects ``max_tokens`` which gpt-5.x rejects).
+    eval_model: str = "gpt-4.1"
+    # App Insights ARM resource ID for resource-scoped KQL queries used by
+    # the Traces panel. Falls back to ``application_insights_workspace_id``
+    # (workspace-scoped) when the resource ID is not set.
+    application_insights_resource_id: str = ""
+    application_insights_workspace_id: str = ""
+    # Foundry project endpoint used by the eval submitter (overrides the
+    # value already on Settings if set explicitly for evals).
+    eval_foundry_project_endpoint: str = ""
+
     @property
     def is_local_mode(self) -> bool:
         """True when the backend should run without Azure services."""

@@ -171,6 +171,19 @@ After `azd up`, register the agent in the Foundry portal so traces appear in the
 
 This is the only manual step — it cannot be automated because the Foundry Control Plane creates internal metadata linking the APIM API to the tracing pipeline.
 
+### Validating a Deployment
+
+The repo ships a Playwright-based smoke skill at `.copilot/skills/e2e-smoke/` that asserts the **23 critical surfaces** (health, scenarios, chat, evals, traces, UI, regression, interactive UX) of a deployed instance in ~66s. After every deploy:
+
+```bash
+cd .copilot/skills/e2e-smoke
+KRATOS_BACKEND_URL="https://<your-backend>.azurecontainerapps.io" \
+KRATOS_FRONTEND_URL="https://<your-frontend>.azurestaticapps.net" \
+./run.sh
+```
+
+See [`.copilot/skills/e2e-smoke/SKILL.md`](./.copilot/skills/e2e-smoke/SKILL.md) for the spec catalogue, env-var reference, and tips for running just the API or just the UX project.
+
 ---
 
 ## Local Development
@@ -439,6 +452,79 @@ The UI shows real-time execution details per message:
 
 ---
 
+## Evals & Tracing
+
+Per-use-case evaluation harness and an App-Insights waterfall trace inspector — both surfaced as admin tabs in the UI and exposed via CLI for CI.
+
+### Per-Use-Case Eval Scenarios
+
+Each use-case carries its own eval suite under `use-cases/<name>/evals/`:
+
+```
+use-cases/insurance/evals/
+  eval_config.json          ← evaluator list + judge model
+  scenarios/                ← committed JSON scenarios
+    load-customer-profile.json
+    policy-wording-lookup.json
+    ...
+  results/                  ← run output (gitignored)
+```
+
+Each scenario declares an `input_message`, `expected_behavior`, `expected_tool_calls`, and the Foundry evaluator set to apply (e.g. `Relevance`, `Coherence`, `TaskAdherence`, `IntentResolution`, `ToolCallAccuracy`).
+
+### Two Eval Modes
+
+| Mode | Pattern | Speed | Use |
+|------|---------|-------|-----|
+| **validation** | In-process: invoke agent sequentially → score locally with `azure-ai-evaluation` evaluators | Seconds | Fast feedback loop, CI smoke |
+| **foundry** | Full Foundry eval pipeline (same evaluators, hosted scoring) | Minutes | Pre-release runs, shareable Foundry portal links |
+
+Both modes follow the **two-phase invoke + score** pattern from the `foundry-evals` awesome-gbb skill: Phase 1 invokes the hosted agent via `AIProjectClient(...).get_openai_client(agent_name=...)` with a warmup retry loop for cold starts; Phase 2 scores the recorded turns with the evaluators configured in `eval_config.json`.
+
+### LLM-Generated Scenarios
+
+The "Generate Scenarios" modal (or `POST /api/use-cases/{uc}/evals/scenarios/generate`) reads the use-case `SYSTEM_PROMPT.md` and the loaded skill catalog and asks the judge model to draft realistic conversations that exercise the agent. Each draft is hand-reviewable before commit. Industry-realism canons from `threadlight-demo-data-factory` are injected for FSI-shaped use-cases (`insurance`, `retail-banking`, `wealth-management`) so generated data feels plausible.
+
+### Traces Panel
+
+The "Traces" admin tab queries App Insights via `LogsQueryClient` (resource-scoped) and renders a per-operation waterfall classified into `llm / agent / tool / skill / http / platform / error` spans. Filterable by `use_case`, `conversation_id`, `run_id`, and lookback window. Identical UX to `threadlight-vnext`.
+
+Spans carry three custom attributes for the filter:
+
+- `kratos.use_case`
+- `kratos.conversation_id`
+- `kratos.eval_run_id` (only set during eval runs)
+
+These are stamped in `copilot_agent.py` and forwarded to the hosted agent via `x-kratos-*` headers from `foundry_agent_proxy.py`.
+
+### CLI
+
+For CI / scripting:
+
+```bash
+# Generate (and optionally save) scenarios
+BACKEND_URL=https://kratos-be.example.com \
+  python scripts/generate_evals.py --use-case insurance --count 5 --save
+
+# Run validation evals
+python scripts/run_evals.py --use-case insurance --mode validation
+
+# Run hosted Foundry evals
+python scripts/run_evals.py --use-case insurance --mode foundry
+
+# Inspect traces
+python scripts/fetch_traces.py --conversation-id abc123
+```
+
+> **API JSON convention.** The backend API uses **camelCase** field names (Pydantic
+> alias generator) — `/api/agent/chat` expects `{message, useCase, conversationId}`,
+> not snake_case. The on-disk eval-scenario format is the exception: it uses
+> `input_message`, `expected_behavior`, `expected_tool_calls` (snake_case) so
+> scenarios stay readable in version control. The `.copilot/skills/e2e-smoke/`
+> Playwright skill encodes both conventions if you want a runnable reference.
+
+---
+
 ## Security
 
 | Control | Implementation |
@@ -642,6 +728,76 @@ All service-to-service auth uses Managed Identity with least-privilege roles:
 | **Total baseline** | **~$265 – $350/month** |
 
 > Model costs (GPT-4o, GPT-5) are usage-dependent and not included in the baseline.
+
+---
+
+## Troubleshooting
+
+Real findings from deploying this repo end-to-end on a fresh Azure subscription. Add to this list as you hit new ones.
+
+### Postdeploy 404 "false alarm" at the tail of every `azd deploy`
+
+**Symptom:** A scary RED block at the tail of every `azd deploy <any-service>` reporting `agents/<key>/versions/<n>` not found, even though the deploy succeeded.
+
+**Cause:** The `azure.ai.agents` azd extension's postdeploy hook fires after **every** `azd deploy` (including unrelated services like `web`) and looks up `agents/<service-key>/versions/<n>` using the SERVICE KEY from `azure.yaml` verbatim, not the agent name.
+
+**Fix in this repo:** `azure.yaml` uses `services.kratos-agent` (matches the agent name in `src/hosted-agent/agent.yaml`). If you fork and rename, keep them aligned.
+
+### `create_version` deduplication — new image, but old code still runs
+
+**Symptom:** You `azd deploy kratos-agent`, the build succeeds, but the running agent serves the previous behaviour. `azd ai agent show` reports a new version but its image digest is identical.
+
+**Cause:** Foundry deduplicates `create_version` when environment variables and metadata are identical — even if the container image tag differs. The `_BUILD_TS` env var in `src/hosted-agent/agent.yaml` (sourced from `KRATOS_BUILD_TS`) is what makes each version unique.
+
+**Fix in this repo:** A `predeploy` hook on `services.kratos-agent` in `azure.yaml` auto-bumps `KRATOS_BUILD_TS` to the current unix timestamp before every deploy. **You shouldn't need to do anything manually.** If you bypass the hook, run `azd env set KRATOS_BUILD_TS $(date +%s)` first.
+
+### Hosted-agent uses `invocations`, not `responses`
+
+**Symptom:** Direct calls to `oai.responses.create()` against the hosted agent return HTTP 400 `invalid_request_error`.
+
+**Cause:** `src/hosted-agent/agent.yaml` declares `protocol: invocations` (not `responses`). Use `AIProjectClient(...).get_openai_client(agent_name="kratos-agent")` — the SDK picks the right transport based on the agent's declared protocol.
+
+This is wired correctly in `src/backend/app/services/eval_service.py` and in the e2e-smoke chat helper. If you write a new client, mirror the invocations pattern.
+
+### 4-identity AcrPull / Foundry User dance on a fresh deploy
+
+**Symptom:** On a brand-new resource group, the hosted agent returns `server_error` on first call. `az role assignment list` shows correct grants on the account-level MI, but the agent's own instance/blueprint identities are missing roles.
+
+**Cause:** Foundry hosted agents have **four** identity surfaces that all need RBAC:
+1. The Foundry project MI (system-assigned on the account)
+2. The deployer/CI MI (Contributor + `User Access Administrator` on the Foundry account)
+3. The **instance** identity (per-agent runtime SP — created at first deploy)
+4. The **blueprint** identity (per-agent platform SP — created at first deploy)
+
+The `azd ai agent` postdeploy hook auto-assigns `Foundry User` (GUID `53ca6127-db72-4b80-b1b0-d745d6d5456d`) to (3) and (4) **if** the deployer has `Azure AI Project Manager` on the project. Confirm with `azd ai agent show` — the `instance_identity.principal_id` and `blueprint.principal_id` should appear in `az role assignment list --assignee <principal_id> --all`.
+
+If empty, grant manually:
+```bash
+ACCT="/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>"
+PROJ="$ACCT/projects/<project>"
+FOUNDRY_USER=53ca6127-db72-4b80-b1b0-d745d6d5456d
+for PID in <instance_pid> <blueprint_pid> <project_mi_pid>; do
+  az role assignment create --assignee "$PID" --role "$FOUNDRY_USER" --scope "$ACCT"
+  az role assignment create --assignee "$PID" --role "$FOUNDRY_USER" --scope "$PROJ"
+  az role assignment create --assignee "$PID" --role AcrPull \
+    --scope "/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ContainerRegistry/registries/<acr>"
+done
+```
+
+RBAC propagation takes 5–15 min. Re-run the e2e-smoke skill to confirm.
+
+### `hooks/postdeploy.sh` blocks CI
+
+**Symptom:** `azd up` hangs at the postdeploy step waiting for input.
+
+**Cause:** The script prompts for which use-cases to upload to blob storage.
+
+**Fix:** Set `KRATOS_AUTO_UPLOAD_USE_CASES=1` in the environment before running `azd up` / `azd deploy`. The script will upload **all** use-cases non-interactively. Local devs without the flag get the interactive prompt as before.
+
+```bash
+export KRATOS_AUTO_UPLOAD_USE_CASES=1
+azd up
+```
 
 ---
 

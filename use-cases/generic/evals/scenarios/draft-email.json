@@ -1,0 +1,15 @@
+{
+  "name": "draft-email",
+  "category": "standard",
+  "description": "Email drafting — agent should call email-draft.",
+  "input_message": "Draft a short email to my team announcing a 30-minute brown-bag next Friday on prompt-engineering best practices.",
+  "input_data": {
+    "recipient": "team",
+    "topic": "prompt-engineering brown-bag",
+    "duration_minutes": 30,
+    "day": "next Friday"
+  },
+  "expected_behavior": "Calls email-draft with subject, body, and clear call-to-action (RSVP, calendar link placeholder). Tone is collegial and concise. Does not invent a calendar URL.",
+  "expected_tool_calls": ["email-draft"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

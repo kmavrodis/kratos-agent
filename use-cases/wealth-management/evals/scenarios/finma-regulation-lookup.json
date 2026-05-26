@@ -1,0 +1,12 @@
+{
+  "name": "finma-regulation-lookup",
+  "category": "compliance",
+  "description": "Internal FINMA / KYC procedure lookup — agent should call rag-search and cite the source.",
+  "input_message": "What are the FINMA documentation requirements for opening a new private banking account for a US-domiciled client?",
+  "input_data": {
+    "topic": "FINMA KYC US-domicile"
+  },
+  "expected_behavior": "Calls rag-search with the FINMA + KYC topic. Quotes the specific procedure or article number and cites the source document. Notes any escalation steps (compliance officer, legal review) explicitly. Does not improvise regulatory advice.",
+  "expected_tool_calls": ["rag-search"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

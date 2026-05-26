@@ -280,3 +280,140 @@ export interface ApmCommandResponse {
   duration_ms: number;
   dependencies: ApmDependency[];
 }
+
+// ─── Evals ───
+
+export type ScenarioCategory =
+  | "standard"
+  | "edge_case"
+  | "error_handling"
+  | "boundary"
+  | "compliance";
+
+export interface EvalScenario {
+  name: string;
+  category: ScenarioCategory;
+  description: string;
+  input_message: string;
+  input_data: Record<string, unknown>;
+  expected_behavior: string;
+  expected_tool_calls: string[];
+  evaluators: string[];
+}
+
+export type EvalMode = "validation" | "foundry";
+
+export type EvalRunStatus =
+  | "pending"
+  | "invoking"
+  | "scoring"
+  | "completed"
+  | "failed";
+
+export interface ScenarioResult {
+  scenario: string;
+  query: string;
+  response: string;
+  tool_calls: Array<{
+    type?: string;
+    skillName?: string;
+    name?: string;
+    status?: string;
+    input?: string | Record<string, unknown>;
+    output?: string;
+    arguments?: Record<string, unknown>;
+    result?: string;
+    durationMs?: number;
+    source?: string;
+  }>;
+  status: string;
+  error: string;
+  duration_ms: number;
+  scores: Record<string, Record<string, unknown>>;
+}
+
+export interface FoundryEvalSummary {
+  eval_id: string;
+  eval_run_id: string;
+  run_status: string;
+  result_counts: Record<string, number>;
+  per_testing_criteria_results: Array<Record<string, unknown>>;
+  output_items: Array<Record<string, unknown>>;
+  report_url: string;
+}
+
+export interface EvalRun {
+  run_id: string;
+  use_case: string;
+  mode: EvalMode;
+  status: EvalRunStatus;
+  scenarios: string[];
+  created_at: string;
+  updated_at: string;
+  started_by: string;
+  progress: string;
+  error: string;
+  results: ScenarioResult[];
+  foundry: FoundryEvalSummary | null;
+}
+
+// ─── Traces ───
+
+export type SpanCategory =
+  | "llm"
+  | "agent"
+  | "agent_internal"
+  | "tool"
+  | "skill"
+  | "http"
+  | "platform"
+  | "error"
+  | "other";
+
+export interface TraceSpan {
+  id: string;
+  parent_id: string;
+  name: string;
+  duration_ms: number;
+  offset_ms: number;
+  timestamp: string;
+  success: boolean;
+  result_code: string;
+  type: string;
+  cloud_role: string;
+  category: SpanCategory;
+  depth: number;
+  attributes: Record<string, string | number>;
+}
+
+export interface TraceLog {
+  timestamp: string;
+  message: string;
+  severity: number;
+  cloud_role: string;
+}
+
+export interface TraceOperation {
+  operation_id: string;
+  timestamp: string;
+  total_duration_ms: number;
+  span_count: number;
+  use_case: string;
+  conversation_id: string;
+  eval_run_id: string;
+  spans: TraceSpan[];
+  logs: TraceLog[];
+}
+
+export interface TraceSummary {
+  total_operations: number;
+  avg_latency_ms: number;
+  total_tokens: number;
+  models_used: string[];
+  error: string;
+}
+
+export interface TraceList {
+  operations: TraceOperation[];
+  summary: TraceSummary;
+}

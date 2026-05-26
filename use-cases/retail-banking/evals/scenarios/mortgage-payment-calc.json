@@ -1,0 +1,13 @@
+{
+  "name": "mortgage-payment-calc",
+  "category": "standard",
+  "description": "Compute monthly mortgage payment — agent must call loan-calculator, not estimate mentally.",
+  "input_message": "Calculate monthly payments for a $250,000 mortgage over 30 years.",
+  "input_data": {
+    "principal": 250000,
+    "term_years": 30
+  },
+  "expected_behavior": "Calls loan-calculator (or code-interpreter as fallback) with principal=250000 and term=30y, retrieves the current rate from product-catalog or asks the user. Returns monthly payment with breakdown. Does not do mental math.",
+  "expected_tool_calls": ["loan-calculator"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

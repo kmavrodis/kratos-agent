@@ -1,0 +1,13 @@
+{
+  "name": "portfolio-rebalance-analysis",
+  "category": "standard",
+  "description": "Portfolio analysis with charts — agent chains crm → portfolio-review → code-interpreter for the rebalance proposal.",
+  "input_message": "Pete Mitchell's portfolio is overweight in tech. Show me a rebalance proposal that brings tech exposure back to his strategic 25% target, with current vs target charts.",
+  "input_data": {
+    "client_name": "Pete Mitchell",
+    "target_tech_weight": 0.25
+  },
+  "expected_behavior": "Loads portfolio via crm, runs portfolio-review to identify current tech weight, calls code-interpreter to compute the rebalance trades and produce current-vs-target allocation charts. Presents a clear actionable proposal with the trades listed and the chart referenced as a downloadable file. Does not invent holdings.",
+  "expected_tool_calls": ["crm", "portfolio-review", "code-interpreter"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

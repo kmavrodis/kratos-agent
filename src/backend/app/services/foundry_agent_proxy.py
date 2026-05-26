@@ -68,6 +68,7 @@ class FoundryAgentProxy:
         use_case: str = "generic",
         system_prompt: str | None = None,
         agent_session_id: str | None = None,
+        eval_run_id: str | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Invoke the hosted agent and yield event dicts.
 
@@ -100,7 +101,11 @@ class FoundryAgentProxy:
             "Content-Type": "application/json",
             "Accept": "text/event-stream",
             "Foundry-Features": "HostedAgents=V1Preview",
+            "x-kratos-use-case": str(use_case) if use_case else "",
+            "x-kratos-conversation-id": str(conversation_id) if conversation_id else "",
         }
+        if eval_run_id:
+            headers["x-kratos-eval-run-id"] = str(eval_run_id)
         if token:
             headers["Authorization"] = f"Bearer {token}"
         payload = {

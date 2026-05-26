@@ -1,0 +1,15 @@
+{
+  "name": "code-interpreter-math",
+  "category": "standard",
+  "description": "Pure computation — agent must call code-interpreter and not do mental math.",
+  "input_message": "What's the compound interest on $10,000 invested at 6.5% annually for 12 years, compounded monthly?",
+  "input_data": {
+    "principal": 10000,
+    "rate": 0.065,
+    "years": 12,
+    "compounding": "monthly"
+  },
+  "expected_behavior": "Calls code-interpreter to compute A = P(1 + r/n)^(nt). Returns final value, total interest, and a brief explanation. Does not approximate mentally.",
+  "expected_tool_calls": ["code-interpreter"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

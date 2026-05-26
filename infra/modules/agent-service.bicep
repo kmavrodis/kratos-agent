@@ -16,6 +16,9 @@ param containerRegistryName string
 @description('App Insights connection string')
 param appInsightsConnectionString string
 
+@description('App Insights resource ID (for resource-scoped KQL queries from the Traces panel)')
+param appInsightsResourceId string = ''
+
 @description('Cosmos DB endpoint')
 param cosmosDbEndpoint string
 
@@ -123,6 +126,7 @@ resource agentService 'Microsoft.App/containerApps@2024-03-01' = {
           }
           env: [
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
+            { name: 'APPLICATION_INSIGHTS_RESOURCE_ID', value: appInsightsResourceId }
             { name: 'COSMOS_DB_ENDPOINT', value: cosmosDbEndpoint }
             { name: 'AZURE_AI_SEARCH_ENDPOINT', value: aiSearchEndpoint }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }

@@ -19,16 +19,21 @@ from app.routers import (
     agent,
     conversations,
     copilot_studio,
+    evals,
     files,
     health,
     settings,
+    traces,
     use_cases,
 )
 from app.services.apm_service import ApmError, ApmService
 from app.services.blob_skill_service import BlobSkillService
 from app.services.cosmos_service import CosmosService
+from app.services.eval_service import EvalService
+from app.services.eval_storage import EvalStorage
 from app.services.foundry_agent_proxy import FoundryAgentProxy
 from app.services.skill_registry import SkillRegistry
+from app.services.traces_service import TracesService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -138,10 +143,22 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     application.state.foundry_proxy = foundry_proxy
     application.state.settings = settings
 
+    # Initialize Eval storage + service (per-use-case scenarios, runs, results)
+    eval_storage = EvalStorage(blob_skill_service, local_base_dir=settings.apm_use_cases_root)
+    application.state.eval_storage = eval_storage
+    eval_service = EvalService(settings, eval_storage, registries, foundry_proxy=foundry_proxy)
+    application.state.eval_service = eval_service
+
+    # Initialize Traces service (App Insights waterfall queries)
+    traces_service = TracesService(settings)
+    application.state.traces_service = traces_service
+
     logger.info("Kratos Agent Service started — environment=%s", settings.environment)
     yield
 
     # Cleanup
+    await eval_service.shutdown()
+    await traces_service.close()
     await foundry_proxy.stop()
     await blob_skill_service.close()
     await cosmos_service.close()
@@ -181,5 +198,7 @@ app.include_router(admin_mcp.router, prefix="/api/admin/mcp-servers", tags=["adm
 app.include_router(admin_apm.router, prefix="/api/admin/use-cases/{use_case}/apm", tags=["admin"])
 app.include_router(admin_analysis.router, prefix="/api/admin/analysis", tags=["admin"])
 app.include_router(use_cases.router, prefix="/api/use-cases", tags=["use-cases"])
+app.include_router(evals.router, prefix="/api/use-cases", tags=["evals"])
+app.include_router(traces.router, prefix="/api/traces", tags=["traces"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(copilot_studio.router, prefix="/api/copilot-studio", tags=["copilot-studio"])

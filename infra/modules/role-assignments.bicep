@@ -10,11 +10,20 @@ param aiSearchName string
 @description('Microsoft Foundry resource name')
 param aiServicesName string
 
+@description('Microsoft Foundry system-assigned principal ID (compile-time output from the ai-services module)')
+param aiServicesPrincipalId string
+
 @description('Key Vault name')
 param keyVaultName string
 
 @description('Storage Account name for skills blob storage')
 param storageAccountName string
+
+@description('Application Insights resource name (for Monitoring Reader RBAC)')
+param appInsightsName string = ''
+
+@description('Container Registry name (for AcrPull grant to the Foundry hosted-agent MI)')
+param containerRegistryName string = ''
 
 @description('Deploying user principal ID')
 param principalId string = ''
@@ -28,6 +37,8 @@ var cognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 var azureAIDeveloper = '64702f94-c441-49e6-a78b-ef80e0188fee'
 var cognitiveServicesUser = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 var storageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+var monitoringReader = '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
+var acrPull = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 
 // ─── References ───
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts@2024-02-15-preview' existing = {
@@ -48,6 +59,14 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2024-10-01' existing =
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: storageAccountName
+}
+
+resource appInsights 'Microsoft.Insights/components@2020-02-02' existing = if (!empty(appInsightsName)) {
+  name: appInsightsName
+}
+
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = if (!empty(containerRegistryName)) {
+  name: containerRegistryName
 }
 
 // ─── Agent Service → Cosmos DB ───
@@ -132,11 +151,33 @@ resource agentStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 
 // ─── AI Services (Hosted Agent) → Blob Storage ───
 resource aiServicesStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, aiServices.identity.principalId, storageBlobDataContributor)
+  name: guid(storageAccount.id, aiServicesPrincipalId, storageBlobDataContributor)
   scope: storageAccount
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributor)
-    principalId: aiServices.identity.principalId
+    principalId: aiServicesPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ─── Agent Service → Application Insights (Monitoring Reader for Traces panel KQL) ───
+resource agentAppInsightsRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(appInsightsName)) {
+  name: guid(appInsights.id, agentServicePrincipalId, monitoringReader)
+  scope: appInsights
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', monitoringReader)
+    principalId: agentServicePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ─── AI Services (Foundry hosted-agent MI) → ACR (AcrPull, so Foundry can pull the hosted-agent image) ───
+resource aiServicesAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(containerRegistryName)) {
+  name: guid(containerRegistry.id, aiServicesPrincipalId, acrPull)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
+    principalId: aiServicesPrincipalId
     principalType: 'ServicePrincipal'
   }
 }
