@@ -967,9 +967,12 @@ class CopilotAgent:
                     send_opts["attachments"] = attachments
                 await session.send(send_opts)
 
-                # Drain the queue until sentinel
+                # Drain the queue until sentinel. 300s silence threshold matches
+                # eval_service._REQUEST_TIMEOUT — gives complex multi-tool scenarios
+                # (PDF generation, long triage chains) enough headroom under gateway
+                # throttle bursts where individual tool calls can stall 60-120s.
                 while True:
-                    item = await asyncio.wait_for(queue.get(), timeout=120.0)
+                    item = await asyncio.wait_for(queue.get(), timeout=300.0)
                     if item is None:
                         break
                     yield item

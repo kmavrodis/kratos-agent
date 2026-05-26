@@ -53,7 +53,9 @@ _WARMUP_ATTEMPTS = 6
 _WARMUP_BACKOFF_S = 5.0
 
 # Request timeout for the Foundry OpenAI client (seconds)
-_REQUEST_TIMEOUT = 120.0
+# Bumped to 300s — complex multi-tool scenarios (PDF report generation, multi-step
+# triage flows) routinely exceed 120s; gateway throttle bursts also push tail latency.
+_REQUEST_TIMEOUT = 300.0
 
 # Scenario count cap
 _SCENARIO_COUNT_MAX = 24
