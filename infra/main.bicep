@@ -42,7 +42,7 @@ param agentApiPath string = 'kratos-agent'
   'westeurope'
   'eastasia'
 ])
-param staticWebAppLocation string = 'westeurope'
+param staticWebAppLocation string = 'eastus2'
 
 // ─── Resource Naming ───
 var abbrs = loadJsonContent('./abbreviations.json')
