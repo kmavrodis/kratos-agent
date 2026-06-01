@@ -1,0 +1,11 @@
+[
+  { "ticket_id": "INC-7001", "author_id": "AGT-301", "author_kind": "agent", "at": "2026-06-01T08:21:00Z", "visibility": "internal", "text": "Reset MFA token in Entra. Asked user to remove + re-add device from authenticator app." },
+  { "ticket_id": "INC-7001", "author_id": "USR-2102", "author_kind": "user",  "at": "2026-06-01T08:55:00Z", "visibility": "public",   "text": "Tried that — still looping. Push notification arrives but app says 'verification failed'." },
+  { "ticket_id": "INC-7001", "author_id": "AGT-301", "author_kind": "agent", "at": "2026-06-01T09:02:00Z", "visibility": "internal", "text": "Time skew on the device — MFA TOTP off by 90s. Asked user to enable automatic time sync." },
+
+  { "ticket_id": "INC-7002", "author_id": "AGT-302", "author_kind": "agent", "at": "2026-06-01T07:30:00Z", "visibility": "internal", "text": "Confirmed Modern Auth is enabled for the mailbox. Pulling MDM compliance status." },
+  { "ticket_id": "INC-7002", "author_id": "AGT-302", "author_kind": "agent", "at": "2026-06-01T09:15:00Z", "visibility": "internal", "text": "Intune shows the device pending a config-profile push from this morning's tenant change. Likely root cause." },
+
+  { "ticket_id": "INC-7004", "author_id": "AGT-305", "author_kind": "agent", "at": "2026-06-01T06:00:00Z", "visibility": "internal", "text": "Plant network monitoring shows WAP CI-WAP-CLE-03 reboot loop, started ~22:50 yesterday. Vendor hotfix available." },
+  { "ticket_id": "INC-7004", "author_id": "AGT-305", "author_kind": "agent", "at": "2026-06-01T08:40:00Z", "visibility": "internal", "text": "Raising emergency change CHG-9001 for vendor hotfix tonight at 23:00 CT (Line 3 shift change)." }
+]

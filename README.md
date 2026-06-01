@@ -298,6 +298,7 @@ Kratos ships with four configurable agent personas, each with its own system pro
 | **Wealth Management** | `use-cases/wealth-management/` | Portfolio review, tax analysis, PDF wealth reports with charts |
 | **Insurance** | `use-cases/insurance/` | Policy information, claims processing, coverage analysis |
 | **Sales Account Review** | `use-cases/sales-account-review/` | AE/CSM co-pilot — account briefings, pipeline review, at-risk signals against the in-repo `salesforce-mcp-server` mock |
+| **IT Service Desk L1** | `use-cases/it-service-desk/` | L1 support co-pilot — triages tickets, searches the KB, surfaces VIP queues, and resolves/reassigns tickets with explicit user confirmation on every write, against the in-repo `servicenow-mcp-server` mock |
 
 Each use case has:
 - `SYSTEM_PROMPT.md` — Agent persona and behavior instructions
