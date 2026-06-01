@@ -1,0 +1,22 @@
+[
+  { "id": "MED-100001-1", "patient_id": "PAT-100001", "display": "Lisinopril 20 mg PO daily",          "rxnorm": "29046",  "status": "active",     "start_date": "2014-07-01", "prescriber_id": "PRA-9001", "indication": "Hypertension" },
+  { "id": "MED-100001-2", "patient_id": "PAT-100001", "display": "Metformin 1000 mg PO BID",            "rxnorm": "6809",   "status": "active",     "start_date": "2017-10-15", "prescriber_id": "PRA-9001", "indication": "Type 2 diabetes" },
+  { "id": "MED-100001-3", "patient_id": "PAT-100001", "display": "Atorvastatin 40 mg PO QHS",           "rxnorm": "83367",  "status": "active",     "start_date": "2025-08-14", "prescriber_id": "PRA-9004", "indication": "Post-MI; LDL <70 target" },
+  { "id": "MED-100001-4", "patient_id": "PAT-100001", "display": "Aspirin 81 mg PO daily",              "rxnorm": "1191",   "status": "active",     "start_date": "2025-08-14", "prescriber_id": "PRA-9004", "indication": "Secondary prevention post-MI" },
+  { "id": "MED-100001-5", "patient_id": "PAT-100001", "display": "Metoprolol succinate 50 mg PO daily","rxnorm": "866427", "status": "active",     "start_date": "2025-08-14", "prescriber_id": "PRA-9004", "indication": "Post-MI cardioprotection" },
+
+  { "id": "MED-100002-1", "patient_id": "PAT-100002", "display": "Azithromycin 500 mg PO x 1, then 250 mg PO daily x 4d", "rxnorm": "18631","status": "completed","start_date": "2026-05-20", "end_date": "2026-05-25", "prescriber_id": "PRA-9001", "indication": "Acute bronchitis" },
+  { "id": "MED-100002-2", "patient_id": "PAT-100002", "display": "Benzonatate 200 mg PO TID PRN cough",   "rxnorm": "1190", "status": "active",     "start_date": "2026-05-20", "prescriber_id": "PRA-9001", "indication": "Cough suppression" },
+
+  { "id": "MED-100003-1", "patient_id": "PAT-100003", "display": "Levothyroxine 50 mcg PO daily",        "rxnorm": "10582","status": "active",     "start_date": "2026-02-25", "prescriber_id": "PRA-9002", "indication": "Hypothyroidism" },
+
+  { "id": "MED-100004-1", "patient_id": "PAT-100004", "display": "Metformin 500 mg PO BID",              "rxnorm": "6809", "status": "active",     "start_date": "2019-03-15", "prescriber_id": "PRA-9002", "indication": "Type 2 diabetes" },
+  { "id": "MED-100004-2", "patient_id": "PAT-100004", "display": "Atorvastatin 20 mg PO QHS",            "rxnorm": "83367","status": "active",     "start_date": "2020-01-10", "prescriber_id": "PRA-9002", "indication": "Hyperlipidemia" },
+
+  { "id": "MED-100005-1", "patient_id": "PAT-100005", "display": "Albuterol HFA 90 mcg/actuation 2 puffs Q4H PRN", "rxnorm": "351137","status": "active","start_date": "2021-09-10", "prescriber_id": "PRA-9003", "indication": "Asthma — rescue" },
+  { "id": "MED-100005-2", "patient_id": "PAT-100005", "display": "Fluticasone HFA 110 mcg 1 puff BID",   "rxnorm": "896189","status": "active",     "start_date": "2022-04-12", "prescriber_id": "PRA-9003", "indication": "Asthma — controller" },
+
+  { "id": "MED-100006-1", "patient_id": "PAT-100006", "display": "Metformin 1000 mg PO BID",             "rxnorm": "6809", "status": "active",     "start_date": "2018-07-20", "prescriber_id": "PRA-9001", "indication": "Type 2 diabetes" },
+  { "id": "MED-100006-2", "patient_id": "PAT-100006", "display": "Empagliflozin 10 mg PO daily",         "rxnorm": "1545653","status": "active",   "start_date": "2024-04-01", "prescriber_id": "PRA-9001", "indication": "T2DM + CKD renal protection" },
+  { "id": "MED-100006-3", "patient_id": "PAT-100006", "display": "Lisinopril 20 mg PO daily",            "rxnorm": "29046","status": "active",     "start_date": "2015-02-15", "prescriber_id": "PRA-9001", "indication": "HTN + CKD" }
+]

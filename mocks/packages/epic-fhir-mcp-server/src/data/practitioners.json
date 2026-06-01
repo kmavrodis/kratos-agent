@@ -1,0 +1,7 @@
+[
+  { "id": "PRA-9001", "name": "Dr. Aniyah Solomon",  "specialty": "Internal Medicine",   "npi": "1356789012", "department": "Adult Primary Care",   "email": "a.solomon@olympushealth.example.com" },
+  { "id": "PRA-9002", "name": "Dr. Henrik Mueller", "specialty": "Family Medicine",     "npi": "1456789013", "department": "Adult Primary Care",   "email": "h.mueller@olympushealth.example.com" },
+  { "id": "PRA-9003", "name": "Dr. Priya Iyer",     "specialty": "Pediatrics",           "npi": "1556789014", "department": "Pediatric Primary Care","email": "p.iyer@olympushealth.example.com" },
+  { "id": "PRA-9004", "name": "Dr. Carlos Mendez",  "specialty": "Cardiology",           "npi": "1656789015", "department": "Cardiology Clinic",    "email": "c.mendez@olympushealth.example.com" },
+  { "id": "PRA-9005", "name": "Dr. Beatrice Lin",   "specialty": "Endocrinology",        "npi": "1756789016", "department": "Endocrinology Clinic", "email": "b.lin@olympushealth.example.com" }
+]

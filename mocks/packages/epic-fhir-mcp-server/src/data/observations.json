@@ -1,0 +1,22 @@
+[
+  { "id": "OBS-100001-1", "patient_id": "PAT-100001", "encounter_id": "ENC-200001", "code": "BP",   "display": "Blood pressure", "value": "148/92",  "unit": "mmHg",  "interpretation": "High",   "effective_at": "2026-04-15T09:05:00Z" },
+  { "id": "OBS-100001-2", "patient_id": "PAT-100001", "encounter_id": "ENC-200001", "code": "HR",   "display": "Heart rate",     "value": "78",      "unit": "bpm",   "interpretation": "Normal", "effective_at": "2026-04-15T09:05:00Z" },
+  { "id": "OBS-100001-3", "patient_id": "PAT-100001", "encounter_id": "ENC-200001", "code": "A1C",  "display": "HbA1c",           "value": "7.4",     "unit": "%",     "interpretation": "Above goal (target <7.0)", "effective_at": "2026-04-15T09:05:00Z" },
+  { "id": "OBS-100001-4", "patient_id": "PAT-100001", "encounter_id": "ENC-200001", "code": "LDL",  "display": "LDL cholesterol", "value": "82",      "unit": "mg/dL", "interpretation": "Above post-MI target (<70)", "effective_at": "2026-04-15T09:05:00Z" },
+  { "id": "OBS-100001-5", "patient_id": "PAT-100001", "encounter_id": "ENC-200001", "code": "EGFR", "display": "eGFR",            "value": "67",      "unit": "mL/min/1.73m2", "interpretation": "Mildly reduced", "effective_at": "2026-04-15T09:05:00Z" },
+
+  { "id": "OBS-100002-1", "patient_id": "PAT-100002", "encounter_id": "ENC-200101", "code": "TEMP", "display": "Temperature",     "value": "100.8",   "unit": "F",     "interpretation": "Low-grade fever", "effective_at": "2026-05-20T11:05:00Z" },
+  { "id": "OBS-100002-2", "patient_id": "PAT-100002", "encounter_id": "ENC-200101", "code": "SPO2", "display": "Oxygen saturation","value": "96",      "unit": "%",     "interpretation": "Normal", "effective_at": "2026-05-20T11:05:00Z" },
+
+  { "id": "OBS-100003-1", "patient_id": "PAT-100003", "encounter_id": "ENC-200201", "code": "TSH",  "display": "TSH",             "value": "6.8",     "unit": "mIU/L", "interpretation": "Elevated (normal 0.4–4.5)", "effective_at": "2026-03-04T15:15:00Z" },
+  { "id": "OBS-100003-2", "patient_id": "PAT-100003", "encounter_id": "ENC-200201", "code": "FT4",  "display": "Free T4",         "value": "0.8",     "unit": "ng/dL", "interpretation": "Low-normal", "effective_at": "2026-03-04T15:15:00Z" },
+
+  { "id": "OBS-100004-1", "patient_id": "PAT-100004", "encounter_id": "ENC-200301", "code": "A1C",  "display": "HbA1c",           "value": "8.2",     "unit": "%",     "interpretation": "Above goal", "effective_at": "2026-01-18T08:40:00Z" },
+  { "id": "OBS-100004-2", "patient_id": "PAT-100004", "encounter_id": "ENC-200301", "code": "LDL",  "display": "LDL cholesterol", "value": "118",     "unit": "mg/dL", "interpretation": "Above goal", "effective_at": "2026-01-18T08:40:00Z" },
+
+  { "id": "OBS-100005-1", "patient_id": "PAT-100005", "encounter_id": "ENC-200402", "code": "PEF",  "display": "Peak expiratory flow", "value": "240", "unit": "L/min", "interpretation": "Yellow zone (<80% personal best)", "effective_at": "2026-04-02T10:05:00Z" },
+
+  { "id": "OBS-100006-1", "patient_id": "PAT-100006", "encounter_id": "ENC-200502", "code": "EGFR", "display": "eGFR",            "value": "42",      "unit": "mL/min/1.73m2", "interpretation": "CKD stage 3", "effective_at": "2026-03-10T10:10:00Z" },
+  { "id": "OBS-100006-2", "patient_id": "PAT-100006", "encounter_id": "ENC-200502", "code": "A1C",  "display": "HbA1c",           "value": "7.8",     "unit": "%",     "interpretation": "Above goal", "effective_at": "2026-03-10T10:10:00Z" },
+  { "id": "OBS-100006-3", "patient_id": "PAT-100006", "encounter_id": "ENC-200502", "code": "BP",   "display": "Blood pressure",   "value": "138/84",  "unit": "mmHg",  "interpretation": "Above target for CKD",    "effective_at": "2026-03-10T10:10:00Z" }
+]

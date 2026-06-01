@@ -1,0 +1,8 @@
+{
+  "epic": {
+    "type": "local",
+    "command": "epic-fhir-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  }
+}

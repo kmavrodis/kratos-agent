@@ -298,6 +298,7 @@ Kratos ships with four configurable agent personas, each with its own system pro
 | **Wealth Management** | `use-cases/wealth-management/` | Portfolio review, tax analysis, PDF wealth reports with charts |
 | **Insurance** | `use-cases/insurance/` | Policy information, claims processing, coverage analysis |
 | **Sales Account Review** | `use-cases/sales-account-review/` | AE/CSM co-pilot — account briefings, pipeline review, at-risk signals against the in-repo `salesforce-mcp-server` mock |
+| **Clinician Visit Prep** | `use-cases/clinician-visit-prep/` | Outpatient-clinic co-pilot — daily schedule briefings, pre-visit summaries with derived clinical focus, lab trends, and med-problem reconciliation against the in-repo `epic-fhir-mcp-server` mock (FHIR R4 resources) |
 
 Each use case has:
 - `SYSTEM_PROMPT.md` — Agent persona and behavior instructions

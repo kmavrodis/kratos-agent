@@ -1,0 +1,6 @@
+[
+  { "id": "ALG-100001-1", "patient_id": "PAT-100001", "substance": "Penicillin",          "reaction": "Rash",                "severity": "moderate", "noted_date": "1998-04-12" },
+  { "id": "ALG-100002-1", "patient_id": "PAT-100002", "substance": "Sulfa drugs",         "reaction": "Hives, swelling",     "severity": "severe",   "noted_date": "2015-08-20" },
+  { "id": "ALG-100004-1", "patient_id": "PAT-100004", "substance": "Contrast dye (CT)",  "reaction": "Anaphylaxis",          "severity": "severe",   "noted_date": "2021-06-04" },
+  { "id": "ALG-100005-1", "patient_id": "PAT-100005", "substance": "Peanuts",             "reaction": "Anaphylaxis",          "severity": "severe",   "noted_date": "2019-03-08" }
+]

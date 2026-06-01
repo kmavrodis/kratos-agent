@@ -13,6 +13,7 @@ same shape: a single binary on PATH, no HTTP, no auth, JSON-RPC over stdio.
 | Package | Mocks | Used by |
 |---|---|---|
 | `salesforce-mcp-server` | Salesforce CRM — accounts, opportunities, contacts, activities, cases | `use-cases/sales-account-review` |
+| `epic-fhir-mcp-server` | Epic-style EHR (FHIR R4) — patients, practitioners, encounters, conditions, medications, observations (vitals + labs), allergies. Read-only by design — chart writes go in a separate persona. | `use-cases/clinician-visit-prep` |
 
 ## Build
 
