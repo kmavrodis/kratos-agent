@@ -13,6 +13,7 @@ same shape: a single binary on PATH, no HTTP, no auth, JSON-RPC over stdio.
 | Package | Mocks | Used by |
 |---|---|---|
 | `salesforce-mcp-server` | Salesforce CRM — accounts, opportunities, contacts, activities, cases | `use-cases/sales-account-review` |
+| `core-banking-mcp-server` | Retail core-banking — customers, accounts, transactions, cards, products, disputes (+ write tools for raise-dispute, block-card, refund-transaction, transfer-between-accounts) | `use-cases/retail-banking-csr` |
 
 ## Build
 

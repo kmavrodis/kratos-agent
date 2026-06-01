@@ -1,0 +1,4 @@
+[
+  { "id": "DSP-40001", "transaction_id": "TXN-30006", "customer_id": "CUS-10001", "opened_date": "2026-05-26", "amount_usd": 348.00, "reason": "Unauthorised charge — never travelled with Southwest", "status": "Open",      "provisional_credit_usd": 348.00, "provisional_credited_at": "2026-05-27", "agent_id": "AGT-901", "expected_resolution_by": "2026-06-25" },
+  { "id": "DSP-40002", "transaction_id": "TXN-30104", "customer_id": "CUS-10002", "opened_date": "2026-05-27", "amount_usd": 210.50, "reason": "Unauthorised charge — Amazon purchase not recognised",  "status": "Under Review", "provisional_credit_usd": 0,       "provisional_credited_at": null,        "agent_id": "AGT-901", "expected_resolution_by": "2026-06-26" }
+]
