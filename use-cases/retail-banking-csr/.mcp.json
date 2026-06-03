@@ -1,0 +1,8 @@
+{
+  "core-banking": {
+    "type": "local",
+    "command": "core-banking-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  }
+}
