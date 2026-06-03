@@ -1,0 +1,10 @@
+name: kratos-it-service-desk
+version: 1.0.0
+description: Kratos agent — it-service-desk use-case APM manifest
+author: kratos-agent
+license: MIT
+target: copilot
+
+dependencies:
+  apm: []
+  mcp: []

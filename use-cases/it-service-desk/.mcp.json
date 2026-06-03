@@ -1,0 +1,8 @@
+{
+  "servicenow": {
+    "type": "local",
+    "command": "servicenow-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  }
+}

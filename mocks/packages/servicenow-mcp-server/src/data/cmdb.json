@@ -1,0 +1,9 @@
+[
+  { "id": "CI-IDP-01",       "name": "Olympus Identity Platform",            "type": "Application",    "environment": "Production", "owner_group": "Identity & Access",   "status": "Operational",   "depends_on": ["CI-AZ-TENANT"]                  },
+  { "id": "CI-EXO-01",       "name": "Exchange Online (olympus.com)",        "type": "Application",    "environment": "Production", "owner_group": "Mobile Productivity", "status": "Operational",   "depends_on": ["CI-AZ-TENANT"]                  },
+  { "id": "CI-AZ-TENANT",    "name": "Azure tenant — olympus.onmicrosoft",    "type": "Tenant",         "environment": "Production", "owner_group": "Identity & Access",   "status": "Operational",   "depends_on": []                                 },
+  { "id": "CI-GITHUB-ORG",   "name": "github.com/olympus organization",      "type": "SaaS",           "environment": "Production", "owner_group": "Identity & Access",   "status": "Operational",   "depends_on": ["CI-IDP-01"]                      },
+  { "id": "CI-WAP-CLE-03",   "name": "Cleveland Plant — WAP cluster 3",      "type": "Network Device", "environment": "Production", "owner_group": "Network",             "status": "Degraded",      "depends_on": ["CI-NET-CLE-CORE"]                },
+  { "id": "CI-NET-CLE-CORE", "name": "Cleveland Plant — Core network",       "type": "Network",        "environment": "Production", "owner_group": "Network",             "status": "Operational",   "depends_on": []                                 },
+  { "id": "CI-LAP-MBP-2002", "name": "MacBook Pro — Elena Morales (EMP-2002)","type": "Laptop",        "environment": "Production", "owner_group": "Endpoint",            "status": "Operational",   "depends_on": []                                 }
+]
