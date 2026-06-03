@@ -95,6 +95,7 @@ disable_error_code = [
     "no-untyped-call",
     "misc",           # subclassing untyped (pydantic/SDK) base classes
     "unused-ignore",
+    "import-untyped",  # third-party libs (e.g. PyYAML) ship without stubs; not suppressed by --ignore-missing-imports
 ]
 
 # The Copilot SDK integration layer relies on dynamically-typed event handlers
