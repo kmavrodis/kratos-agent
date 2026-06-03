@@ -1,0 +1,19 @@
+[
+  { "id": "CND-100001-1", "patient_id": "PAT-100001", "code": "I10",     "display": "Essential hypertension",                       "clinical_status": "active",   "onset_date": "2014-06-22", "category": "problem-list-item" },
+  { "id": "CND-100001-2", "patient_id": "PAT-100001", "code": "E11.9",   "display": "Type 2 diabetes mellitus without complications","clinical_status": "active",   "onset_date": "2017-09-30", "category": "problem-list-item" },
+  { "id": "CND-100001-3", "patient_id": "PAT-100001", "code": "I25.10",  "display": "ASCVD without angina pectoris",                "clinical_status": "active",   "onset_date": "2025-08-12", "category": "problem-list-item" },
+  { "id": "CND-100001-4", "patient_id": "PAT-100001", "code": "I21.9",   "display": "Acute MI, unspecified",                        "clinical_status": "resolved", "onset_date": "2025-08-12", "category": "encounter-diagnosis" },
+
+  { "id": "CND-100002-1", "patient_id": "PAT-100002", "code": "J20.9",   "display": "Acute bronchitis, unspecified",                "clinical_status": "active",   "onset_date": "2026-05-15", "category": "encounter-diagnosis" },
+
+  { "id": "CND-100003-1", "patient_id": "PAT-100003", "code": "E03.9",   "display": "Hypothyroidism, unspecified",                  "clinical_status": "active",   "onset_date": "2026-02-20", "category": "problem-list-item" },
+
+  { "id": "CND-100004-1", "patient_id": "PAT-100004", "code": "E11.9",   "display": "Type 2 diabetes mellitus without complications","clinical_status": "active",   "onset_date": "2019-03-12", "category": "problem-list-item" },
+  { "id": "CND-100004-2", "patient_id": "PAT-100004", "code": "E78.5",   "display": "Hyperlipidemia, unspecified",                  "clinical_status": "active",   "onset_date": "2019-03-12", "category": "problem-list-item" },
+
+  { "id": "CND-100005-1", "patient_id": "PAT-100005", "code": "J45.40",  "display": "Moderate persistent asthma, uncomplicated",    "clinical_status": "active",   "onset_date": "2021-09-04", "category": "problem-list-item" },
+
+  { "id": "CND-100006-1", "patient_id": "PAT-100006", "code": "N18.3",   "display": "CKD, stage 3 (moderate)",                      "clinical_status": "active",   "onset_date": "2022-11-08", "category": "problem-list-item" },
+  { "id": "CND-100006-2", "patient_id": "PAT-100006", "code": "E11.65",  "display": "Type 2 diabetes mellitus with hyperglycemia",  "clinical_status": "active",   "onset_date": "2018-07-15", "category": "problem-list-item" },
+  { "id": "CND-100006-3", "patient_id": "PAT-100006", "code": "I10",     "display": "Essential hypertension",                       "clinical_status": "active",   "onset_date": "2015-02-10", "category": "problem-list-item" }
+]
