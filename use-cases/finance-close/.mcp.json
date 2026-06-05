@@ -1,0 +1,8 @@
+{
+  "sap-s4": {
+    "type": "local",
+    "command": "sap-s4-mcp-server",
+    "args": [],
+    "tools": ["*"]
+  }
+}

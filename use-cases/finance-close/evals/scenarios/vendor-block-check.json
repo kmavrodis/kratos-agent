@@ -1,0 +1,12 @@
+{
+  "name": "vendor-block-check",
+  "category": "edge-case",
+  "description": "Check whether a vendor is blocked. Agent must surface the block status + reason verbatim from the tool, not invent it.",
+  "input_message": "Is Northbridge Materials blocked? Why?",
+  "input_data": {
+    "vendor_name": "Northbridge Materials"
+  },
+  "expected_behavior": "Calls vendor-lookup (sap_search_vendors_by_name then sap_get_vendor for V-1201). Surfaces that the vendor is blocked_for_posting=true with reason 'Quality hold pending QA dispute (May 2026)'. Does not invent additional context. Mentions YTD spend ($920,000) and credit rating (BB).",
+  "expected_tool_calls": ["vendor-lookup"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

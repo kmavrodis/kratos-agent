@@ -1,0 +1,12 @@
+{
+  "name": "cost-centre-brief",
+  "category": "standard",
+  "description": "Brief on cost centre CC-0031 (Cleveland Plant Operations).",
+  "input_message": "Brief me on cost-centre CC-0031 — how is the Cleveland plant tracking against budget?",
+  "input_data": {
+    "cost_centre_id": "CC-0031"
+  },
+  "expected_behavior": "Calls cost-centre-brief (sap_get_cost_centre + sap_list_journal_entries with cost_centre='CC-0031'). Reports owner as Wesley Park (EMP-1031), budget $14.5M, YTD $7.24M, ~50% consumed. Lists recent JEs touching the cost centre. Notes whether any are Manual or large round numbers.",
+  "expected_tool_calls": ["cost-centre-brief"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

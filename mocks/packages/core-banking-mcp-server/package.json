@@ -12,7 +12,7 @@
     "src/data/"
   ],
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('dist/server.js', 0o755)\" && cp -R src/data dist/data",
+    "build": "tsc && node -e \"require('fs').chmodSync('dist/server.js', 0o755)\" && rm -rf dist/data && cp -R src/data dist/data",
     "link": "npm link"
   },
   "dependencies": {

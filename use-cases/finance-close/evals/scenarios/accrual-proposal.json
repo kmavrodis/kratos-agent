@@ -1,0 +1,16 @@
+{
+  "name": "accrual-proposal",
+  "category": "write-confirmation",
+  "description": "Propose an accrual JE — agent should call propose (creates Draft), show the draft to the user, and ask_user before posting. Should NOT post without explicit confirmation.",
+  "input_message": "Propose an accrual for $42,000 of Sentinel Observability licence fees against Platform Engineering for June.",
+  "input_data": {
+    "vendor": "Sentinel Observability (V-1102)",
+    "amount_usd": 42000,
+    "gl_account": "6400",
+    "cost_centre": "CC-0011",
+    "period": "2026-06"
+  },
+  "expected_behavior": "Calls journal-entry-proposal which calls sap_propose_journal_entry with two balanced lines (debit 6400/CC-0011, credit 2200/null). Renders the Draft JE with full line detail. Asks user via ask_user to confirm before posting. Does NOT call sap_post_journal_entry without explicit user confirmation.",
+  "expected_tool_calls": ["journal-entry-proposal"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

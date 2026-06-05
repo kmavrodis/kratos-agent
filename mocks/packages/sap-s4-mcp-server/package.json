@@ -1,11 +1,11 @@
 {
-  "name": "workday-mcp-server",
+  "name": "sap-s4-mcp-server",
   "version": "0.1.0",
-  "description": "Mock Workday HCM as a stdio MCP server (employees, orgs, positions, time-off, shifts, payroll, workflows).",
+  "description": "Mock SAP S/4HANA (Finance + Materials) as a stdio MCP server — cost centres, GL accounts, journal entries, vendors, materials, plants, production orders.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "workday-mcp-server": "dist/server.js"
+    "sap-s4-mcp-server": "dist/server.js"
   },
   "files": [
     "dist/",

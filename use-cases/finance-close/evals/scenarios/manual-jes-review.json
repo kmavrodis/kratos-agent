@@ -1,0 +1,13 @@
+{
+  "name": "manual-jes-review",
+  "category": "standard",
+  "description": "Surface manual JEs in a period for controller review.",
+  "input_message": "Show me all manual journal entries posted in May 2026 — anything that needs review?",
+  "input_data": {
+    "period": "2026-05",
+    "type": "Manual"
+  },
+  "expected_behavior": "Calls journals-queue-review (which uses sap_list_journal_entries with period='2026-05' and type='Manual'). Returns line-level detail for JE-30099 — a single $480,000 manual T&E adjustment with no offsetting source. Flags it as audit risk (round number, manual, no source).",
+  "expected_tool_calls": ["journals-queue-review"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

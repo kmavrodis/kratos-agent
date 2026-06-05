@@ -13,6 +13,7 @@ same shape: a single binary on PATH, no HTTP, no auth, JSON-RPC over stdio.
 | Package | Mocks | Used by |
 |---|---|---|
 | `salesforce-mcp-server` | Salesforce CRM — accounts, opportunities, contacts, activities, cases | `use-cases/sales-account-review` |
+| `sap-s4-mcp-server` | SAP S/4HANA (Finance + Materials) — cost centres, GL accounts, journal entries (Posted / Draft / Manual), vendors (sanctioned + credit-rating signals), plants, materials with safety-stock flags, production orders. Write tools for propose-journal-entry (Draft) and post-journal-entry (promote Draft → Posted) with H-I-T-L confirmation. | `use-cases/finance-close` |
 | `workday-mcp-server` | Workday HCM — orgs, positions, employees, time-off, payroll, shifts (+ write tools for create-employee and approve-time-off) | `use-cases/hr-onboarding` |
 | `servicenow-mcp-server` | ServiceNow ITSM — users, incidents/requests/change, work notes, KB articles, CMDB (+ write tools for create-incident, update-state, assign, add-work-note) | `use-cases/it-service-desk` |
 | `core-banking-mcp-server` | Retail core-banking — customers, accounts, transactions, cards, products, disputes (+ write tools for raise-dispute, block-card, refund-transaction, transfer-between-accounts) | `use-cases/retail-banking-csr` |

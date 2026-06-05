@@ -1,0 +1,12 @@
+{
+  "name": "variance-review",
+  "category": "standard",
+  "description": "Standard variance review — agent should call variance-review and group by flag, surfacing investigate-grade GLs first.",
+  "input_message": "Run my May 2026 variance review — flag the GL accounts that need investigation.",
+  "input_data": {
+    "period": "2026-05"
+  },
+  "expected_behavior": "Calls variance-review (which uses sap_get_variance_analysis with no gl_code). Groups results by flag — investigate first, watch second, normal collapsed to a count. Includes signed % variance (e.g. +86.4%) and dollar variance. Suggests at least one drill-down (e.g. JE-30099 manual entry on GL 6200).",
+  "expected_tool_calls": ["variance-review"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}
