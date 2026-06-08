@@ -77,105 +77,169 @@ logger = logging.getLogger(__name__)
 _copilot_agent: CopilotAgent | None = None
 _cosmos_service: CosmosService | None = None
 _blob_service: BlobSkillService | None = None
+_apm_service: ApmService | None = None
 _registries: dict[str, SkillRegistry] = {}
 _settings: Settings | None = None
+
+# Lazy per-use-case loading. A pre-warmed sandbox is unclaimed, so at warm time
+# we don't yet know which use-case it will serve — loading all 9 use-cases up
+# front (each does a serial blob sync + skill parse + ``apm install``) is the
+# dominant cold-start cost. Instead we warm only the shared core (Cosmos, blob,
+# Copilot agent) and load a single use-case's skills the first time it is
+# actually requested, caching it in ``_registries`` thereafter.
+_registry_lock = asyncio.Lock()
+
+# Cold-start timing — populated by _startup() and surfaced in the warmup
+# response so the backend can log the hosted-agent's own startup cost (vs the
+# platform microVM boot) without needing App Insights access.
+_startup_total_ms: float = 0.0
+_startup_phases: dict[str, float] = {}
 
 app = InvocationAgentServerHost()
 
 
 # ─── Lifecycle ───────────────────────────────────────────────────────────────
 
-async def _apm_startup_sync(apm_service: ApmService, use_cases_root: str) -> tuple[int, int]:
-    """Run ``apm install`` for each local use-case that needs syncing."""
-    from pathlib import Path
-
-    root = Path(use_cases_root)
-    if not root.is_dir():
-        return (0, 0)
-
-    synced = 0
-    total = 0
-    for entry in sorted(root.iterdir()):
-        if not entry.is_dir():
-            continue
-        total += 1
-        try:
-            if not await apm_service.needs_sync(entry.name):
-                continue
-            await apm_service.sync(entry.name)
-            synced += 1
-        except ApmError as exc:
-            logger.warning("APM sync failed for '%s': %s", entry.name, exc)
-    return (synced, total)
-
-
 async def _startup() -> None:
-    """Initialise all services — mirrors the FastAPI lifespan startup."""
-    global _copilot_agent, _cosmos_service, _blob_service, _settings
+    """Initialise the shared core — mirrors the FastAPI lifespan startup.
+
+    Only use-case-agnostic services are initialised here (telemetry, Cosmos,
+    blob, the Copilot SDK agent). Individual use-case skill registries are
+    loaded lazily by :func:`_ensure_registry` on first use, so a pre-warmed
+    sandbox becomes ready without paying to load all 9 use-cases up front.
+    """
+    global _copilot_agent, _cosmos_service, _blob_service, _apm_service, _settings
+    global _startup_total_ms, _startup_phases
+
+    import time as _time
+
+    t_start = _time.monotonic()
+    phases: dict[str, float] = {}
+
+    def _mark(name: str, t0: float) -> None:
+        phases[name] = round((_time.monotonic() - t0) * 1000, 1)
 
     _settings = get_settings()
 
     # Setup OpenTelemetry
+    t0 = _time.monotonic()
     setup_telemetry(_settings)
+    _mark("telemetry", t0)
 
-    # Cosmos DB
+    # Cosmos, blob storage, and the Copilot SDK agent are mutually independent,
+    # so initialise them concurrently. Cosmos init and the Copilot agent's token
+    # pre-warm each cost ~1.7s serially; running them in parallel roughly halves
+    # the shared-core warm time.
+    t0 = _time.monotonic()
     _cosmos_service = CosmosService(_settings)
-    await _cosmos_service.initialize()
-
-    # Blob Storage for skills
     blob_service = BlobSkillService(_settings)
-    await blob_service.initialize()
+    _copilot_agent = CopilotAgent(_settings)
+    # The agent shares the (initially empty) _registries dict; lazy loads add
+    # keys to it in place so the agent sees them without a reset.
+    _copilot_agent.set_registries(_registries)
+    await asyncio.gather(
+        _cosmos_service.initialize(),
+        blob_service.initialize(),
+        _copilot_agent.start(),
+    )
     _blob_service = blob_service
+    _copilot_agent.set_cosmos_service(_cosmos_service)
+    # APM service (kept for lazy per-use-case syncs)
+    _apm_service = ApmService(_settings, blob_service)
+    _mark("core_parallel", t0)
 
-    # APM service
-    apm_service = ApmService(_settings, blob_service)
-
-    if _settings.apm_enabled and _settings.apm_startup_sync:
-        synced, total = await _apm_startup_sync(apm_service, _settings.apm_use_cases_root)
-        logger.info("APM startup sync: %d/%d use-cases synced", synced, total)
-
-    # Load all use-case registries
+    # Seed local use-cases into blob if the container is empty. This only
+    # uploads use-cases that are missing (a fast list + skip when already
+    # seeded by a prior deploy / the backend), and is required so that the
+    # lazy per-use-case loads below can pull skills from blob.
     if blob_service.is_available:
+        t0 = _time.monotonic()
         try:
             seeded = await blob_service.seed_from_local()
             if seeded:
                 logger.info("Seeded %d use-case(s) into blob", len(seeded))
-            for uc_name in await blob_service.list_use_cases():
-                registry = SkillRegistry()
-                await registry.load(uc_name, blob_service, apm_service=apm_service)
-                _registries[uc_name] = registry
         except Exception:
-            logger.exception("Failed to load use-cases from blob storage — falling back to local disk")
+            logger.exception("Failed to seed use-cases into blob storage")
+        _mark("seed", t0)
 
-    if not _registries:
-        # Blob unavailable or failed — load from baked-in local use-cases directory
-        logger.info("Loading use-cases from local disk: %s", _settings.apm_use_cases_root)
-        from pathlib import Path
-
-        uc_root = Path(_settings.apm_use_cases_root)
-        if uc_root.is_dir():
-            for entry in sorted(uc_root.iterdir()):
-                if entry.is_dir() and not entry.name.startswith("."):
-                    registry = SkillRegistry()
-                    await registry.load(entry.name, apm_service=apm_service, local_root=str(uc_root))
-                    _registries[entry.name] = registry
-        else:
-            logger.warning("Local use-cases directory not found: %s", uc_root)
-
-    logger.info("Loaded %d use-cases: %s", len(_registries), list(_registries.keys()))
-
-    # Copilot SDK agent
-    _copilot_agent = CopilotAgent(_settings)
-    _copilot_agent.set_registries(_registries)
-    _copilot_agent.set_cosmos_service(_cosmos_service)
-    await _copilot_agent.start()
+    _startup_phases = phases
+    _startup_total_ms = round((_time.monotonic() - t_start) * 1000, 1)
 
     logger.info(
-        "Kratos Hosted Agent started — environment=%s foundry_endpoint=%s model=%s",
+        "Kratos Hosted Agent core started in %.0fms (phases=%s) — environment=%s model=%s",
+        _startup_total_ms,
+        phases,
         _settings.environment,
-        _settings.foundry_endpoint[:80] if _settings.foundry_endpoint else "(empty)",
         _settings.foundry_model_deployment or "(empty)",
     )
+
+
+async def _ensure_registry(use_case: str) -> None:
+    """Lazily load a single use-case's skill registry on first use.
+
+    Loading is guarded by a lock and cached in ``_registries`` so concurrent or
+    repeat requests for the same use-case load it only once. Falls back to the
+    baked-in local ``use-cases/`` directory when blob is unavailable.
+    """
+    if use_case in _registries:
+        return
+
+    import time as _time
+
+    async with _registry_lock:
+        if use_case in _registries:
+            return
+        t0 = _time.monotonic()
+
+        # Sync just this use-case's APM dependencies (no-op when none declared).
+        if _apm_service is not None and _settings is not None and _settings.apm_enabled and _settings.apm_startup_sync:
+            try:
+                if await _apm_service.needs_sync(use_case):
+                    await _apm_service.sync(use_case)
+            except ApmError as exc:
+                logger.warning("APM sync failed for '%s': %s", use_case, exc)
+            except Exception:
+                logger.warning("Unexpected APM sync error for '%s' (non-fatal)", use_case, exc_info=True)
+
+        local_root = _settings.apm_use_cases_root if _settings else "use-cases"
+
+        # Prefer blob (so use-cases uploaded post-deploy are picked up), but ALWAYS
+        # fall back to the baked-in local use-cases/ directory if blob is
+        # unavailable OR the blob load fails / yields nothing. The hosted-agent's
+        # Foundry-managed compute may not be able to reach the storage account
+        # (private-endpoint only), so the local fallback is what keeps the
+        # correct skills + system prompt loaded — mirroring the original eager
+        # startup behaviour. Without this fallback the agent silently reverts to
+        # the generic system prompt for every use-case.
+        registry: SkillRegistry | None = None
+        if _blob_service is not None and _blob_service.is_available:
+            try:
+                candidate = SkillRegistry()
+                await candidate.load(use_case, _blob_service, apm_service=_apm_service)
+                if candidate.system_prompt or candidate.skills:
+                    registry = candidate
+                else:
+                    logger.warning("Blob load for '%s' returned no skills/prompt — falling back to local disk", use_case)
+            except Exception:
+                logger.warning("Blob load failed for '%s' — falling back to local disk", use_case, exc_info=True)
+
+        if registry is None:
+            try:
+                candidate = SkillRegistry()
+                await candidate.load(use_case, apm_service=_apm_service, local_root=local_root)
+                registry = candidate
+            except Exception:
+                logger.exception("Failed to lazy-load use-case '%s' from local disk", use_case)
+                return
+
+        _registries[use_case] = registry
+        logger.info(
+            "Lazy-loaded use-case '%s' (%d skills, prompt=%s) in %.0fms",
+            use_case,
+            len(getattr(registry, "skills", {}) or {}),
+            bool(getattr(registry, "system_prompt", "")),
+            (_time.monotonic() - t0) * 1000,
+        )
 
 
 async def _shutdown() -> None:
@@ -359,7 +423,13 @@ async def handle_invoke(request: Request) -> Response:
     if isinstance(_warmup_data, dict) and _warmup_data.get("warmup") is True:
         return JSONResponse(
             status_code=200,
-            content={"status": "warm", "ready": _copilot_agent is not None},
+            content={
+                "status": "warm",
+                "ready": _copilot_agent is not None,
+                "startup_ms": _startup_total_ms,
+                "phases": _startup_phases,
+                "loaded_use_cases": list(_registries.keys()),
+            },
         )
 
     try:
@@ -411,6 +481,12 @@ async def handle_invoke(request: Request) -> Response:
                 "message": str(e),
             },
         )
+
+    # Lazy-load this conversation's use-case (cached after first use). A
+    # pre-warmed sandbox warms only the shared core, so the first real request
+    # for a given use-case pays a small one-time load instead of every sandbox
+    # loading all 9 use-cases up front.
+    await _ensure_registry(use_case)
 
     return StreamingResponse(
         _stream_response(request.state.invocation_id, conversation_id, message, use_case),

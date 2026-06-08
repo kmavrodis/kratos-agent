@@ -135,12 +135,25 @@ class FoundryAgentProxy:
                 json={"warmup": True},
                 timeout=aiohttp.ClientTimeout(total=45),
             ) as resp:
-                await resp.read()
+                body = await resp.read()
                 elapsed = loop.time() - t0
                 ok = resp.status == 200
                 returned = resp.headers.get("x-agent-session-id")
                 if not ok:
                     logger.warning("Warm-pool ping returned HTTP %d in %.1fs", resp.status, elapsed)
+                else:
+                    # The hosted agent reports its own _startup() cost so we can
+                    # distinguish platform microVM boot from our init work.
+                    with contextlib.suppress(Exception):
+                        payload = json.loads(body)
+                        startup_ms = payload.get("startup_ms")
+                        if startup_ms is not None:
+                            logger.info(
+                                "Warm-pool: hosted-agent core ready in %sms (phases=%s, loaded=%s)",
+                                startup_ms,
+                                payload.get("phases"),
+                                payload.get("loaded_use_cases"),
+                            )
                 return (ok, returned, resp.status, elapsed)
         except (aiohttp.ClientError, asyncio.TimeoutError):
             elapsed = loop.time() - t0
