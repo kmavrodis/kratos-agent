@@ -1,0 +1,14 @@
+{
+  "name": "vip-watchlist-no-identity-ask",
+  "category": "identity-anchor",
+  "description": "Headline sample question. Agent must resolve the user as Aaron Cole (AGT-301) and the date as 8 Jun 2026 without asking, then brief the open VIP tickets with what's blocking each.",
+  "input_message": "Brief me on the open VIP tickets and what's blocking each one",
+  "input_data": {
+    "expected_agent": "AGT-301",
+    "expected_date": "2026-06-08",
+    "must_not_ask_identity": true
+  },
+  "expected_behavior": "Calls servicenow_list_tickets / vip-watchlist skill to find open tickets where the caller has vip=true. Resolves each caller via servicenow_get_user; optionally enriches with workday_get_employee / m365_get_user_presence for OOO context. Renders a per-ticket brief: VIP badge, caller, current state, last note, what's blocking. Does NOT ask 'who are you?' or 'which queue?'",
+  "expected_tool_calls": ["vip-watchlist", "servicenow"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}

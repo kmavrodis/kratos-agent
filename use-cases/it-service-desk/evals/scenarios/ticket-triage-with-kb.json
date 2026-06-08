@@ -1,0 +1,14 @@
+{
+  "name": "ticket-triage-with-kb",
+  "category": "happy-path",
+  "description": "Triage INC-7001 (MFA loop). Agent fetches the ticket + work notes + caller, searches the KB, proposes a remediation that matches KB-200, and does not write anything without confirmation.",
+  "input_message": "Triage INC-7001 — walk me through what's known and propose a fix",
+  "input_data": {
+    "expected_ticket": "INC-7001",
+    "expected_kb_match": "KB-200",
+    "must_not_write": true
+  },
+  "expected_behavior": "Calls servicenow_get_ticket(INC-7001), servicenow_list_work_notes(INC-7001), servicenow_get_user(caller) in parallel. Searches KB for 'MFA loop' or similar via servicenow_search_kb. Renders the standard triage shape: snapshot -> history -> KB-cited fix -> recommended next action. Does NOT call any write tool (servicenow_update_ticket_state, servicenow_add_work_note, etc.) without explicit confirmation.",
+  "expected_tool_calls": ["ticket-triage", "servicenow"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}
