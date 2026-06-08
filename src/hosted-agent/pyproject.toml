@@ -7,7 +7,7 @@ dependencies = [
     # Hosted agent protocol adapter
     "azure-ai-agentserver-invocations>=1.0.0b3",
     # Copilot SDK engine (same version as the Container App backend)
-    "github-copilot-sdk==0.1.32",
+    "github-copilot-sdk==1.0.0",
     # Azure services (reused from backend)
     "azure-identity>=1.17.0",
     "azure-cosmos>=4.7.0",

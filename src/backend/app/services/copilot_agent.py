@@ -17,7 +17,7 @@ from importlib.metadata import version
 from typing import TYPE_CHECKING
 
 from azure.identity.aio import ManagedIdentityCredential, get_bearer_token_provider
-from copilot import CopilotClient, PermissionRequestResult
+from copilot import CopilotClient, PermissionHandler
 
 try:
     from azure.identity.aio import AzureCLICredential, ChainedTokenCredential
@@ -454,7 +454,7 @@ class CopilotAgent:
                 "mode": "replace",
                 "content": system_prompt,
             },
-            "on_permission_request": lambda req, ctx: PermissionRequestResult(kind="approved"),
+            "on_permission_request": PermissionHandler.approve_all,
             "on_user_input_request": self._handle_user_input_request,
         }
         provider = self._build_provider_config()
@@ -552,7 +552,7 @@ class CopilotAgent:
 
         if sdk_session_id:
             try:
-                session = await self._client.resume_session(sdk_session_id, config)
+                session = await self._client.resume_session(sdk_session_id, **config)
                 elapsed_ms = (time.monotonic() - t0) * 1000
                 logger.info(
                     "Resumed SDK session=%s for conversation=%s elapsed=%.0fms",
@@ -571,7 +571,7 @@ class CopilotAgent:
 
         if session is None:
             t0 = time.monotonic()
-            session = await self._client.create_session(config)
+            session = await self._client.create_session(**config)
             elapsed_ms = (time.monotonic() - t0) * 1000
 
             # Persist the new SDK session ID to Cosmos DB
@@ -962,10 +962,7 @@ class CopilotAgent:
                     session.on(on_event)
                     self._registered_handlers.add(conversation_id)
 
-                send_opts: dict = {"prompt": message}
-                if attachments:
-                    send_opts["attachments"] = attachments
-                await session.send(send_opts)
+                await session.send(message, attachments=attachments)
 
                 # Drain the queue until sentinel. 300s silence threshold matches
                 # eval_service._REQUEST_TIMEOUT — gives complex multi-tool scenarios
