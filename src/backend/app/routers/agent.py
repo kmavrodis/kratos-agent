@@ -1,5 +1,6 @@
 """Agent endpoint — forwards requests to the Foundry hosted agent and streams SSE."""
 
+import asyncio
 import base64
 import contextlib
 import json
@@ -13,6 +14,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 from sse_starlette.sse import EventSourceResponse
 
@@ -30,6 +32,11 @@ logger = logging.getLogger(__name__)
 _tracer = trace.get_tracer("kratos.agent.proxy")
 
 router = APIRouter()
+
+# Keep strong references to in-flight agent runs so they are not garbage
+# collected if the client disconnects before the run completes. The run
+# continues to completion and persists its result to Cosmos regardless.
+_background_runs: set[asyncio.Task] = set()
 
 _SAFE_RELPATH_RE = re.compile(r"^[\w\-. /]+$")
 
@@ -88,7 +95,17 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
     if eval_run_id:
         _span.set_attribute("kratos.eval_run_id", eval_run_id)
 
-    async def event_generator():  # noqa: ANN202
+    # Capture references that must outlive the HTTP request. The agent run is
+    # launched as a detached task below so it survives a client disconnect
+    # (e.g. the user navigates away mid-response); the frontend can re-fetch
+    # the persisted result from Cosmos at any time.
+    app = request.app
+    otel_ctx = otel_context.get_current()
+    event_queue: asyncio.Queue = asyncio.Queue()
+    sentinel = object()
+
+    async def run_agent() -> None:
+        token = otel_context.attach(otel_ctx)
         start_time = time.monotonic()
         total_tool_calls = 0
 
@@ -104,7 +121,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
             await cosmos.upsert_message(user_message)
 
             # Resolve use-case system prompt from the registry
-            registries = getattr(request.app.state, "registries", {})
+            registries = getattr(app.state, "registries", {})
             registry = registries.get(body.useCase)
             system_prompt = getattr(registry, "system_prompt", None) if registry else None
 
@@ -151,7 +168,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
 
                 if event_name == "thought":
                     collected_thoughts.append(event_data.get("content", ""))
-                    yield {"event": "thought", "data": json.dumps(event_data)}
+                    await event_queue.put({"event": "thought", "data": json.dumps(event_data)})
                 elif event_name == "tool_call":
                     status = event_data.get("status")
                     tool_name = (
@@ -185,8 +202,8 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                         if real_call_id:
                             call_id = str(real_call_id)
                         else:
-                            queue = started_queue.get(tool_name) or []
-                            call_id = queue.pop(0) if queue else f"{tool_name}:orphan"
+                            pending = started_queue.get(tool_name) or []
+                            call_id = pending.pop(0) if pending else f"{tool_name}:orphan"
                         sp = open_tool_spans.pop(call_id, None)
                         if sp is None:
                             # tool_call arrived only on completion — synthesise a span
@@ -206,7 +223,7 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                         sp.end()
                         total_tool_calls += 1
                     collected_tool_calls.append(event_data)
-                    yield {"event": "tool_call", "data": json.dumps(event_data)}
+                    await event_queue.put({"event": "tool_call", "data": json.dumps(event_data)})
                 elif event_name == "usage":
                     # Replay usage as an LLM span so traces tab shows model + tokens
                     llm_sp = _tracer.start_span(
@@ -223,18 +240,18 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                         },
                     )
                     llm_sp.end()
-                    yield {"event": "usage", "data": json.dumps(event_data)}
+                    await event_queue.put({"event": "usage", "data": json.dumps(event_data)})
                 elif event_name == "content":
                     assistant_content_parts.append(event_data.get("content", ""))
-                    yield {"event": "content", "data": json.dumps(event_data)}
+                    await event_queue.put({"event": "content", "data": json.dumps(event_data)})
                 elif event_name == "file_content":
                     # Hosted agent streams generated files — save to /tmp for
                     # the download endpoint to serve. Do NOT forward to frontend.
                     _save_streamed_file(event_data)
                 elif event_name == "user_input_request":
-                    yield {"event": "user_input_request", "data": json.dumps(event_data)}
+                    await event_queue.put({"event": "user_input_request", "data": json.dumps(event_data)})
                 elif event_name == "error":
-                    yield {"event": "error", "data": json.dumps(event_data)}
+                    await event_queue.put({"event": "error", "data": json.dumps(event_data)})
                 elif event_name == "done":
                     proxy_done = event_data
                 elif event_name == "_gateway_session":
@@ -284,15 +301,17 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
 
             # Generate follow-up questions (best-effort, non-blocking)
             try:
-                registries = getattr(request.app.state, "registries", {})
+                registries = getattr(app.state, "registries", {})
                 registry = registries.get(body.useCase)
                 skill_names = [s.name for s in registry.skills if s.enabled] if registry else []
                 follow_ups = await generate_follow_ups(body.message, full_response, skill_names)
                 if follow_ups:
-                    yield {
-                        "event": "follow_up_questions",
-                        "data": json.dumps(FollowUpQuestionsEvent(questions=follow_ups).model_dump()),
-                    }
+                    await event_queue.put(
+                        {
+                            "event": "follow_up_questions",
+                            "data": json.dumps(FollowUpQuestionsEvent(questions=follow_ups).model_dump()),
+                        }
+                    )
             except Exception:
                 logger.debug("Follow-up generation skipped", exc_info=True)
 
@@ -308,12 +327,31 @@ async def chat(body: AgentRequest, request: Request) -> EventSourceResponse:
                 timeToFirstTokenMs=run_stats["timeToFirstTokenMs"],
                 modelLatencyMs=run_stats["modelLatencyMs"],
             )
-            yield {"event": "done", "data": json.dumps(done.model_dump())}
+            await event_queue.put({"event": "done", "data": json.dumps(done.model_dump())})
 
         except Exception:
             logger.exception("Agent proxy failed for conversation=%s", body.conversationId)
             error = ErrorEvent(message="An internal error occurred", code="AGENT_ERROR")
-            yield {"event": "error", "data": json.dumps(error.model_dump())}
+            await event_queue.put({"event": "error", "data": json.dumps(error.model_dump())})
+        finally:
+            await event_queue.put(sentinel)
+            otel_context.detach(token)
+
+    # Launch the agent run detached from the request lifecycle. It keeps
+    # running (and persists to Cosmos) even if the client disconnects.
+    run_task = asyncio.create_task(run_agent())
+    _background_runs.add(run_task)
+    run_task.add_done_callback(_background_runs.discard)
+
+    async def event_generator():  # noqa: ANN202
+        # Relay events from the detached run to the connected client. If the
+        # client disconnects, this generator is cancelled but the run task
+        # above continues to completion independently.
+        while True:
+            item = await event_queue.get()
+            if item is sentinel:
+                break
+            yield item
 
     return EventSourceResponse(event_generator())
 

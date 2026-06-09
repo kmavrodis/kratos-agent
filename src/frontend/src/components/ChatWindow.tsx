@@ -32,52 +32,92 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   const [userInputPrompt, setUserInputPrompt] = useState<UserInputPrompt | null>(null);
   const [userInputAnswer, setUserInputAnswer] = useState("");
   const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([]);
+  // True when an answer is being generated on the backend but is not being
+  // streamed into this view (e.g. after navigating back to a conversation
+  // whose response is still in flight). We poll Cosmos until it arrives.
+  const [awaitingResponse, setAwaitingResponse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const thoughtsRef = useRef<string[]>([]);
   const toolCallsRef = useRef<ToolCallInfo[]>([]);
   const runStatsRef = useRef<RunStats | null>(null);
   const titleUpdatedRef = useRef<Set<string>>(new Set()); // track which conversations have been titled
+  const isStreamingRef = useRef(false);
+  isStreamingRef.current = isStreaming;
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thoughts, activeToolCalls, runStats]);
 
-  // Load message history when switching to an existing conversation
+  // Load message history when switching to an existing conversation. The agent
+  // run is durable on the backend (it persists to Cosmos even if the client
+  // disconnects), so if the latest message is still a user turn we poll until
+  // the assistant response is persisted and appears.
   useEffect(() => {
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 150; // ~5 min at 2s intervals
+    const POLL_INTERVAL_MS = 2000;
+
     setMessages([]);
     setThoughts([]);
     setActiveToolCalls([]);
     setRunStats(null);
     setMessageStats({});
-    getConversationMessages(conversation.id)
-      .then((msgs) => {
+    setAwaitingResponse(false);
+
+    const applyLoaded = (loaded: ChatMessage[]) => {
+      setMessages(loaded);
+      const restoredStats: Record<string, { thoughts: string[]; toolCalls: ToolCallInfo[]; runStats: RunStats }> = {};
+      for (const m of loaded) {
+        if (m.role === "assistant" && m.metadata?.runStats) {
+          restoredStats[m.id] = {
+            thoughts: m.metadata.thoughts || [],
+            toolCalls: m.metadata.toolCalls || [],
+            runStats: m.metadata.runStats,
+          };
+        }
+      }
+      setMessageStats(restoredStats);
+    };
+
+    const load = async () => {
+      try {
+        const msgs = await getConversationMessages(conversation.id);
+        if (cancelled) return;
+        // If this view is actively streaming its own response, leave it alone.
+        if (isStreamingRef.current) {
+          setAwaitingResponse(false);
+          return;
+        }
         const loaded = (msgs as ChatMessage[]).filter(
           (m) => m.role === "user" || m.role === "assistant"
         );
         if (loaded.length > 0) {
-          setMessages(loaded);
-
-          // Restore execution details from persisted metadata
-          const restoredStats: Record<string, { thoughts: string[]; toolCalls: ToolCallInfo[]; runStats: RunStats }> = {};
-          for (const m of loaded) {
-            if (m.role === "assistant" && m.metadata?.runStats) {
-              restoredStats[m.id] = {
-                thoughts: m.metadata.thoughts || [],
-                toolCalls: m.metadata.toolCalls || [],
-                runStats: m.metadata.runStats,
-              };
-            }
-          }
-          if (Object.keys(restoredStats).length > 0) {
-            setMessageStats(restoredStats);
-          }
+          applyLoaded(loaded);
         }
-      })
-      .catch(() => {
-        // Non-fatal — new conversation or backend unreachable
-      });
+        // A trailing user message means the assistant reply is still being
+        // generated on the backend — keep polling until it shows up.
+        const last = loaded[loaded.length - 1];
+        const pending = !!last && last.role === "user";
+        setAwaitingResponse(pending);
+        if (pending && attempts < MAX_ATTEMPTS) {
+          attempts += 1;
+          pollTimer = setTimeout(load, POLL_INTERVAL_MS);
+        }
+      } catch {
+        // Non-fatal — new conversation or backend briefly unreachable.
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
   }, [conversation.id]);
 
   const handleSend = async (messageOverride?: string) => {
@@ -106,6 +146,7 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsStreaming(true);
+    setAwaitingResponse(false);
     setThoughts([]);
     setActiveToolCalls([]);
     setRunStats(null);
@@ -402,6 +443,18 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                 isStreaming={true}
                 runStats={runStats}
               />
+            </div>
+          )}
+
+          {/* Awaiting a response that is still being generated on the backend
+              (e.g. after navigating back to this conversation mid-run). */}
+          {!isStreaming && awaitingResponse && (
+            <div className="ml-11 flex items-center gap-2.5 text-sm text-slate-500 dark:text-slate-400">
+              <svg className="w-4 h-4 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>Generating response…</span>
             </div>
           )}
 
