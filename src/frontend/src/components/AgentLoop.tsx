@@ -12,470 +12,443 @@ interface Step {
   description: string;
   detail: string;
   icon: React.ReactNode;
-  layer: "frontend" | "backend" | "sdk" | "azure";
+  layer: "you" | "kratos" | "sdk" | "azure";
   isLoop?: boolean;
   visualization: React.ReactNode;
 }
 
+/* Layer colors use theme-stable Tailwind hues for the 4-way differentiation
+   plus the semantic `accent` token for the Kratos layer so it picks up the
+   active theme. Chrome (modal, borders, text) uses semantic tokens. */
 const LAYER_COLORS = {
-  frontend: {
-    dot: "bg-cyan-400",
-    badge: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-400/10 dark:text-cyan-400 dark:border-cyan-400/20",
-    ring: "ring-cyan-400/30",
-    text: "text-cyan-600 dark:text-cyan-400",
+  you: {
+    dot:   "bg-cyan-500",
+    badge: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20",
+    ring:  "ring-cyan-500/30",
+    text:  "text-cyan-600 dark:text-cyan-400",
   },
-  backend: {
-    dot: "bg-primary-400",
-    badge: "bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-400/10 dark:text-primary-400 dark:border-primary-400/20",
-    ring: "ring-primary-400/30",
-    text: "text-primary-600 dark:text-primary-400",
+  kratos: {
+    dot:   "bg-accent",
+    badge: "bg-accent-soft text-accent border-accent/20",
+    ring:  "ring-accent/30",
+    text:  "text-accent",
   },
   sdk: {
-    dot: "bg-violet-400",
-    badge: "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-400/10 dark:text-violet-400 dark:border-violet-400/20",
-    ring: "ring-violet-400/30",
-    text: "text-violet-600 dark:text-violet-400",
+    dot:   "bg-violet-500",
+    badge: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+    ring:  "ring-violet-500/30",
+    text:  "text-violet-600 dark:text-violet-400",
   },
   azure: {
-    dot: "bg-accent-400",
-    badge: "bg-accent-50 text-accent-700 border-accent-200 dark:bg-accent-400/10 dark:text-accent-400 dark:border-accent-400/20",
-    ring: "ring-accent-400/30",
-    text: "text-accent-600 dark:text-accent-400",
+    dot:   "bg-emerald-500",
+    badge: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    ring:  "ring-emerald-500/30",
+    text:  "text-emerald-600 dark:text-emerald-400",
   },
 } as const;
 
 const LAYER_LABELS: Record<string, string> = {
-  frontend: "Frontend",
-  backend: "Backend",
-  sdk: "Copilot SDK",
-  azure: "Azure",
+  you:    "You",
+  kratos: "Kratos",
+  sdk:    "Copilot SDK",
+  azure:  "Azure",
 };
 
-/* ─── Loop step indices (0-indexed) ──────────────────────────────── */
-const LOOP_START = 8;  // Step 9: Tool Decision
-const LOOP_END = 10;   // Step 11: Agentic Loop
+/* Loop step indices (0-indexed): steps 7 (Plan), 8 (Act), 9 (Loop) */
+const LOOP_START = 6;
+const LOOP_END = 8;
 
-/* ─── Step Visualization Components ──────────────────────────────── */
+/* ─── Visualizations ─────────────────────────────────────────────── */
 
-function VizChatInput() {
+function VizSdkStack() {
   return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-sm" role="img" aria-label="Chat input visualization">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-3 h-3 rounded-full bg-red-500/80" />
-        <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
-        <span className="w-3 h-3 rounded-full bg-green-500/80" />
-        <span className="ml-2 text-xs text-muted">Kratos Agent</span>
-      </div>
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="SDK stack diagram">
       <div className="space-y-2">
-        <div className="flex items-center gap-2 text-muted">
-          <span className="text-cyan-400 text-xs font-semibold px-1.5 py-0.5 rounded bg-cyan-400/10">[user]</span>
-          <span className="text-text-strong">Analyze my portfolio performance and draft a summary email</span>
+        <div className="rounded-lg bg-surface border border-border px-4 py-3 text-center">
+          <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-0.5">Your app</div>
+          <div className="text-sm font-semibold text-text-strong">Kratos</div>
+          <div className="text-[11px] text-muted mt-0.5">Persona, skills, connectors, UI</div>
         </div>
-        <div className="flex items-start gap-2 text-muted">
-          <span className="text-cyan-400/60 text-xs font-semibold px-1.5 py-0.5 rounded bg-cyan-400/5 mt-0.5">📎</span>
-          <span className="text-muted text-xs">portfolio_q4.xlsx <span className="text-text">(base64, 142 KB)</span></span>
+        <div className="flex justify-center text-muted text-lg leading-none">↓</div>
+        <div className="rounded-lg bg-violet-500/10 border border-violet-500/30 px-4 py-3 text-center ring-1 ring-violet-500/20">
+          <div className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-400 font-semibold mb-0.5">The harness</div>
+          <div className="text-sm font-semibold text-text-strong">GitHub Copilot SDK</div>
+          <div className="text-[11px] text-muted mt-0.5">Sessions, tool calling, streaming, retries</div>
+        </div>
+        <div className="flex justify-center text-muted text-lg leading-none">↓</div>
+        <div className="rounded-lg bg-surface border border-border px-4 py-3 text-center">
+          <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-0.5">Built into the SDK</div>
+          <div className="text-sm font-semibold text-text-strong">Tool calls · Session memory · Streaming · Model routing</div>
         </div>
       </div>
     </div>
   );
 }
 
-function VizApiRequest() {
+function VizPersonas() {
+  const personas = [
+    { name: "Wealth advisor", prompt: "Portfolio review, market data, email drafting", tint: "from-emerald-500/15 to-emerald-500/5", border: "border-emerald-500/30" },
+    { name: "Retail banker",  prompt: "Customer lookup, account support, next best action", tint: "from-cyan-500/15 to-cyan-500/5",       border: "border-cyan-500/30" },
+    { name: "Clinician",      prompt: "Patient context, FHIR data, visit preparation", tint: "from-violet-500/15 to-violet-500/5",   border: "border-violet-500/30" },
+  ];
   return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="API request visualization">
-      <div className="mb-2">
-        <span className="text-green-400 font-bold">POST</span>{" "}
-        <span className="text-text-strong">/chat</span>{" "}
-        <span className="text-text">HTTP/1.1</span>
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Three personas converging on one engine">
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {personas.map((p) => (
+          <div key={p.name} className={`rounded-lg bg-gradient-to-br ${p.tint} border ${p.border} px-2.5 py-2.5`}>
+            <div className="text-[10px] uppercase tracking-wide text-muted font-semibold mb-1">Persona bundle</div>
+            <div className="text-[12px] font-semibold text-text-strong mb-1.5">{p.name}</div>
+            <div className="text-[10.5px] text-text leading-snug mb-2">{p.prompt}</div>
+            <div className="flex flex-wrap gap-1">
+              {['prompt', 'skills', 'MCP'].map((part) => (
+                <span key={part} className="rounded bg-surface/70 border border-border-soft px-1.5 py-0.5 text-[9px] text-muted">
+                  {part}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
-      <div className="text-muted mb-3">
-        <div>Content-Type: <span className="text-muted">text/event-stream</span></div>
-        <div>Connection: <span className="text-muted">keep-alive</span></div>
-      </div>
-      <div className="border-t border-border pt-2 space-y-1">
-        <div className="text-accent">{"{"}</div>
-        <div className="pl-4"><span className="text-accent">&quot;message&quot;</span>: <span className="text-amber-300">&quot;Analyze my portfolio...&quot;</span>,</div>
-        <div className="pl-4"><span className="text-accent">&quot;conversationId&quot;</span>: <span className="text-amber-300">&quot;c9f2e...&quot;</span>,</div>
-        <div className="pl-4"><span className="text-accent">&quot;useCase&quot;</span>: <span className="text-amber-300">&quot;wealth-management&quot;</span>,</div>
-        <div className="pl-4"><span className="text-accent">&quot;attachments&quot;</span>: [<span className="text-muted">...</span>]</div>
-        <div className="text-accent">{"}"}</div>
-      </div>
-    </div>
-  );
-}
-
-function VizCosmosWrite() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="Cosmos DB write visualization">
-      <div className="flex items-center gap-2 mb-3">
-        <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375" />
+      <div className="relative h-6">
+        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 300 24" preserveAspectRatio="none" aria-hidden>
+          <path d="M 50 0 L 150 22" stroke="currentColor" className="text-border" strokeWidth="1" fill="none" />
+          <path d="M 150 0 L 150 22" stroke="currentColor" className="text-border" strokeWidth="1" fill="none" />
+          <path d="M 250 0 L 150 22" stroke="currentColor" className="text-border" strokeWidth="1" fill="none" />
         </svg>
-        <span className="text-accent font-semibold text-xs">Cosmos DB — Write-Ahead</span>
       </div>
-      <div className="space-y-1">
-        <div className="text-muted">container: <span className="text-text-strong">messages</span></div>
-        <div className="text-muted">partition: <span className="text-amber-300">&quot;c9f2e...&quot;</span></div>
-        <div className="border-t border-border my-2" />
-        <div className="text-accent">{"{"}</div>
-        <div className="pl-4"><span className="text-accent">&quot;id&quot;</span>: <span className="text-amber-300">&quot;a7b3f...&quot;</span>,</div>
-        <div className="pl-4"><span className="text-accent">&quot;role&quot;</span>: <span className="text-amber-300">&quot;user&quot;</span>,</div>
-        <div className="pl-4"><span className="text-accent">&quot;content&quot;</span>: <span className="text-amber-300">&quot;Analyze my portfolio...&quot;</span>,</div>
-        <div className="pl-4"><span className="text-accent">&quot;timestamp&quot;</span>: <span className="text-amber-300">&quot;2025-07-14T09:32:01Z&quot;</span></div>
-        <div className="text-accent">{"}"}</div>
-      </div>
-      <div className="mt-2 text-green-400 text-xs flex items-center gap-1">
-        <span>✓</span> Persisted before AI processing
-      </div>
-    </div>
-  );
-}
-
-function VizSessionResolve() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="Session resolution visualization">
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="flex-1 rounded-lg bg-accent border border-violet-500/20 p-2.5 text-center">
-            <div className="text-accent font-semibold text-[10px] uppercase tracking-wide mb-1">conversation_id</div>
-            <div className="text-text-strong">c9f2e-4a1b</div>
-          </div>
-          <div className="text-muted text-lg">→</div>
-          <div className="flex-1 rounded-lg bg-accent border border-violet-500/20 p-2.5 text-center">
-            <div className="text-accent font-semibold text-[10px] uppercase tracking-wide mb-1">sdk_session_id</div>
-            <div className="text-text-strong">sess_8x7k2</div>
-          </div>
+      <div className="flex justify-center">
+        <div className="rounded-lg bg-accent-soft border border-accent/30 px-4 py-2">
+          <div className="text-[10px] uppercase tracking-wider text-accent font-semibold">Kratos engine</div>
+          <div className="text-[11px] text-text">One hosted agent switching personas</div>
         </div>
-        <div className="border-t border-border pt-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-green-400">Existing session found — resuming multi-turn context</span>
-          </div>
-        </div>
-        <div className="text-text text-[10px]">Auth: ManagedIdentityCredential → AzureCLICredential chain</div>
       </div>
     </div>
   );
 }
 
-function VizSystemPrompt() {
+function VizSkillsMenu() {
+  const skills = [
+    { name: "web-search",      desc: "search the web" },
+    { name: "rag-search",      desc: "search company docs" },
+    { name: "data-analysis",   desc: "run Python on data", active: true },
+    { name: "email-draft",     desc: "draft an email" },
+    { name: "portfolio-review", desc: "pull a client's holdings" },
+    { name: "pdf-report",      desc: "generate a PDF" },
+  ];
   return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="System prompt assembly visualization">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-amber-400">📄</span>
-        <span className="text-muted">Blob Storage</span>
-        <span className="text-text">/</span>
-        <span className="text-amber-300">wealth-management</span>
-        <span className="text-text">/</span>
-        <span className="text-text-strong">SYSTEM_PROMPT.md</span>
-      </div>
-      <div className="rounded-lg bg-slate-900 border border-border p-3 space-y-1.5">
-        <div className="text-accent font-semibold text-[10px] uppercase tracking-wide">System Prompt</div>
-        <div className="text-text-strong">You are a wealth management advisor AI assistant.</div>
-        <div className="text-text-strong">You have access to portfolio analysis tools,</div>
-        <div className="text-text-strong">market data, and document generation.</div>
-        <div className="text-muted mt-2">Always prefer tool usage over guessing.</div>
-        <div className="text-muted">Never fabricate financial data.</div>
-      </div>
-      <div className="mt-2 flex items-center gap-2 text-muted text-[10px]">
-        <span className="text-accent">mode=&apos;replace&apos;</span>
-        <span>•</span>
-        <span>YAML frontmatter stripped</span>
-      </div>
-    </div>
-  );
-}
-
-function VizSkillRegistry() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 text-xs" role="img" aria-label="Skill registry visualization">
-      <div className="flex items-center gap-2 mb-3 font-mono">
-        <span className="text-accent font-semibold">skills.yaml</span>
-        <span className="text-text">→</span>
-        <span className="text-muted">wealth-management</span>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {[
-          { name: "web-search", icon: "🔍", active: true },
-          { name: "rag-search", icon: "📚", active: true },
-          { name: "code-interpreter", icon: "🐍", active: true },
-          { name: "data-analysis", icon: "📊", active: true },
-          { name: "email-draft", icon: "✉️", active: true },
-          { name: "portfolio-review", icon: "💼", active: true },
-          { name: "document-summary", icon: "📝", active: true },
-          { name: "pdf-report", icon: "📄", active: true },
-          { name: "file-sharing", icon: "📁", active: false },
-        ].map((skill) => (
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Skills menu with one expanded">
+      <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">The skill menu the model sees</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-3">
+        {skills.map((s) => (
           <div
-            key={skill.name}
-            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border font-mono ${
-              skill.active
-                ? "bg-primary-400/5 border-primary-400/20 text-primary-300"
-                : "bg-slate-900 border-slate-800 text-slate-600"
+            key={s.name}
+            className={`rounded-lg border px-2 py-1.5 text-[11px] ${
+              s.active
+                ? "bg-accent-soft border-accent/40 text-accent ring-1 ring-accent/20"
+                : "bg-surface border-border text-text"
             }`}
           >
-            <span className="text-sm">{skill.icon}</span>
-            <span className="truncate">{skill.name}</span>
+            <div className="font-semibold">{s.name}</div>
+            <div className="text-[10px] text-muted">{s.desc}</div>
           </div>
         ))}
       </div>
-      <div className="mt-2 font-mono text-muted text-[10px]">
-        Each skill: <span className="text-accent">@define_tool</span> async function + OpenTelemetry span
-      </div>
-    </div>
-  );
-}
-
-function VizSendToSdk() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="SDK dispatch visualization">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="rounded-lg bg-accent border border-accent px-3 py-2 text-center">
-            <div className="text-accent font-semibold text-[10px] uppercase tracking-wide">FastAPI</div>
-            <div className="text-muted text-[10px]">Backend</div>
-          </div>
-          <div className="flex-1 px-3 flex flex-col items-center">
-            <div className="text-accent text-[10px] mb-1">session.send()</div>
-            <div className="w-full h-[1px] bg-accent relative">
-              <div className="absolute right-0 -top-1 text-accent">▶</div>
-            </div>
-            <div className="text-text text-[10px] mt-1">message + attachments</div>
-          </div>
-          <div className="rounded-lg bg-accent border border-violet-400/20 px-3 py-2 text-center">
-            <div className="text-accent font-semibold text-[10px] uppercase tracking-wide">Copilot SDK</div>
-            <div className="text-muted text-[10px]">Session</div>
-          </div>
+      <div className="rounded-lg bg-surface border border-accent/40 p-3">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[10px] uppercase tracking-wider text-accent font-semibold">Loaded on demand</span>
+          <span className="text-[10px] text-muted">data-analysis · SKILL.md</span>
         </div>
-        <div className="border-t border-border pt-2 text-muted">
-          <div>on_event callback → asyncio.Queue → SSE generator</div>
-          <div className="text-text mt-1">Registered once per session, captures all SDK events</div>
+        <div className="text-[11px] text-text leading-relaxed font-mono">
+          # Data analysis<br />
+          Use this skill when the user wants you to compute<br />
+          metrics over a spreadsheet or table.<br />
+          <span className="text-muted">Inputs: file path, the question.</span><br />
+          <span className="text-muted">Returns: numbers and a short summary.</span>
         </div>
       </div>
     </div>
   );
 }
 
-function VizModelInference() {
+function VizConnectors() {
+  const systems = ["Salesforce", "SAP S/4", "Epic", "ServiceNow", "Workday"];
   return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="Model inference visualization">
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="rounded-lg bg-accent border border-violet-400/20 px-3 py-2 text-center">
-            <div className="text-accent font-semibold text-[10px]">Copilot SDK</div>
-          </div>
-          <div className="flex-1 px-2 flex flex-col items-center">
-            <div className="w-full h-[1px] bg-accent to-accent-400 relative">
-              <div className="absolute right-0 -top-1 text-accent-400">▶</div>
-            </div>
-            <div className="text-text text-[10px] mt-0.5 flex items-center gap-1">
-              <svg className="w-3 h-3 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Managed Identity — keyless
-            </div>
-          </div>
-          <div className="rounded-lg bg-accent-400/10 border border-accent-400/20 px-3 py-2 text-center">
-            <div className="text-accent-400 font-semibold text-[10px]">Azure OpenAI</div>
-            <div className="text-muted text-[10px]">GPT-4o</div>
-          </div>
-        </div>
-        <div className="rounded-lg bg-slate-900 border border-border p-2.5 space-y-1">
-          <div className="text-accent-400 text-[10px] font-semibold uppercase tracking-wide">Streaming Response</div>
-          <div className="text-muted">
-            data: {`{"type":"content_block_delta","delta":{"text":"I'll analyze"}}`}
-          </div>
-          <div className="text-muted">
-            data: {`{"type":"content_block_delta","delta":{"text":" your Q4 portfolio"}}`}
-          </div>
-          <div className="text-text">
-            data: {`{"type":"content_block_delta","delta":{"text":"..."}}`}
-          </div>
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="MCP connectors to enterprise systems">
+      <div className="flex justify-center mb-2">
+        <div className="rounded-lg bg-accent-soft border border-accent/30 px-3 py-1.5 text-center">
+          <div className="text-[10px] uppercase tracking-wider text-accent font-semibold">A skill</div>
+          <div className="text-[11px] text-text">portfolio-review</div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function VizToolDecision() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="Tool decision visualization">
-      <div className="space-y-3">
-        <div className="rounded-lg bg-slate-900 border border-border p-3">
-          <div className="text-text-strong mb-2">I&apos;ll analyze your portfolio data. Let me use the data analysis tool...</div>
-          <div className="rounded-lg bg-accent border border-violet-400/20 p-2.5 space-y-1">
-            <div className="text-accent font-semibold">tool_use:</div>
-            <div className="pl-3 text-text-strong">name: <span className="text-amber-300">&quot;data_analysis&quot;</span></div>
-            <div className="pl-3 text-text-strong">input: <span className="text-amber-300">&quot;Analyze portfolio_q4.xlsx — returns, risk metrics&quot;</span></div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 text-green-400">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>Tool registered and available — executing</span>
-        </div>
+      <div className="flex justify-center text-muted text-base leading-none mb-2">↓</div>
+      <div className="rounded-lg bg-violet-500/10 border border-violet-500/30 px-3 py-2 mb-2 text-center">
+        <div className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-400 font-semibold">Model Context Protocol</div>
+        <div className="text-[11px] text-text">Open standard for connecting agents to systems</div>
       </div>
-    </div>
-  );
-}
-
-function VizToolExecution() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="Tool execution visualization">
-      <div className="space-y-3">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-400" />
-            <span className="text-green-400 font-semibold">data_analysis</span>
-            <span className="text-text">— execution_start</span>
-          </div>
-          <div className="rounded-lg bg-slate-900 border border-border p-2.5 ml-4">
-            <div className="text-muted text-[10px] mb-1">OpenTelemetry span: gen_ai.tool.name=data_analysis</div>
-            <div className="text-text-strong">Analyzing portfolio_q4.xlsx...</div>
-            <div className="text-text-strong mt-1">Total return: <span className="text-green-400">+12.4%</span></div>
-            <div className="text-text-strong">Sharpe ratio: <span className="text-amber-300">1.82</span></div>
-            <div className="text-text-strong">Max drawdown: <span className="text-red-400">-6.1%</span></div>
-          </div>
-          <div className="flex items-center gap-2 ml-4">
-            <span className="w-2 h-2 rounded-full bg-green-400" />
-            <span className="text-green-400">execution_complete</span>
-            <span className="text-text">— 1.2s</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function VizAgenticLoop() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="Agentic loop visualization">
-      <div className="space-y-2">
-        {[
-          { iteration: 1, tool: "data_analysis", result: "Portfolio metrics computed", status: "complete" as const },
-          { iteration: 2, tool: "web_search", result: "Market benchmark data retrieved", status: "complete" as const },
-          { iteration: 3, tool: "email_draft", result: "Summary email generated", status: "active" as const },
-        ].map((iter) => (
-          <div key={iter.iteration} className={`flex items-center gap-3 rounded-lg p-2 ${iter.status === "active" ? "bg-primary-400/5 border border-primary-400/20" : "bg-slate-900/50"}`}>
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
-              iter.status === "active" ? "bg-primary-400/20 text-primary-400" : "bg-slate-800 text-slate-500"
-            }`}>
-              {iter.iteration}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className={iter.status === "active" ? "text-primary-300" : "text-slate-400"}>{iter.tool}</span>
-                <span className="text-text">→</span>
-                <span className="text-muted truncate">{iter.result}</span>
-              </div>
-            </div>
-            {iter.status === "active" ? (
-              <div className="flex items-center gap-1 text-accent">
-                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
-                </svg>
-              </div>
-            ) : (
-              <span className="text-green-500 text-[10px]">✓</span>
-            )}
-          </div>
-        ))}
-        <div className="flex items-center gap-2 pt-1 text-text">
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
-          </svg>
-          <span>Loop until model emits final text without tool_call blocks</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function VizSseStream() {
-  return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="SSE event stream visualization">
-      <div className="space-y-1.5">
-        {[
-          { type: "ThoughtEvent", data: '"Analyzing portfolio data against benchmarks..."', color: "text-violet-400", bg: "bg-violet-400/5" },
-          { type: "ToolCallEvent", data: '"data_analysis — started"', color: "text-amber-400", bg: "bg-amber-400/5" },
-          { type: "ToolCallEvent", data: '"data_analysis — completed (1.2s)"', color: "text-green-400", bg: "bg-green-400/5" },
-          { type: "ContentEvent", data: '"## Q4 Portfolio Summary\\n\\nYour portfolio..."', color: "text-primary-400", bg: "bg-primary-400/5" },
-          { type: "ContentEvent", data: '"returned **+12.4%** with a Sharpe ratio of..."', color: "text-primary-400", bg: "bg-primary-400/5" },
-          { type: "UsageEvent", data: '"prompt: 2,847 | completion: 1,203 | reasoning: 456"', color: "text-slate-400", bg: "bg-slate-400/5" },
-        ].map((evt, i) => (
-          <div key={i} className={`flex items-start gap-2 rounded-lg px-2 py-1 ${evt.bg}`}>
-            <span className={`${evt.color} whitespace-nowrap font-semibold`}>event:</span>
-            <span className="text-muted whitespace-nowrap">{evt.type}</span>
-            <span className="text-text truncate">{evt.data}</span>
+      <div className="flex justify-center text-muted text-base leading-none mb-2">↓</div>
+      <div className="grid grid-cols-5 gap-1">
+        {systems.map((s) => (
+          <div key={s} className="rounded-lg bg-surface border border-border px-1.5 py-1.5 text-center">
+            <div className="text-[10px] font-semibold text-text-strong truncate">{s}</div>
           </div>
         ))}
       </div>
-      <div className="mt-2 text-text text-[10px]">Real-time delivery via Server-Sent Events — single HTTP connection</div>
+      <div className="mt-2 text-[10px] text-muted text-center">Mocked for the demo · swap for real in production</div>
     </div>
   );
 }
 
-function VizComplete() {
+function VizAskInput() {
   return (
-    <div className="rounded-xl bg-slate-950 p-4 font-mono text-xs" role="img" aria-label="Completion visualization">
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-green-400 font-semibold">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Chat input with attachment">
+      <div className="rounded-xl bg-surface border border-border p-3">
+        <div className="text-[13px] text-text-strong mb-2">Review my client&rsquo;s Q4 portfolio and draft an email summarising it for them.</div>
+        <div className="inline-flex items-center gap-1.5 rounded-md bg-surface-2 border border-border-soft px-2 py-1 text-[11px] text-text">
+          <svg className="w-3 h-3 text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
           </svg>
-          session.idle
+          <span className="text-muted">portfolio_q4.xlsx</span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted">
+        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse-slow" />
+        <span>Streaming connection opens · stays open until the agent is done</span>
+      </div>
+    </div>
+  );
+}
+
+function VizSession() {
+  return (
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Session continuity across turns">
+      <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-3">The same conversation, four turns apart</div>
+      <div className="relative">
+        <div className="absolute left-0 right-0 top-3 h-[2px] bg-border" />
+        <div className="absolute left-0 top-3 h-[2px] bg-gradient-to-r from-violet-500 to-violet-400" style={{ width: "100%" }} />
+        <div className="relative flex justify-between">
           {[
-            { label: "Save Response", detail: "→ Cosmos DB", icon: "💾", done: true },
-            { label: "Token Metrics", detail: "→ App Insights", icon: "📊", done: true },
-            { label: "Follow-ups", detail: "→ LLM call", icon: "💡", done: true },
-          ].map((task) => (
-            <div
-              key={task.label}
-              className="rounded-lg bg-slate-900 border border-border p-2.5 text-center"
-            >
-              <div className="text-lg mb-1">{task.icon}</div>
-              <div className="text-text-strong font-semibold text-[10px]">{task.label}</div>
-              <div className="text-text text-[10px]">{task.detail}</div>
-              {task.done && <div className="text-green-400 text-[10px] mt-1">✓ done</div>}
+            { day: "Mon", label: "First turn" },
+            { day: "Mon", label: "Reply" },
+            { day: "Tue", label: "Reload page" },
+            { day: "Tue", label: "Pick up here", active: true },
+          ].map((t, i) => (
+            <div key={i} className="flex flex-col items-center">
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center text-[10px] font-bold ${
+                t.active
+                  ? "bg-violet-500 border-violet-500 text-white"
+                  : "bg-surface border-violet-400 text-violet-500"
+              }`}>
+                {i + 1}
+              </div>
+              <div className="mt-1.5 text-[10px] text-text-strong font-semibold">{t.day}</div>
+              <div className="text-[10px] text-muted">{t.label}</div>
             </div>
           ))}
         </div>
-        <div className="border-t border-border pt-2 flex items-center gap-3 text-muted text-[10px]">
-          <span>OpenTelemetry: <span className="text-accent">operation_duration</span>, <span className="text-accent">token_usage</span></span>
+      </div>
+      <div className="mt-4 text-[11px] text-text bg-surface border border-border rounded-lg px-3 py-2">
+        Same context · no replay · no re-sending history
+      </div>
+    </div>
+  );
+}
+
+function VizPlan() {
+  return (
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Model planning which skill to use">
+      <div className="flex items-center justify-center mb-3">
+        <div className="rounded-lg bg-violet-500/10 border border-violet-500/30 px-3 py-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-violet-600 dark:text-violet-400 font-semibold">Plan</div>
+          <div className="text-[11px] text-text">&ldquo;I&rsquo;ll need real portfolio data for this.&rdquo;</div>
+        </div>
+      </div>
+      <div className="flex justify-center text-muted text-base leading-none mb-2">↓</div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {[
+          { name: "web-search",       active: false },
+          { name: "portfolio-review", active: true },
+          { name: "email-draft",      active: false },
+        ].map((s) => (
+          <div
+            key={s.name}
+            className={`rounded-lg border px-2 py-1.5 text-center text-[11px] ${
+              s.active
+                ? "bg-accent-soft border-accent/40 text-accent ring-1 ring-accent/30 font-semibold"
+                : "bg-surface border-border text-muted"
+            }`}
+          >
+            {s.name}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-accent font-semibold">
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Calling portfolio-review
+      </div>
+    </div>
+  );
+}
+
+function VizAct() {
+  return (
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Skill executing against real data">
+      <div className="rounded-lg bg-surface border border-accent/40 p-3 mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[11px] font-semibold text-text-strong">portfolio-review</span>
+          </div>
+          <span className="text-[10px] text-muted">running</span>
+        </div>
+        <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+          <div className="h-full bg-accent rounded-full" style={{ width: "100%" }} />
+        </div>
+        <div className="mt-2 text-[10.5px] text-muted">Fetching positions from the wealth platform…</div>
+      </div>
+      <div className="rounded-lg bg-surface border border-border p-3">
+        <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-2">Returned</div>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div>
+            <div className="text-[10px] text-muted">Return</div>
+            <div className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">+12.4%</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-muted">Sharpe</div>
+            <div className="text-[13px] font-semibold text-text-strong">1.82</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-muted">Drawdown</div>
+            <div className="text-[13px] font-semibold text-danger-500">−6.1%</div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 text-[10px] text-muted text-center">Real call · traced in Azure Monitor · 1.2s</div>
+    </div>
+  );
+}
+
+function VizLoop() {
+  const iterations = [
+    { n: 1, action: "portfolio-review",  result: "Got the positions" },
+    { n: 2, action: "web-search",        result: "Got the benchmark" },
+    { n: 3, action: "email-draft",       result: "Drafted the email" },
+  ];
+  return (
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="The agent loop">
+      <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-3 text-center">Three passes through the loop</div>
+      <div className="space-y-2">
+        {iterations.map((it, i) => (
+          <div key={it.n} className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-full bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-[10px] font-bold text-violet-600 dark:text-violet-400">
+              {it.n}
+            </div>
+            <div className="flex-1 grid grid-cols-3 gap-1.5 items-center">
+              <div className="rounded-md bg-violet-500/10 border border-violet-500/30 px-2 py-1 text-[10.5px] text-center text-violet-600 dark:text-violet-400 font-semibold">Model thinks</div>
+              <div className="rounded-md bg-accent-soft border border-accent/30 px-2 py-1 text-[10.5px] text-center text-accent font-semibold truncate">{it.action}</div>
+              <div className="rounded-md bg-surface border border-border px-2 py-1 text-[10.5px] text-center text-text truncate">{it.result}</div>
+            </div>
+            {i < iterations.length - 1 ? (
+              <svg className="w-4 h-4 text-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-[11px] text-text-strong text-center">
+        Final answer ready · loop exits
+      </div>
+    </div>
+  );
+}
+
+function VizAnswer() {
+  return (
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Live event stream and answer">
+      <div className="space-y-1.5 mb-3">
+        {[
+          { type: "thought",  text: "Checking the portfolio data…",       tone: "text-violet-600 dark:text-violet-400 bg-violet-500/5" },
+          { type: "tool",     text: "portfolio-review · done in 1.2s",    tone: "text-accent bg-accent-soft" },
+          { type: "thought",  text: "Comparing against the benchmark…",   tone: "text-violet-600 dark:text-violet-400 bg-violet-500/5" },
+          { type: "tool",     text: "web-search · done in 0.8s",          tone: "text-accent bg-accent-soft" },
+          { type: "content",  text: "Drafting the email now…",            tone: "text-cyan-600 dark:text-cyan-400 bg-cyan-500/5" },
+        ].map((e, i) => (
+          <div key={i} className={`flex items-center gap-2 rounded-md px-2 py-1 text-[10.5px] ${e.tone}`}>
+            <span className="font-semibold uppercase tracking-wider text-[9px] min-w-[44px]">{e.type}</span>
+            <span className="truncate">{e.text}</span>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-lg bg-surface border border-border p-3">
+        <div className="text-[10px] uppercase tracking-wider text-muted font-semibold mb-1.5">The answer, rendering live</div>
+        <div className="text-[12px] text-text-strong font-semibold mb-1">Q4 portfolio summary</div>
+        <div className="text-[11.5px] text-text leading-relaxed">
+          Your portfolio returned <span className="font-semibold text-emerald-600 dark:text-emerald-400">+12.4%</span> in Q4, beating the benchmark by 2.1 points…
         </div>
       </div>
     </div>
   );
 }
 
-/* SVG icon helpers — small, inline, no dependencies */
+function VizAudit() {
+  return (
+    <div className="rounded-xl bg-surface-2 border border-border-soft p-5" role="img" aria-label="Persistence, tracing, and cost recording">
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-lg bg-surface border border-border p-3 text-center">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold mb-1">Cosmos DB</div>
+          <div className="text-[11px] font-semibold text-text-strong">Every message saved</div>
+          <div className="mt-2 inline-flex items-center gap-1 text-emerald-500 text-[10px]">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            before &amp; after every turn
+          </div>
+        </div>
+        <div className="rounded-lg bg-surface border border-border p-3 text-center">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold mb-1">Foundry traces</div>
+          <div className="text-[11px] font-semibold text-text-strong">Every skill call logged</div>
+          <div className="mt-2 inline-flex items-center gap-1 text-emerald-500 text-[10px]">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            inputs · outputs · timing
+          </div>
+        </div>
+        <div className="rounded-lg bg-surface border border-border p-3 text-center">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold mb-1">App Insights</div>
+          <div className="text-[11px] font-semibold text-text-strong">Every token counted</div>
+          <div className="mt-2 inline-flex items-center gap-1 text-emerald-500 text-[10px]">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            per turn · per conversation
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 text-[11px] text-text text-center">
+        Compliance can replay any conversation. Finance can itemise every run.
+      </div>
+    </div>
+  );
+}
+
+/* ─── Icons ──────────────────────────────────────────────────────── */
+
 const Icons = {
-  chat: (
+  sdk: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.671 1.09-.086 2.17-.207 3.238-.364 1.584-.233 2.707-1.627 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0l4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0l-5.571 3-5.571-3" />
     </svg>
   ),
-  api: (
+  persona: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-    </svg>
-  ),
-  db: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75" />
-    </svg>
-  ),
-  session: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-    </svg>
-  ),
-  prompt: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
     </svg>
   ),
   skills: (
@@ -483,22 +456,27 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17l-5.34-3.08a.75.75 0 010-1.298l5.34-3.08a2.25 2.25 0 012.16 0l5.34 3.08a.75.75 0 010 1.298l-5.34 3.08a2.25 2.25 0 01-2.16 0zM4.5 14.25l7.5 4.33 7.5-4.33" />
     </svg>
   ),
-  send: (
+  connect: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
     </svg>
   ),
-  model: (
+  ask: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.068.157 2.148.279 3.238.364.466.037.893.281 1.153.671L12 21l2.652-3.978c.26-.39.687-.634 1.153-.671 1.09-.086 2.17-.207 3.238-.364 1.584-.233 2.707-1.627 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
     </svg>
   ),
-  tools: (
+  session: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  ),
+  plan: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
     </svg>
   ),
-  execute: (
+  act: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
     </svg>
@@ -508,190 +486,166 @@ const Icons = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
     </svg>
   ),
-  stream: (
+  answer: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
     </svg>
   ),
-  done: (
+  audit: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
 };
 
+/* ─── Steps ──────────────────────────────────────────────────────── */
+
 const STEPS: Step[] = [
   {
     id: 1,
-    label: "Input",
-    title: "User Input",
-    source: "src/components/ChatWindow.tsx",
-    icon: Icons.chat,
-    layer: "frontend",
-    visualization: <VizChatInput />,
+    label: "SDK",
+    title: "GitHub Copilot SDK",
+    source: "The agent harness underneath Kratos",
+    icon: Icons.sdk,
+    layer: "sdk",
+    visualization: <VizSdkStack />,
     description:
-      "User types a message in the chat UI. File attachments are base64-encoded and bundled with the prompt.",
+      "Kratos does not talk to the model directly. It runs on top of the GitHub Copilot SDK, the same harness that powers GitHub Copilot itself.",
     detail:
-      "The ChatWindow component captures text via a controlled input and any uploaded files through a hidden file input. On submit, it creates a user ChatMessage, adds it to local state, then calls streamAgentChat() which opens an SSE connection to POST /chat. The component also handles auto-titling on the first message of a conversation.",
+      "A harness is the boring but critical layer between an app and the model. It manages the conversation, lets the model call tools, streams the answer back token by token, retries when things fail, and keeps a session alive across turns. We could have written all of that ourselves. We have done it before. It is hundreds of pages of code that breaks every time a new model ships. Kratos hands the whole thing to the SDK and spends its engineering on what makes the agent useful: the persona, the skills, and the connectors into your real systems.",
   },
   {
     id: 2,
-    label: "API",
-    title: "POST /chat (SSE)",
-    source: "app/routers/agent.py",
-    icon: Icons.api,
-    layer: "backend",
-    visualization: <VizApiRequest />,
+    label: "Persona",
+    title: "One hosted agent, many personas",
+    source: "Prompt, skills, and MCP connections per use-case",
+    icon: Icons.persona,
+    layer: "kratos",
+    visualization: <VizPersonas />,
     description:
-      "FastAPI receives the request and opens a Server-Sent Events stream. This single HTTP connection carries all events back to the browser.",
+      "A persona is not only a system prompt. It is the prompt, the subset of skills, and the MCP connections that belong to a business role.",
     detail:
-      "The agent router validates the AgentRequest body (message, conversationId, useCase, attachments). It sets up an EventSourceResponse with an async generator. File attachments are decoded from base64, written to temp files, and converted to SDK format. The SSE stream stays open until session.idle fires.",
+      "In this demo, all of those personas run on one hosted Kratos agent. Switch the persona and the agent gets a different prompt, a different skill menu, and different connectors to the systems that matter for that use case. For production, we would usually advise a separate Kratos agent per business use case, because ownership, security boundaries, release schedules, and compliance reviews are cleaner that way. The demo uses one host so you can see the pattern without deploying the same app eight times.",
   },
   {
     id: 3,
-    label: "Persist",
-    title: "Save to Cosmos DB",
-    source: "app/services/cosmos_service.py",
-    icon: Icons.db,
-    layer: "backend",
-    visualization: <VizCosmosWrite />,
+    label: "Skills",
+    title: "Skills",
+    source: "A library of things the agent can do",
+    icon: Icons.skills,
+    layer: "kratos",
+    visualization: <VizSkillsMenu />,
     description:
-      "The user message is persisted to Azure Cosmos DB before any AI processing begins — a write-ahead pattern that prevents data loss even if the model call fails.",
+      "A skill is a thing the agent knows how to do: search the web, run code, summarise a document, draft an email, look up a customer's portfolio.",
     detail:
-      "Messages are stored in the 'messages' container with conversationId as the partition key. Each message gets a UUID and UTC timestamp. This write-ahead pattern means the conversation history is always recoverable. The assistant response is also saved after the full turn completes.",
+      "Every skill is a small markdown file that describes when to use it, plus a backing function that does the work. The model never sees all of them at once. It sees a short menu of skill names and one-line descriptions and picks which one to load. Only the chosen skill's full instructions and code are pulled into the conversation. This matters for two reasons. The model stays focused, because it is not drowning in capabilities it does not need this turn. And the bill stays sensible, because you only pay for the context you actually use.",
   },
   {
     id: 4,
-    label: "Session",
-    title: "Resolve SDK Session",
-    source: "app/services/copilot_agent.py",
-    icon: Icons.session,
-    layer: "sdk",
-    visualization: <VizSessionResolve />,
+    label: "MCP",
+    title: "MCP connectors",
+    source: "MCP servers in front of Salesforce, SAP, Epic, ServiceNow, Workday",
+    icon: Icons.connect,
+    layer: "kratos",
+    visualization: <VizConnectors />,
     description:
-      "Resolve or create a Copilot SDK session. Existing sessions are resumed from Cosmos DB to preserve multi-turn context without re-sending history.",
+      "Skills can reach into the systems your business actually runs on: CRM, ERP, EHR, core banking, ticketing, HR.",
     detail:
-      "Session IDs are mapped conversation_id → sdk_session_id in Cosmos. Resuming a session means the SDK reconnects to the same server-side context, preserving the full conversation history without re-sending it. New sessions are created with the configured model, tools, skill directories, MCP servers, and a custom system prompt. Auth uses ManagedIdentityCredential → AzureCLICredential chain.",
+      "The mechanism is MCP, the Model Context Protocol. It is an open standard for letting an agent talk to a backend system in a structured way. Kratos ships with mocks for the big ones (Salesforce, SAP S/4, Epic FHIR, ServiceNow, Workday, a core banking sample) so the demo runs without real credentials. In production you swap the mock for the real connector and the agent does not know the difference.",
   },
   {
     id: 5,
-    label: "Prompt",
-    title: "System Prompt Assembly",
-    source: "app/services/skill_registry.py",
-    icon: Icons.prompt,
-    layer: "backend",
-    visualization: <VizSystemPrompt />,
+    label: "Ask",
+    title: "You ask the agent",
+    source: "The chat input in your browser",
+    icon: Icons.ask,
+    layer: "you",
+    visualization: <VizAskInput />,
     description:
-      "The use-case-specific system prompt is loaded from Blob Storage. Each persona (generic, retail-banking, wealth-management, etc.) has its own SYSTEM_PROMPT.md.",
+      "You type a question. You can attach a file: a spreadsheet, a PDF, an image.",
     detail:
-      "The registry reads SYSTEM_PROMPT.md from the use-case's blob container, strips any YAML frontmatter, and passes the body as the session's system message with mode='replace'. A fallback default prompt is stored in Cosmos DB settings and used only when no use-case-specific prompt is found. The prompt instructs the model to always prefer tool usage over guessing.",
+      "Nothing magical at this step. The browser sends the message to Kratos over a streaming connection that stays open for the rest of the turn. Anything the agent does — thinking, calling skills, writing the answer — can flow back to your screen as it happens, instead of arriving in one block at the end.",
   },
   {
     id: 6,
-    label: "Skills",
-    title: "Skill & Tool Registry",
-    source: "app/services/skill_tools.py",
-    icon: Icons.skills,
-    layer: "backend",
-    visualization: <VizSkillRegistry />,
+    label: "Session",
+    title: "The SDK picks up the conversation",
+    source: "Copilot SDK session",
+    icon: Icons.session,
+    layer: "sdk",
+    visualization: <VizSession />,
     description:
-      "Skill names and descriptions (from SKILL.md frontmatter) are always sent to the LLM. The model decides which skill to fully load into context by calling the SDK's built-in skill tool on demand.",
+      "Kratos hands the message to the Copilot SDK, which resumes the existing conversation if there is one and loads the persona and skill menu for this use-case.",
     detail:
-      "Each use-case has a skills/ directory of SKILL.md markdown files with YAML frontmatter (name, description, enabled). The SkillRegistry loads these per use-case and passes the skill directories to the Copilot SDK session. The SDK exposes skill names and descriptions to the LLM, which then invokes the skill tool to pull the full markdown instructions into context when needed. Backing implementations live as @define_tool functions in skill_tools.py.",
+      "A session is the SDK's idea of an ongoing conversation. It remembers what the agent said three turns ago. It knows which skills are available. It tracks the running token cost. If you reload the browser tomorrow and pick up the same conversation, the session resumes from where you left off rather than starting over.",
   },
   {
     id: 7,
-    label: "Send",
-    title: "Dispatch to SDK",
-    source: "copilot_agent.py → session.send()",
-    icon: Icons.send,
+    label: "Plan",
+    title: "The model plans the next action",
+    source: "Copilot SDK",
+    icon: Icons.plan,
     layer: "sdk",
-    visualization: <VizSendToSdk />,
+    isLoop: true,
+    visualization: <VizPlan />,
     description:
-      "The user message and file attachments are dispatched to the Copilot SDK session via session.send(). The SDK handles the full conversation lifecycle from here.",
+      "The model reads your question, scans the skill menu, and plans the next move: answer directly, call a skill, or ask for more information.",
     detail:
-      "session.send() transmits the message payload. The SDK manages context windowing, token limits, and conversation threading. A synchronous on_event callback is registered on the session (once per session, not per turn) to capture all SDK events and route them to an asyncio.Queue for the SSE generator.",
+      "Ask \"what is a Sharpe ratio\" and the model can answer directly. Ask \"what is the Sharpe ratio of my Q4 portfolio\" and it cannot guess. It needs data. So it selects the skill that fits (portfolio-review, data-analysis, web-search, whichever is right for the task) and asks the SDK to run it. This is the moment where \"chat with an LLM\" turns into \"agent doing work\".",
   },
   {
     id: 8,
-    label: "Model",
-    title: "Model Inference",
-    source: "Azure OpenAI via Foundry",
-    icon: Icons.model,
-    layer: "azure",
-    visualization: <VizModelInference />,
+    label: "Act",
+    title: "The skill runs against real data",
+    source: "Kratos backend",
+    icon: Icons.act,
+    layer: "kratos",
+    isLoop: true,
+    visualization: <VizAct />,
     description:
-      "The Copilot SDK streams the request to Microsoft Foundry via Managed Identity. No API keys stored or transmitted — auth is fully keyless.",
+      "The chosen skill executes: querying a system, running Python, retrieving a document, calling an API.",
     detail:
-      "The SDK constructs a chat completions request with the full context: system prompt, conversation history, available tool definitions. The provider config points to your Foundry endpoint with Azure AD token authentication (ManagedIdentityCredential → AzureCLICredential chain). The model deployment is configurable (defaults to gpt-54). Responses stream back as token deltas through the Foundry endpoint.",
+      "This is where Kratos does the real work. If the skill is portfolio-review, it pulls the customer's positions from the wealth platform. If it is code-interpreter, it runs Python in a sandbox. If it is web-search, it goes out to Bing. Every call is traced. We know which skill ran, how long it took, what it returned, whether it failed. That trace shows up in Azure Monitor and in the live thought stream you see on the left of the chat.",
   },
   {
     id: 9,
-    label: "Tools?",
-    title: "Tool Decision",
-    source: "Copilot SDK (internal)",
-    icon: Icons.tools,
-    layer: "sdk",
-    isLoop: true,
-    visualization: <VizToolDecision />,
-    description:
-      "The model examines the request against available tools. If tool_use blocks are detected, the SDK dispatches execution events. Otherwise, text streams directly.",
-    detail:
-      "The model's response may contain tool_use content blocks alongside or instead of text. The SDK detects these and dispatches tool.execution_start events for each. If no tools are called, the response flows directly to streaming deltas. This is the entry point of the agentic loop — the model can call multiple tools in sequence or parallel.",
-  },
-  {
-    id: 10,
-    label: "Execute",
-    title: "Tool Execution",
-    source: "app/services/skill_tools.py",
-    icon: Icons.execute,
-    layer: "backend",
-    isLoop: true,
-    visualization: <VizToolExecution />,
-    description:
-      "Skills execute asynchronously with OpenTelemetry tracing: web search, RAG, code interpreter, email drafts, document summaries, data analysis, and more.",
-    detail:
-      "Each skill runs with its own OpenTelemetry span (gen_ai.tool.name, gen_ai.tool.call.id). Skills can make authenticated Azure API calls via DefaultAzureCredential and return structured results. The code interpreter runs Python in a sandboxed subprocess with a 30-second timeout. The SDK captures tool outputs and feeds them back to the model.",
-  },
-  {
-    id: 11,
     label: "Loop",
-    title: "Agentic Loop",
-    source: "Copilot SDK session",
+    title: "The agent loop",
+    source: "Copilot SDK",
     icon: Icons.loop,
     layer: "sdk",
     isLoop: true,
-    visualization: <VizAgenticLoop />,
+    visualization: <VizLoop />,
     description:
-      "Tool results are fed back to the model. It reasons over outputs and may call additional tools. This loop repeats until the model produces a final text answer.",
+      "The model reads the skill's result, thinks again, and decides what to do next: call another skill, refine the query, or write the final answer.",
     detail:
-      "This is the core agentic pattern. Each iteration generates execution_start → execution_complete event pairs. The model can chain tools (e.g. search → analyze → draft email), run the same tool with refined queries, or decide it has enough information to respond. The loop exits when the model emits a text response without further tool_call blocks. The session.idle event signals completion.",
+      "This is the agent loop. It is what makes Kratos an agent rather than a chatbot. A chatbot answers in one shot. An agent keeps going. Pull the portfolio. Look at it. Notice it underperformed the benchmark. Pull the benchmark data to confirm. Draft an email explaining the gap. Each step uses the result of the previous one. The loop ends when the model decides it has enough and writes a final answer for you. Most turns take two or three iterations. Hard ones take more.",
   },
   {
-    id: 12,
-    label: "Stream",
-    title: "SSE Event Stream",
-    source: "app/routers/agent.py",
-    icon: Icons.stream,
-    layer: "backend",
-    visualization: <VizSseStream />,
+    id: 10,
+    label: "Answer",
+    title: "The answer streams to your screen",
+    source: "Kratos backend → your browser",
+    icon: Icons.answer,
+    layer: "you",
+    visualization: <VizAnswer />,
     description:
-      "Events stream to the frontend in real-time: thoughts, tool call status, content deltas, and usage metrics — all over a single SSE connection.",
+      "You see the agent's reasoning, the skills it calls, and its final answer as they happen, not after the whole turn is done.",
     detail:
-      "The on_event callback translates SDK events into typed SSE events: ThoughtEvent (agent reasoning), ToolCallEvent (started/completed/failed with skill name and duration), ContentEvent (streaming text deltas), UsageEvent (token counts), and UserInputRequestEvent (when the agent asks the user a question). The frontend ThoughtChain and MessageBubble components render these in real-time.",
+      "Every event from inside the loop flows down the same open connection to your browser: a thought (\"checking the portfolio data\"), a tool call (\"portfolio-review started\"), a result (\"done in 1.2 seconds\"), the words of the answer as they are written. The thought chain on the left of the chat is not a replay. It is the live trace of what the agent is doing right now. If a skill takes 4 seconds, you watch it take 4 seconds. There is nowhere for the agent to hide.",
   },
   {
-    id: 13,
-    label: "Done",
-    title: "Complete & Persist",
-    source: "session.idle event",
-    icon: Icons.done,
-    layer: "backend",
-    visualization: <VizComplete />,
+    id: 11,
+    label: "Audit",
+    title: "Persisted, traced, costed",
+    source: "Cosmos DB · Foundry · Application Insights",
+    icon: Icons.audit,
+    layer: "azure",
+    visualization: <VizAudit />,
     description:
-      "The session goes idle. The full assistant response is saved to Cosmos DB, token usage is recorded to Application Insights, and follow-up questions are generated.",
+      "Every message, every skill call, and every token is recorded. The conversation survives reloads, the audit trail survives compliance reviews, and the bill is itemised.",
     detail:
-      "On session.idle, orphaned tool spans are closed, token counts (prompt, completion, reasoning) are aggregated and emitted as a final DoneEvent, the assistant message is persisted to Cosmos DB, and an optional LLM call generates contextual follow-up questions. OpenTelemetry metrics (operation_duration, token_usage) are recorded for monitoring in Application Insights.",
+      "The full conversation is saved before and after every turn, so a crash or a reload never loses anything. Every skill invocation is logged with its inputs, outputs, and timing. Token usage is reported per turn and per conversation, so you know what each agent run actually costs. None of this requires bolt-on work. It is built into the SDK and the surrounding Azure services. If your compliance team asks how the agent behaved on a specific case six months ago, you can pull the full trace.",
   },
 ];
 
@@ -710,7 +664,6 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
     setActiveStep(i);
   }, []);
 
-  // Auto-play
   const play = useCallback(() => {
     if (isPlaying) {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -728,17 +681,15 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
         return;
       }
       setActiveStep(i);
-    }, 3000);
+    }, 3500);
   }, [isPlaying]);
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
-  // Scroll card into view on mobile when step changes
   useEffect(() => {
     if (open) cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeStep, open]);
 
-  // Keyboard navigation: Escape to close, Arrow keys to navigate
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -761,7 +712,6 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
     return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose, isPlaying, play]);
 
-  // Stop autoplay when closing
   useEffect(() => {
     if (!open && timerRef.current) {
       clearInterval(timerRef.current);
@@ -769,218 +719,251 @@ export default function AgentLoop({ open, onClose }: { open: boolean; onClose: (
     }
   }, [open]);
 
+  useEffect(() => {
+    if (open) {
+      setActiveStep(0);
+    }
+  }, [open]);
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-      <div className="relative w-full max-w-6xl mx-4 my-6 md:my-10 rounded-2xl border border-border-soft bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="relative w-full max-w-6xl mx-4 my-6 md:my-10 rounded-2xl border border-border bg-surface shadow-card" onClick={(e) => e.stopPropagation()}>
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center rounded-xl border border-border-soft bg-surface text-muted hover:text-text hover:bg-hover transition-all backdrop-blur-sm"
+          className="absolute top-4 right-4 z-10 w-9 h-9 flex items-center justify-center rounded-xl border border-border bg-surface-2 text-muted hover:text-text-strong hover:bg-hover transition-all"
           aria-label="Close"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
+
         <div className="px-4 sm:px-6 md:px-10 py-8 md:py-12">
-      {/* ── Header ── */}
-      <div className="mb-10 md:mb-14">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-soft border border-accent mb-4">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-slow" />
-          <span className="text-xs font-semibold text-accent tracking-wide uppercase">
-            Agentic Pipeline
-          </span>
-        </div>
-        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-text tracking-tight">
-          Agentic Loop
-        </h2>
-      </div>
+          {/* ── Header ── */}
+          <div className="mb-8 md:mb-12 max-w-3xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-soft border border-accent/20 mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse-slow" />
+              <span className="text-xs font-semibold text-accent tracking-wide uppercase">How it works</span>
+            </div>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-text-strong tracking-tight mb-3">
+              From a question to an answer
+            </h2>
+            <p className="text-text text-base md:text-lg leading-relaxed">
+              What is actually happening when you talk to Kratos, and why we built it on top of the GitHub Copilot SDK instead of from scratch.
+            </p>
+          </div>
 
-      {/* ── Timeline ── */}
-      <div className="relative mb-16 md:mb-20">
-        {/* Track line */}
-        <div className="absolute left-0 right-0 top-6 h-[2px] bg-surface-2 rounded-full" />
-        {/* Progress fill */}
-        <div
-          className="absolute left-0 top-6 h-[2px] rounded-full bg-accent transition-all duration-500 ease-out"
-          style={{ width: `${(activeStep / (STEPS.length - 1)) * 100}%` }}
-        />
-
-        {/* Step nodes */}
-        <div className="relative flex justify-between">
-          {STEPS.map((s, i) => {
-            const isActive = i === activeStep;
-            const isPast = i < activeStep;
-            const lc = LAYER_COLORS[s.layer];
-            const inLoop = i >= LOOP_START && i <= LOOP_END;
-            const isLoopActive = activeStep >= LOOP_START && activeStep <= LOOP_END;
-
-            return (
-              <button
-                key={s.id}
-                onClick={() => !isPlaying && goTo(i)}
-                disabled={isPlaying}
-                className="flex flex-col items-center group outline-none focus-visible:ring-2 focus-visible:ring-primary-400 rounded-xl"
-                aria-label={`Step ${s.id}: ${s.title}`}
-                aria-current={isActive ? "step" : undefined}
-              >
-                {/* Circle */}
-                <div
-                  className={`
-                    relative w-12 h-12 rounded-xl flex items-center justify-center
-                    transition-all duration-300 border
-                    ${isActive
-                      ? `bg-white dark:bg-navy-800 border-slate-200 dark:border-white/[0.12] shadow-card-hover dark:shadow-none ring-2 ${lc.ring} scale-105`
-                      : isPast
-                      ? `bg-primary-50 dark:bg-primary-400/10 border-primary-100 dark:border-primary-400/20 ${lc.text}`
-                      : "bg-white dark:bg-navy-850 border-slate-200 dark:border-white/[0.06] text-slate-400 dark:text-slate-500 group-hover:border-slate-300 dark:group-hover:border-white/[0.12] group-hover:shadow-card"
-                    }
-                  `}
-                >
-                  <span className={isActive ? lc.text : ""}>
-                    {isActive ? s.icon : (
-                      <span className="text-xs font-bold">{s.id}</span>
-                    )}
-                  </span>
-                </div>
-                {/* Label */}
-                <span
-                  className={`
-                    mt-1.5 text-[11px] font-medium transition-colors whitespace-nowrap
-                    ${isActive ? lc.text : "text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300"}
-                  `}
-                >
-                  {s.label}
-                </span>
-                {/* Loop bracket connector — first loop step gets the label */}
-                {inLoop && (
-                  <div className="flex flex-col items-center mt-1.5">
-                    <div className={`w-[2px] h-2 rounded-full transition-colors duration-300 ${
-                      isLoopActive ? "bg-amber-400" : "bg-slate-200 dark:bg-white/[0.08]"
-                    }`} />
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* ── Agentic Loop bracket — rendered below the step nodes ── */}
-        {(() => {
-          // Calculate the horizontal positions based on step indices
-          const total = STEPS.length;
-          const leftPct = (LOOP_START / (total - 1)) * 100;
-          const rightPct = (LOOP_END / (total - 1)) * 100;
-          const widthPct = rightPct - leftPct;
-          const isLoopActive = activeStep >= LOOP_START && activeStep <= LOOP_END;
-          return (
-            <div
-              className="absolute hidden md:block pointer-events-none"
-              style={{ left: `${leftPct}%`, width: `${widthPct}%`, top: "calc(100% - 6px)" }}
+          {/* ── Play / step counter ── */}
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              onClick={play}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-surface-2 text-text hover:bg-hover hover:text-text-strong transition-all text-xs font-semibold"
             >
-              {/* Bracket shape: ╰──────────╯ */}
-              <svg className="w-full" viewBox="0 0 200 28" preserveAspectRatio="none" fill="none" aria-hidden>
-                <path
-                  d="M 4 0 L 4 14 Q 4 22 12 22 L 188 22 Q 196 22 196 14 L 196 0"
-                  stroke="currentColor"
-                  className={`transition-colors duration-300 ${
-                    isLoopActive ? "text-amber-400" : "text-slate-200 dark:text-white/[0.08]"
-                  }`}
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  fill="none"
-                />
-                {/* Small arrow at left end pointing up (return) */}
-                <path
-                  d="M 1 6 L 4 0 L 7 6"
-                  stroke="currentColor"
-                  className={`transition-colors duration-300 ${
-                    isLoopActive ? "text-amber-400" : "text-slate-200 dark:text-white/[0.08]"
-                  }`}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
+              {isPlaying ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="5" width="4" height="14" rx="1" />
+                    <rect x="14" y="5" width="4" height="14" rx="1" />
+                  </svg>
+                  Pause
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M5 4.5v15a.5.5 0 00.77.42l12-7.5a.5.5 0 000-.84l-12-7.5A.5.5 0 005 4.5z" />
+                  </svg>
+                  Play through
+                </>
+              )}
+            </button>
+            <div className="text-xs text-muted font-mono">
+              {String(activeStep + 1).padStart(2, "0")} / {String(STEPS.length).padStart(2, "0")}
+            </div>
+          </div>
+
+          {/* ── Timeline ── */}
+          <div className="relative mb-12 md:mb-16">
+            <div className="absolute left-0 right-0 top-6 h-[2px] bg-border rounded-full" />
+            <div
+              className="absolute left-0 top-6 h-[2px] rounded-full bg-accent transition-all duration-500 ease-out"
+              style={{ width: `${(activeStep / (STEPS.length - 1)) * 100}%` }}
+            />
+
+            <div className="relative flex justify-between">
+              {STEPS.map((s, i) => {
+                const isActive = i === activeStep;
+                const isPast = i < activeStep;
+                const lc = LAYER_COLORS[s.layer];
+                const inLoop = i >= LOOP_START && i <= LOOP_END;
+                const isLoopActive = activeStep >= LOOP_START && activeStep <= LOOP_END;
+
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => !isPlaying && goTo(i)}
+                    disabled={isPlaying}
+                    className="flex flex-col items-center group outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+                    aria-label={`Step ${s.id}: ${s.title}`}
+                    aria-current={isActive ? "step" : undefined}
+                  >
+                    <div
+                      className={`
+                        relative w-12 h-12 rounded-xl flex items-center justify-center
+                        transition-all duration-300 border
+                        ${isActive
+                          ? `bg-surface-2 border-border shadow-card ring-2 ${lc.ring} scale-105`
+                          : isPast
+                          ? `bg-surface-2 border-border ${lc.text}`
+                          : "bg-surface border-border-soft text-muted group-hover:border-border group-hover:shadow-card"
+                        }
+                      `}
+                    >
+                      <span className={isActive ? lc.text : ""}>
+                        {isActive ? s.icon : (
+                          <span className="text-xs font-bold">{s.id}</span>
+                        )}
+                      </span>
+                    </div>
+                    <span
+                      className={`
+                        mt-1.5 text-[11px] font-medium transition-colors whitespace-nowrap
+                        ${isActive ? lc.text : "text-muted group-hover:text-text"}
+                      `}
+                    >
+                      {s.label}
+                    </span>
+                    {inLoop && (
+                      <div className="flex flex-col items-center mt-1.5">
+                        <div className={`w-[2px] h-2 rounded-full transition-colors duration-300 ${
+                          isLoopActive ? "bg-accent" : "bg-border"
+                        }`} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Loop bracket */}
+            {(() => {
+              const total = STEPS.length;
+              const leftPct = (LOOP_START / (total - 1)) * 100;
+              const rightPct = (LOOP_END / (total - 1)) * 100;
+              const widthPct = rightPct - leftPct;
+              const isLoopActive = activeStep >= LOOP_START && activeStep <= LOOP_END;
+              return (
+                <div
+                  className="absolute hidden md:block pointer-events-none"
+                  style={{ left: `${leftPct}%`, width: `${widthPct}%`, top: "calc(100% - 6px)" }}
+                >
+                  <svg className="w-full" viewBox="0 0 200 28" preserveAspectRatio="none" fill="none" aria-hidden>
+                    <path
+                      d="M 4 0 L 4 14 Q 4 22 12 22 L 188 22 Q 196 22 196 14 L 196 0"
+                      stroke="currentColor"
+                      className={`transition-colors duration-300 ${isLoopActive ? "text-accent" : "text-border"}`}
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                    <path
+                      d="M 1 6 L 4 0 L 7 6"
+                      stroke="currentColor"
+                      className={`transition-colors duration-300 ${isLoopActive ? "text-accent" : "text-border"}`}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  </svg>
+                  <div className="flex items-center justify-center gap-1.5 -mt-0.5">
+                    <svg className={`w-3 h-3 transition-colors duration-300 ${isLoopActive ? "text-accent" : "text-muted"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
+                    </svg>
+                    <span className={`text-[10px] font-bold tracking-wider uppercase transition-colors duration-300 ${isLoopActive ? "text-accent" : "text-muted"}`}>
+                      The agent loop
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* ── Detail card ── */}
+          <div
+            ref={cardRef}
+            className="rounded-2xl border border-border bg-surface-2 shadow-card overflow-hidden animate-fade-in"
+            key={activeStep}
+          >
+            <div className="h-1 bg-accent" />
+            <div className="p-6 md:p-8">
+              <div className="flex flex-wrap items-start gap-3 mb-4">
+                <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border text-sm font-bold ${colors.badge}`}>
+                  {step.id}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xl md:text-2xl font-bold text-text-strong tracking-tight">
+                    {step.title}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${colors.text}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
+                      {LAYER_LABELS[step.layer]}
+                    </span>
+                    <span className="text-border">·</span>
+                    <span className="text-[11px] text-muted truncate">{step.source}</span>
+                  </div>
+                </div>
+                {step.isLoop && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-accent-soft text-accent border border-accent/20">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
+                    </svg>
+                    In the loop
+                  </span>
+                )}
+              </div>
+
+              <p className="text-text text-sm md:text-[15px] leading-relaxed mb-5">
+                {step.description}
+              </p>
+
+              <div className="mb-5">
+                {step.visualization}
+              </div>
+
+              <p className="text-text-strong text-[14px] md:text-[15px] leading-relaxed">
+                {step.detail}
+              </p>
+            </div>
+          </div>
+
+          {/* ── Nav arrows ── */}
+          <div className="mt-6 flex items-center justify-between">
+            <button
+              onClick={() => setActiveStep((s) => Math.max(s - 1, 0))}
+              disabled={activeStep === 0 || isPlaying}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-hover hover:text-text-strong disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs font-semibold"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
-              {/* Label centered under bracket */}
-              <div className="flex items-center justify-center gap-1.5 -mt-0.5">
-                <svg className={`w-3 h-3 transition-colors duration-300 ${
-                  isLoopActive ? "text-amber-500 dark:text-amber-400" : "text-slate-300 dark:text-slate-600"
-                }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
-                </svg>
-                <span className={`text-[10px] font-bold tracking-wider uppercase transition-colors duration-300 ${
-                  isLoopActive ? "text-amber-500 dark:text-amber-400" : "text-slate-300 dark:text-slate-600"
-                }`}>
-                  Agentic Loop
-                </span>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* ── Detail card ── */}
-      <div
-        ref={cardRef}
-        className="rounded-2xl border border-border-soft bg-surface shadow-card dark:shadow-none overflow-hidden animate-fade-in"
-        key={activeStep}
-      >
-        {/* Top accent strip */}
-        <div className={`h-1 bg-gradient-to-r from-primary-400 via-violet-400 to-cyan-400`} />
-
-        <div className="p-6 md:p-8">
-          {/* Row: number + title + badges */}
-          <div className="flex flex-wrap items-start gap-3 mb-4">
-            <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl border text-sm font-bold ${colors.badge}`}>
-              {step.id}
-            </span>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-xl md:text-2xl font-bold text-text tracking-tight">
-                {step.title}
-              </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${colors.text}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-                  {LAYER_LABELS[step.layer]}
-                </span>
-                <span className="text-text-strong dark:text-white/[0.12]">·</span>
-                <code className="text-[11px] font-mono text-muted truncate">
-                  {step.source}
-                </code>
-              </div>
-            </div>
-            {step.isLoop && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-accent-soft text-accent border border-accent">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M21.012 4.356v4.992" />
-                </svg>
-                Agentic Loop
-              </span>
-            )}
+              Previous
+            </button>
+            <span className="text-[11px] text-muted hidden md:inline">Tip: use ← → keys, or space to play through</span>
+            <button
+              onClick={() => setActiveStep((s) => Math.min(s + 1, STEPS.length - 1))}
+              disabled={activeStep === STEPS.length - 1 || isPlaying}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-hover hover:text-text-strong disabled:opacity-30 disabled:cursor-not-allowed transition-all text-xs font-semibold"
+            >
+              Next
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
           </div>
-
-          {/* Short description */}
-          <p className="text-muted text-sm leading-relaxed mb-5">
-            {step.description}
-          </p>
-
-          {/* ── Inline Visualization ── */}
-          <div className="mb-5">
-            {step.visualization}
-          </div>
-
-          {/* Detailed explanation */}
-          <p className="text-text text-[15px] leading-relaxed mb-5">
-            {step.detail}
-          </p>
-
-        </div>
-      </div>
-
         </div>
       </div>
     </div>
