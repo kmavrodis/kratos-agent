@@ -134,18 +134,6 @@ export default function Home() {
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  // Full-screen Agent Manager view
-  if (skillsOpen) {
-    return (
-      <SkillsAdminPanel
-        onClose={() => setSkillsOpen(false)}
-        useCase={selectedUseCase}
-        useCases={useCases}
-        onSelectUseCase={setSelectedUseCase}
-      />
-    );
-  }
-
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Skip to content link for accessibility */}
@@ -196,6 +184,7 @@ export default function Home() {
       <main id="main-content" className="flex-1 flex flex-col min-w-0">
         {activeConversation ? (
           <ChatWindow
+            key={activeConversation.id}
             conversation={activeConversation}
             onTitleChange={handleTitleChange}
             initialMessage={pendingMessage ?? undefined}
@@ -320,6 +309,19 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {/* Full-screen Agent Manager overlay — rendered on top so the active
+          ChatWindow stays mounted and any in-flight stream keeps running. */}
+      {skillsOpen && (
+        <div className="fixed inset-0 z-[60]">
+          <SkillsAdminPanel
+            onClose={() => setSkillsOpen(false)}
+            useCase={selectedUseCase}
+            useCases={useCases}
+            onSelectUseCase={setSelectedUseCase}
+          />
+        </div>
+      )}
     </div>
   );
 }
