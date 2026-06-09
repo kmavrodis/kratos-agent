@@ -1,0 +1,22 @@
+{
+  "name": "handover-pack-pdf-deliverable",
+  "category": "deliverable",
+  "description": "End-to-end deliverable. Agent gathers the open queue + bucket-categorises per §8.1, renders the handover PDF, and surfaces the /tmp path for download.",
+  "input_message": "Build me the end-of-shift handover pack for tonight's overnight cover",
+  "input_data": {
+    "expected_agent": "AGT-301",
+    "expected_incoming": "Night",
+    "expected_output_path_pattern": "/tmp/handover-",
+    "expected_sections_in_order": [
+      "Open P1/P2",
+      "Awaiting user",
+      "Pending escalations",
+      "VIP watchlist",
+      "Network/Change in flight",
+      "Notes for incoming"
+    ]
+  },
+  "expected_behavior": "Resolves the date as 2026-06-08 and the outgoing shift as Aaron Cole's Day shift without asking. Lists open tickets via servicenow_list_tickets. Buckets them into the 5 §8.1 categories. For VIP tickets, optionally cross-joins to workday / m365 for context. Invokes handover-pack-pdf (code_interpreter executing scripts/render_handover.py) with the right tickets-json shape. References /tmp/handover-YYYY-MM-DD-day-to-night.pdf in the response so file-sharing picks it up. Does NOT auto-email — §8.2 explicitly says PDF only; email is a separate workflow.",
+  "expected_tool_calls": ["servicenow", "handover-pack-pdf", "file-sharing"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}
