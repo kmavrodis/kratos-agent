@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Kratos — {{ACCOUNT_NAME}} account brief</title>
+  <style>
+    @page { size: A4; margin: 12mm 14mm; }
+    body {
+      font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      color: #1a1d2e; font-size: 9.5pt; line-height: 1.45; margin: 0; background: #fbfbfd;
+    }
+    .cover {
+      background: linear-gradient(135deg, #0f1e4a 0%, #1a2f6b 100%);
+      color: #fff; padding: 22mm 14mm; margin: -12mm -14mm 0 -14mm;
+    }
+    .cover .firm { font-size: 9pt; letter-spacing: 4px; color: #a8b8e8; font-weight: 600; }
+    .cover h1 { font-size: 24pt; margin: 7mm 0 3mm 0; font-weight: 300; }
+    .cover .sub { font-size: 12pt; color: #cfd8f5; margin-bottom: 9mm; }
+    .cover .meta { display: flex; justify-content: space-between; font-size: 9pt; color: #cfd8f5; border-top: 1px solid #4c5fa0; padding-top: 4mm; }
+    .cover .meta strong { color: #fff; }
+    h2 {
+      font-size: 12pt; color: #0f1e4a; margin-top: 7mm; margin-bottom: 3mm;
+      border-bottom: 2px solid #c7d0eb; padding-bottom: 1.5mm;
+    }
+    h2 .tag { float: right; font-size: 8.5pt; color: #5a6896; font-weight: normal; }
+    .snapshot {
+      background: #eef2fb; border-left: 4px solid #1a2f6b; padding: 4mm 5mm; margin: 3mm 0 5mm 0;
+    }
+    .snapshot table { border-collapse: collapse; width: 100%; }
+    .snapshot td { padding: 1.2mm 4mm 1.2mm 0; font-size: 9pt; vertical-align: top; }
+    .snapshot td.label { color: #5a6896; width: 24mm; }
+    .snapshot td.value { color: #1a1d2e; font-weight: 500; }
+    .snapshot .description { margin-top: 3mm; padding-top: 3mm; border-top: 1px solid #d4dcee; font-style: italic; color: #3a4368; }
+    table.data {
+      border-collapse: collapse; width: 100%; margin: 2mm 0 4mm 0; font-size: 9pt;
+    }
+    table.data th {
+      background: #f0f3fa; color: #3a4368; text-align: left; font-weight: 600;
+      padding: 2mm 2mm; border-bottom: 1.5px solid #c7d0eb;
+    }
+    table.data td { padding: 2mm 2mm; border-bottom: 1px solid #eaeef7; vertical-align: top; }
+    table.data td.right { text-align: right; white-space: nowrap; }
+    table.data td.mono { font-family: "SF Mono", "Menlo", monospace; font-size: 8.5pt; color: #5a6896; }
+    .badge {
+      display: inline-block; padding: 1mm 2.5mm; border-radius: 12px;
+      font-size: 8.5pt; font-weight: 500;
+      background: #eef2fb; color: #1a2f6b;
+    }
+    .badge.ok { background: #d8eedb; color: #2e6b3a; }
+    .badge.wip { background: #fdf0d0; color: #8b5a00; }
+    .badge.blocked { background: #f9d9d4; color: #a32d20; }
+    .muted { color: #5a6896; font-size: 8.5pt; }
+    .none { color: #8b91a8; font-style: italic; text-align: center; }
+    .risks-box { background: #fff4f2; border-left: 4px solid #d04030; padding: 4mm 5mm; margin: 4mm 0; }
+    .risks-box h3 { margin: 0 0 2mm 0; color: #a32d20; font-size: 10pt; }
+    .risks-box ul { margin: 2mm 0 0 5mm; padding: 0; }
+    .next-box { background: #eef9f0; border-left: 4px solid #2e6b3a; padding: 4mm 5mm; margin: 4mm 0; }
+    .next-box h3 { margin: 0 0 2mm 0; color: #2e6b3a; font-size: 10pt; }
+    .next-box ol { margin: 2mm 0 0 6mm; padding: 0; }
+    .next-box li { margin-bottom: 1.5mm; }
+    .footer { margin-top: 8mm; padding-top: 3mm; border-top: 1px solid #eaeef7; font-size: 8pt; color: #8b91a8; }
+  </style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="firm">KRATOS · SALES · ACCOUNT BRIEF</div>
+  <h1>{{ACCOUNT_NAME}}</h1>
+  <div class="sub">{{INDUSTRY}} · {{TIER}}</div>
+  <div class="meta">
+    <span>Owner: <strong>{{OWNER}}</strong> · CSM: <strong>{{CSM}}</strong> · SE: <strong>{{SE}}</strong></span>
+    <span>Renewal: <strong>{{RENEWAL}}</strong></span>
+  </div>
+</div>
+
+<div class="snapshot">
+  <table>
+    <tr>
+      <td class="label">Health</td><td class="value">{{HEALTH_BADGE}}</td>
+      <td class="label">ARR committed</td><td class="value">{{ARR}}</td>
+    </tr>
+    <tr>
+      <td class="label">Tier</td><td class="value">{{TIER}}</td>
+      <td class="label">Renewal date</td><td class="value">{{RENEWAL}}</td>
+    </tr>
+  </table>
+  <div class="description">{{DESCRIPTION}}</div>
+</div>
+
+<h2>Open pipeline <span class='tag'>by close date</span></h2>
+<table class="data">
+  <thead><tr><th>Opp</th><th>Name</th><th>Stage</th><th class='right'>Amount</th><th class='right'>Prob</th><th>Close</th><th>Next step</th></tr></thead>
+  <tbody>{{PIPELINE_ROWS}}</tbody>
+</table>
+
+<h2>Key contacts <span class='tag'>⭐ = primary</span></h2>
+<table class="data">
+  <thead><tr><th>Name</th><th>Title</th><th>Role</th></tr></thead>
+  <tbody>{{CONTACT_ROWS}}</tbody>
+</table>
+
+<h2>Recent activity <span class='tag'>newest first</span></h2>
+<table class="data">
+  <thead><tr><th style="width: 22mm;">Date</th><th style="width: 18mm;">Type</th><th>Subject &amp; outcome</th></tr></thead>
+  <tbody>{{ACTIVITY_ROWS}}</tbody>
+</table>
+
+<h2>Open cases <span class='tag'>P1 first</span></h2>
+<table class="data">
+  <thead><tr><th>Case</th><th class='right'>Pri</th><th>Status</th><th>Subject &amp; summary</th></tr></thead>
+  <tbody>{{CASE_ROWS}}</tbody>
+</table>
+
+<div class="risks-box">
+  <h3>⚠ Risks &amp; opens</h3>
+  {{RISKS}}
+</div>
+
+<div class="next-box">
+  <h3>✓ Suggested next steps</h3>
+  {{NEXT_STEPS}}
+</div>
+
+<div class="footer">
+  Generated by Kratos Sales Co-pilot · simulated data · {{GENERATED_AT}}
+</div>
+
+</body>
+</html>

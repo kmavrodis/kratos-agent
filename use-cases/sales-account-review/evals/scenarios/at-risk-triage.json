@@ -1,10 +1,13 @@
 {
   "name": "at-risk-triage",
-  "category": "standard",
-  "description": "At-risk account triage — agent calls at-risk-signals and prioritizes per the SYSTEM_PROMPT rules.",
+  "category": "happy-path",
+  "description": "At-risk triage scoped to user's own book, with P0/P1/P2 prioritisation and concrete next-step per account.",
   "input_message": "Which of my accounts are at risk right now and why?",
-  "input_data": {},
-  "expected_behavior": "Asks for user id once if not in context. Calls at-risk-signals for the owner. Prioritizes: Red health first, then Yellow with renewal <90 days, then any account with open P1 cases. For each at-risk account, gives the reason explicitly (don't soften) and suggests 1-3 next steps.",
-  "expected_tool_calls": ["at-risk-signals"],
+  "input_data": {
+    "expected_user": "USR-101",
+    "must_not_ask_identity": true
+  },
+  "expected_behavior": "Resolves 'my' as USR-101 without asking. Calls at-risk-signals scoped to owner_user_id=USR-101. Per skill rules: pulls account list, then for each account fans out to cases + open opps. Scores P0 (Red + open P1 OR renewal <30d with prob <50%), P1 (Red OR open P1 OR renewal <60d with prob <70%), P2 (Yellow with renewal <120d). Output ordered P0 → P1 → P2. Each entry names the account, gives the reason directly (no softening), and ends with one concrete suggestion tied to data. Says 'no at-risk accounts' explicitly if the book is healthy.",
+  "expected_tool_calls": ["at-risk-signals", "salesforce"],
   "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
 }

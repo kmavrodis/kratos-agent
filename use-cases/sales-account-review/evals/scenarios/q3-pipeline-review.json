@@ -1,13 +1,14 @@
 {
   "name": "q3-pipeline-review",
-  "category": "standard",
-  "description": "Pipeline filter by quarter — agent calls opportunity-pipeline and groups by stage sorted by close date.",
-  "input_message": "What's in my pipeline for Q3? Show open opps with close date in the next 90 days.",
+  "category": "happy-path",
+  "description": "Pipeline filter on the user's own book by close date window.",
+  "input_message": "What's in my pipeline for Q3? Show open opps closing in the next 90 days",
   "input_data": {
-    "period": "Q3",
-    "horizon_days": 90
+    "expected_user": "USR-101",
+    "horizon_days": 90,
+    "must_not_ask_identity": true
   },
-  "expected_behavior": "Asks for the user's CRM id once if not in context. Then calls opportunity-pipeline with the owner id and a 90-day close window. Returns opportunities grouped by stage and sorted by close date ascending. Includes opportunity id, account, amount, and stage for each. Does not invent opps.",
-  "expected_tool_calls": ["opportunity-pipeline"],
+  "expected_behavior": "Resolves 'my' as USR-101 without asking. Calls opportunity-pipeline filtered by owner_user_id=USR-101, open_only, close_date between 2026-06-09 and 2026-09-07 (90 days). Groups by stage, sorts by close date ascending. Each row shows opp id, account, amount ($), probability (%), stage, close date, next step. Surfaces commit-eligible deals (Stage 4+) separately from earlier stages. Does NOT invent opps.",
+  "expected_tool_calls": ["opportunity-pipeline", "salesforce"],
   "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
 }

@@ -1,0 +1,13 @@
+{
+  "name": "account-brief-pdf-deliverable",
+  "category": "deliverable",
+  "description": "End-to-end deliverable. Agent gathers full account state from Salesforce and produces the printable account-brief PDF for the QBR prep folder.",
+  "input_message": "Build the Acme Corp account brief PDF for the QBR prep folder",
+  "input_data": {
+    "expected_account": "Acme Corp (ACC-001)",
+    "expected_output_path_pattern": "/tmp/account-brief"
+  },
+  "expected_behavior": "Composes the full account picture: salesforce_get_account, salesforce_list_opportunities (open_only), salesforce_list_contacts_by_account, salesforce_list_activities_by_account (limit 8), salesforce_list_open_cases_by_account. Resolves owner/CSM/SE user ids to names via salesforce_get_user. Builds the status JSON per the account-brief-pdf SKILL.md schema and invokes render_account_brief.py via code_interpreter. PDF written to /tmp/account-brief-acme-corp.pdf. References the path using the file-sharing convention so it shows as a downloadable artifact. Closes with 4-6 line summary highlighting key risks and next steps.",
+  "expected_tool_calls": ["account-brief-pdf", "salesforce", "file-sharing"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}
