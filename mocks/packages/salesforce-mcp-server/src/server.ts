@@ -251,6 +251,45 @@ server.registerTool(
   }
 );
 
+// ── Writes ────────────────────────────────────────────────────────────────
+
+server.registerTool(
+  "salesforce_log_activity",
+  {
+    title: "Log a Salesforce activity (write)",
+    description:
+      "Log a new activity (call, meeting, email, task) against an account. " +
+      "WRITE TOOL — the assistant must show the draft to the user and get explicit " +
+      "confirmation via ask_user before calling this. Returns the new ACT-* id.",
+    inputSchema: {
+      account_id: z.string().describe("Account id, e.g. ACC-001."),
+      type: z.enum(["Call", "Meeting", "Email", "Task", "Note"])
+        .describe("Activity type."),
+      subject: z.string().min(1).describe("Subject line (will appear on the timeline)."),
+      summary: z.string().min(1).describe("Body / outcome (1-3 sentences)."),
+      owner_user_id: z.string().describe("Owning user id, e.g. USR-101."),
+      date: z.string().optional()
+        .describe("Date the activity occurred (YYYY-MM-DD). Defaults to today."),
+    },
+  },
+  async ({ account_id, type: kind, subject, summary, owner_user_id, date }) => {
+    if (!accounts.find((a) => a.id === account_id)) return notFound("account", account_id);
+    if (!users.find((u) => u.id === owner_user_id)) return notFound("user", owner_user_id);
+    const nextNum = activities.reduce((max, a) => {
+      const n = parseInt(a.id.replace("ACT-", ""), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 1000) + 1;
+    const id = `ACT-${nextNum}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const newActivity: Activity = {
+      id, account_id, type: kind, subject, summary,
+      owner_user_id, date: date ?? today,
+    };
+    activities.unshift(newActivity);
+    return text({ ok: true, activity: newActivity, note: "Activity logged on the account timeline." });
+  }
+);
+
 // ── Boot ──────────────────────────────────────────────────────────────────
 
 const transport = new StdioServerTransport();

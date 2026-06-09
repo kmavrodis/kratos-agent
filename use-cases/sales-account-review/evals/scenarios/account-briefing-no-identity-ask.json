@@ -1,0 +1,14 @@
+{
+  "name": "account-briefing-no-identity-ask",
+  "category": "identity-anchor",
+  "description": "Headline regression test. Agent must resolve the user as Alex Rivera (USR-101) and today as 9 Jun 2026 without asking, then produce the Acme Corp brief with snapshot, pipeline, contacts, recent activity, risks, next steps.",
+  "input_message": "Brief me on Acme Corp before my 3pm with Margaret Chen",
+  "input_data": {
+    "expected_user": "USR-101",
+    "expected_account": "Acme Corp (ACC-001)",
+    "must_not_ask_identity": true
+  },
+  "expected_behavior": "Resolves the user as Alex Rivera without asking. Calls account-briefing which fans out to salesforce_get_account + salesforce_list_opportunities (open_only) + salesforce_list_contacts_by_account + salesforce_list_activities_by_account + salesforce_list_open_cases_by_account in parallel. Resolves owner/CSM/SE user ids to names. Returns the structured brief: Snapshot → Pipeline → Key contacts (Margaret Chen called out as CFO/EB) → Recent activity → Risks → Suggested next steps. Cites opp ids (OPP-1001, OPP-1002). Does NOT ask 'which AE are you' or 'who am I briefing for'.",
+  "expected_tool_calls": ["account-briefing", "salesforce"],
+  "evaluators": ["Relevance", "Coherence", "TaskAdherence", "IntentResolution", "ToolCallAccuracy"]
+}
