@@ -174,9 +174,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     if settings.keep_warm_enabled and not settings.is_local_mode:
         import asyncio
 
-        keep_warm_task = asyncio.create_task(
-            _keep_warm_loop(foundry_proxy, settings.keep_warm_interval_s)
-        )
+        keep_warm_task = asyncio.create_task(_keep_warm_loop(foundry_proxy, settings.keep_warm_interval_s))
         logger.info(
             "Warm-pool task started — maintaining %d pre-warmed sandboxes, refresh every %ds",
             settings.warm_pool_size,
