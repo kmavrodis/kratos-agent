@@ -11,54 +11,31 @@
    only — never hard-coded hex values.
    ────────────────────────────────────────────────────────────────────── */
 
-:root, [data-theme="anthropic-peach"] {
-  /* 1. Anthropic Peach (default) — light */
-  --bg:           #f7f3ec;
-  --surface:      #fcfaf5;
-  --surface-2:    #efe9dd;
-  --border:       #ddd4c2;
-  --border-soft:  #e7ddca;
-  --hover:        #e7dfcd;
-  --text:         #23201c;
-  --text-strong:  #0f0e0c;
-  --muted:        #7a7163;
-  --muted-strong: #5a5247;
-  --accent:       #cc785c;
-  --accent-hover: #b56a52;
-  --accent-fg:    #fcfaf5;
-  --accent-soft:  rgba(204, 120, 92, 0.10);
-  --ask-accent:   #cc785c;
-  --ask-accent-fg:#fcfaf5;
-  --ask-border:   #e7c6b3;
-  --ask-bg:       rgba(204, 120, 92, 0.06);
-  --code-fg:      #cc785c;
-  --shadow-card:  0 1px 2px rgba(35,32,28,0.05), 0 2px 8px rgba(35,32,28,0.04);
-  --font-display: 'Inter';
-  --font-mono:    'JetBrains Mono';
+:root {
+  /* Default tokens (Newsprint light) — overridden by any [data-theme] below */
+  --bg:           #f7f3e9;
+  --surface:      #fdfaf2;
+  --surface-2:    #efe9d8;
+  --border:       #d8d0bb;
+  --border-soft:  #e2dcc8;
+  --hover:        #e6dec9;
+  --text:         #1a1a1a;
+  --text-strong:  #000000;
+  --muted:        #6e6a5f;
+  --muted-strong: #4a473f;
+  --accent:       #1a1a1a;
+  --accent-hover: #000000;
+  --accent-fg:    #f7f3e9;
+  --accent-soft:  rgba(26, 26, 26, 0.08);
+  --ask-accent:   #a02929;
+  --ask-accent-fg:#f7f3e9;
+  --ask-border:   #d4a094;
+  --ask-bg:       rgba(160, 41, 41, 0.06);
+  --code-fg:      #a02929;
+  --shadow-card:  0 1px 2px rgba(26,26,26,0.06), 0 2px 8px rgba(26,26,26,0.05);
+  --font-display: 'Source Serif 4';
+  --font-mono:    'IBM Plex Mono';
   color-scheme: light;
-}
-[data-theme="anthropic-peach"].dark {
-  --bg:           #1f1d1a;
-  --surface:      #2a2723;
-  --surface-2:    #24211d;
-  --border:       #3a352f;
-  --border-soft:  #322e29;
-  --hover:        #322e29;
-  --text:         #f4ecdf;
-  --text-strong:  #ffffff;
-  --muted:        #a89e8c;
-  --muted-strong: #c4b9a3;
-  --accent:       #e08768;
-  --accent-hover: #f0997a;
-  --accent-fg:    #1f1d1a;
-  --accent-soft:  rgba(224, 135, 104, 0.14);
-  --ask-accent:   #e08768;
-  --ask-accent-fg:#1f1d1a;
-  --ask-border:   #4a3328;
-  --ask-bg:       rgba(224, 135, 104, 0.08);
-  --code-fg:      #e08768;
-  --shadow-card:  0 1px 2px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
-  color-scheme: dark;
 }
 
 [data-theme="tokyo-night"] {
@@ -209,6 +186,7 @@
 }
 
 [data-theme="newsprint"] {
+  /* Newsprint (default) — light */
   --bg:           #f7f3e9;
   --surface:      #fdfaf2;
   --surface-2:    #efe9d8;
@@ -234,26 +212,26 @@
   color-scheme: light;
 }
 [data-theme="newsprint"].dark {
-  --bg:           #111110;
-  --surface:      #1a1a18;
-  --surface-2:    #161614;
-  --border:       #2a2926;
-  --border-soft:  #20201d;
-  --hover:        #23221f;
+  --bg:           #1d1d1c;
+  --surface:      #262624;
+  --surface-2:    #212120;
+  --border:       #36352f;
+  --border-soft:  #2c2b27;
+  --hover:        #2f2e2a;
   --text:         #ede6d3;
   --text-strong:  #ffffff;
-  --muted:        #928c7a;
-  --muted-strong: #b3ad99;
+  --muted:        #98927f;
+  --muted-strong: #b8b29d;
   --accent:       #ede6d3;
   --accent-hover: #ffffff;
-  --accent-fg:    #111110;
+  --accent-fg:    #1d1d1c;
   --accent-soft:  rgba(237, 230, 211, 0.10);
   --ask-accent:   #e35c4d;
-  --ask-accent-fg:#111110;
+  --ask-accent-fg:#1d1d1c;
   --ask-border:   #52201a;
   --ask-bg:       rgba(227, 92, 77, 0.10);
   --code-fg:      #e35c4d;
-  --shadow-card:  0 1px 2px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-card:  0 1px 2px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.35);
   color-scheme: dark;
 }
 
@@ -306,7 +284,7 @@
   color-scheme: dark;
 }
 
-[data-theme="cursor-cyber"] {
+[data-theme="neon-noir"] {
   --bg:           #fafafa;
   --surface:      #ffffff;
   --surface-2:    #f3f3f5;
@@ -331,7 +309,7 @@
   --font-mono:    'JetBrains Mono';
   color-scheme: light;
 }
-[data-theme="cursor-cyber"].dark {
+[data-theme="neon-noir"].dark {
   --bg:           #0a0a14;
   --surface:      #13131f;
   --surface-2:    #0e0e18;
