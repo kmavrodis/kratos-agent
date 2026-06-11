@@ -170,6 +170,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     aiSearchName: aiSearch.outputs.name
     aiServicesName: aiFoundry.outputs.name
     aiServicesPrincipalId: aiFoundry.outputs.principalId
+    aiServicesProjectPrincipalId: aiFoundry.outputs.projectPrincipalId
     keyVaultName: keyVault.outputs.name
     storageAccountName: blobStorage.outputs.name
     appInsightsName: appInsights.outputs.name
@@ -180,15 +181,22 @@ module roleAssignments './modules/role-assignments.bicep' = {
 
 // ─── Outputs ───
 output AZURE_RESOURCE_GROUP string = rg.name
+output AZURE_TENANT_ID string = tenant().tenantId
 output AZURE_CONTAINER_REGISTRY_NAME string = containerRegistry.outputs.name
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.outputs.loginServer
 output AZURE_COSMOS_DB_ENDPOINT string = cosmosDb.outputs.endpoint
 output AZURE_AI_SEARCH_ENDPOINT string = aiSearch.outputs.endpoint
 output AZURE_KEY_VAULT_URI string = keyVault.outputs.uri
 output AZURE_APP_INSIGHTS_CONNECTION_STRING string = appInsights.outputs.connectionString
+output AZURE_AI_ACCOUNT_NAME string = aiFoundry.outputs.name
 output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
 output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_AI_PROJECT_ENDPOINT string = aiFoundry.outputs.projectEndpoint
+// Extension contract drift (per foundry-hosted-agents skill): azure.ai.agents
+// extension v0.1.31+ reads FOUNDRY_PROJECT_ENDPOINT, older versions read
+// AZURE_AI_PROJECT_ENDPOINT. Emit both with the same value until the
+// extension settles on one name.
+output FOUNDRY_PROJECT_ENDPOINT string = aiFoundry.outputs.projectEndpoint
 output AZURE_AI_PROJECT_ID string = aiFoundry.outputs.projectId
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name

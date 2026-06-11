@@ -13,6 +13,9 @@ param aiServicesName string
 @description('Microsoft Foundry system-assigned principal ID (compile-time output from the ai-services module)')
 param aiServicesPrincipalId string
 
+@description('Microsoft Foundry PROJECT system-assigned principal ID. Per foundry-hosted-agents skill, this is the MI that actually pulls the hosted-agent container image from ACR — granting AcrPull only to the account MI is insufficient and causes ImageError at first invoke.')
+param aiServicesProjectPrincipalId string = ''
+
 @description('Key Vault name')
 param keyVaultName string
 
@@ -178,6 +181,21 @@ resource aiServicesAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
     principalId: aiServicesPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ─── AI Services PROJECT MI → ACR (AcrPull) ───
+// The Foundry PROJECT MI is what actually pulls the hosted-agent container
+// image at first invoke (per foundry-hosted-agents skill). Account MI alone
+// is insufficient and produces ImageError. Belt-and-braces with the account MI
+// grant above.
+resource aiServicesProjectAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(containerRegistryName) && !empty(aiServicesProjectPrincipalId)) {
+  name: guid(containerRegistry.id, aiServicesProjectPrincipalId, acrPull)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPull)
+    principalId: aiServicesProjectPrincipalId
     principalType: 'ServicePrincipal'
   }
 }

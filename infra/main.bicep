@@ -248,6 +248,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     aiSearchName: aiSearch.outputs.name
     aiServicesName: aiFoundry.outputs.name
     aiServicesPrincipalId: aiFoundry.outputs.principalId
+    aiServicesProjectPrincipalId: aiFoundry.outputs.projectPrincipalId
     keyVaultName: keyVault.outputs.name
     storageAccountName: blobStorage.outputs.name
     appInsightsName: appInsights.outputs.name
