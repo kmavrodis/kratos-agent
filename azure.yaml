@@ -50,6 +50,20 @@ services:
                       echo "{\"apiUrl\":\"${AGENT_SERVICE_URL}\"}" > out/config.json
                       echo "Injected config.json with apiUrl=${AGENT_SERVICE_URL}"
                     fi
+                    # Emit a basePath-aware staticwebapp.config.json into out/ so the
+                    # SWA EasyAuth 401 redirect + /api/* gating stay inside the mount
+                    # path (e.g. /kratos) when hosted behind Front Door. Empty base
+                    # path → straight copy (standalone root deployment).
+                    BP="$(printf '%s' "${NEXT_PUBLIC_BASE_PATH:-}" | sed 's#/*$##')"
+                    if [ -f staticwebapp.config.json ]; then
+                      if [ -n "$BP" ]; then
+                        sed "s#/.auth/login/aad#${BP}/.auth/login/aad#g; s#\"/api/\*\"#\"${BP}/api/*\"#g" \
+                          staticwebapp.config.json > out/staticwebapp.config.json
+                        echo "Wrote basePath-aware staticwebapp.config.json (basePath=${BP})"
+                      else
+                        cp staticwebapp.config.json out/staticwebapp.config.json
+                      fi
+                    fi
 hooks:
     postdeploy:
         name: postdeploy

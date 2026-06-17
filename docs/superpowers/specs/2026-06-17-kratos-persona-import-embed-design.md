@@ -314,21 +314,83 @@ site could `POST` import directly and arrive with just `?persona=<name>` — "Va
 
 ---
 
-## 8. Secondary PR — agentic-loop-site (separate session)
+## 8. Secondary PR — agentic-loop-site (full plan)
 
-Captured here for completeness; **implemented in a separate session/worktree**, not this one.
+Lands in the **`agentic-loop-site` repo** (`~/Repos/agentic-loop-site`) on its **own
+branch/PR** — it is a different repository from this Kratos worktree, so it cannot be
+committed here, but it is fully planned below and tracked alongside the Kratos PR.
 
-- Replace the **mock** Kratos integration (`src/pages/Kratos.tsx`,
-  `src/components/KratosChatMock.tsx`, `src/data/kratos.ts` `mockKratosReply`) with:
-  - a **"Describe your agent" generate box** that **builds the threadlight-compatible
-    manifest** in the site (reusing the `GreenfieldBuilder` / `advisor.ts` "Make it real"
-    pattern, repurposed to persona intent), and
-  - the **import-then-settle** handoff (§10.1 Variant B / D9): the site writes the manifest
-    to `sessionStorage['kratos.import']` (§7.1) and navigates to `/kratos/?embed=1&theme=<t>&import=1`;
-    Kratos imports on entry (after its own EasyAuth) and settles on `?persona=<name>`.
-- Add the **Front Door** profile + routes that path-mount Kratos under `/kratos/*`
-  (per §6.3–6.4), including `/kratos/.auth/*` and `/kratos/api/*`.
-- No Kratos files are copied — the mount serves the live Kratos SWA.
+**Repo facts (verified):** Vite + React 19 SPA, `BrowserRouter` (`src/main.tsx`), deployed to
+Azure **Static Web App** `agentic-loop` (`rg-agentic-loop`) via `deploy.ps1` (SWA CLI). **No
+IaC and no `staticwebapp.config.json` today.** The "generate" surface today is
+`src/components/GreenfieldBuilder.tsx` → `src/data/advisor.ts` (`buildAdvisorPackage` →
+`AdvisorPackage`) → `src/components/MakeItRealModal.tsx` (a *copy-a-Copilot-prompt* handoff —
+**no manifest, no backend call**). The Kratos surface is **fully mocked**:
+`src/pages/Kratos.tsx`, `src/components/KratosLauncher.tsx`, `src/components/KratosChatMock.tsx`,
+`src/data/kratos.ts` (`KRATOS_PERSONAS`, `mockKratosReply`).
+
+### 8.1 Workstream S-A — Persona manifest builder (NL → threadlight manifest)
+
+- **New `src/data/manifest.ts`** — `buildPersonaManifest({ intent, requirementIds, name? })`
+  that maps the free-text intent + `inferRequirementsFromSelections(...)` (reuse `advisor.ts`)
+  → a **threadlight-design-compatible manifest object** (the §9 contract: `name`,
+  `description`, `instructions`, `skills[]`, `mcpServers`/`tools`, `traits[]`,
+  `workflow_model:'agent'`). The TS type mirrors the Kratos Pydantic import model field-for-field.
+- **NL→manifest is the site's job (D2).** Primary mapping is **deterministic** (regex/intent
+  hints already in `advisor.ts`), matching Kratos's deterministic import. The site **may**
+  optionally call its own advisor/LLM to enrich `instructions`/`description` — that choice is
+  the site's, and the manifest it emits is the contract Kratos consumes.
+- **New `src/components/PersonaBuilder.tsx`** (or a persona mode added to `GreenfieldBuilder`):
+  a "Describe your agent" box + a **"Create in Kratos"** CTA that produces the manifest and
+  triggers the handoff (S-B). The existing `MakeItRealModal` "copy a Copilot prompt" path stays
+  for the app-scaffolding use case; persona creation is a distinct, shorter path.
+
+### 8.2 Workstream S-B — Generate → import handoff (Variant B / §10.1)
+
+- **New `src/lib/kratosHandoff.ts`** — `relayAndOpen(manifest, { theme })`:
+  1. `sessionStorage.setItem('kratos.import', JSON.stringify(manifest))` (§7.1 relay key),
+  2. `window.location.assign(`${KRATOS_BASE}/?embed=1&import=1&theme=${theme}`)`.
+- **Full-page navigation, not `react-router`** — `/kratos/*` is served by the **Kratos** app
+  via Front Door, so the handoff must leave the SPA (`window.location.assign`), never
+  `navigate('/kratos')`. `KRATOS_BASE` comes from `import.meta.env.VITE_KRATOS_BASE`
+  (default `/kratos`).
+- Kratos imports on entry after its own EasyAuth, then settles on `?persona=<name>` (§7.1).
+
+### 8.3 Workstream S-C — Replace the mock with the embedded real Kratos
+
+- **Route-collision fix (required).** The site's `react-router` route `path="kratos"`
+  (`src/main.tsx`) **collides** with the Front Door `/kratos/*` mount (the edge routes
+  `/kratos/*` to the Kratos SWA, so the site SPA never renders its own `/kratos`). **Rename the
+  site's Kratos *marketing* route** (e.g. `/reference/kratos` or `/kratos-about`) and update the
+  `Sidebar` link. The bare `/kratos/*` namespace is reserved for the embedded app.
+- **`KratosLauncher.tsx`** — replace `navigate('/kratos', { state })` with a **deep-link into
+  the embedded app**: `window.location.assign(`${KRATOS_BASE}/?embed=1&persona=${personaId}&prompt=${encodeURIComponent(prompt)}&theme=${theme}`)`.
+- **`Kratos.tsx`** (now at the renamed marketing path) — keep the marketing/"why this
+  architecture" content; route its "try it" CTAs into the embedded app. Remove the
+  `KratosChatMock` render branch.
+- **Retire the mock** — delete `KratosChatMock.tsx` and `mockKratosReply` from `kratos.ts`.
+  Keep a static `KRATOS_PERSONAS` list for the launcher dropdown (or, optional enhancement,
+  fetch live personas from `${KRATOS_BASE}/api/use-cases`).
+
+### 8.4 Workstream S-D — Front Door infra + site deploy
+
+- **New `infra/frontdoor.bicep`** (the site has no IaC today) provisioning an **Azure Front
+  Door** profile + endpoint with two origins (site SWA, Kratos SWA) and routes, in priority
+  order: `/kratos/.auth/*` and `/kratos/api/*` and `/kratos/*` → **Kratos** origin (caching
+  off); default `/*` → **site** origin. (Per §6.3–6.4.)
+- **Entra app #2** (Kratos) redirect URIs must include the Front Door origin under
+  `/kratos/.auth/login/aad/callback` — documented as a deploy step.
+- **Add `staticwebapp.config.json`** to the site only if needed for SPA fallback; `/kratos/*`
+  is handled at the Front Door edge and never reaches the site SWA.
+- **Update `deploy.ps1`** (or add an `azd`/CLI step) to provision/refresh Front Door alongside
+  the existing SWA deploy. No Kratos files are copied — the mount serves the live Kratos SWA.
+
+### 8.5 Workstream S-E — Config & local dev
+
+- **`VITE_KRATOS_BASE`** (default `/kratos`) — handoff/deep-link target, configurable per env.
+- **Local dev fallback** — without Front Door, `/kratos` isn't mounted; if
+  `VITE_KRATOS_STANDALONE_URL` is set, the handoff opens that absolute Kratos URL instead so the
+  flow is testable locally.
 
 ---
 
@@ -421,11 +483,17 @@ import-on-entry → settle on `?persona=<name>`.
 - Tests for the import mapping + endpoint.
 - This spec; session `plan.md`.
 
-**agentic-loop-site PR (separate session):**
-- Replace mock Kratos with a generate box that **builds the manifest**, relays it via
-  `sessionStorage['kratos.import']`, and enters `/kratos/?embed=1&import=1` so Kratos imports
-  on entry and settles on `?persona=<name>` (§10.1 Variant B / D9).
-- Front Door profile + routes (`/kratos/*`, `/kratos/.auth/*`, `/kratos/api/*`, default → site).
+**agentic-loop-site PR (separate repo `~/Repos/agentic-loop-site`, own branch):**
+- `src/data/manifest.ts` — **new** `buildPersonaManifest(...)` → threadlight-compatible manifest (§9 contract; reuses `advisor.ts` requirement inference).
+- `src/components/PersonaBuilder.tsx` — **new** (or persona mode in `GreenfieldBuilder.tsx`): "Describe your agent" box + "Create in Kratos" CTA.
+- `src/lib/kratosHandoff.ts` — **new** `relayAndOpen(manifest,{theme})`: `sessionStorage['kratos.import']` + full-page `window.location.assign('/kratos/?embed=1&import=1&theme=…')` (Variant B).
+- `src/components/KratosLauncher.tsx` — replace `navigate('/kratos',{state})` with deep-link `…/kratos/?embed=1&persona=&prompt=&theme=`.
+- `src/main.tsx` + `src/components/Sidebar.tsx` — **rename the marketing `/kratos` route** (e.g. `/reference/kratos`) to free the `/kratos/*` namespace for the Front Door mount.
+- `src/pages/Kratos.tsx` — keep marketing content at the renamed path; remove the mock render branch.
+- `src/components/KratosChatMock.tsx` — **delete**; `src/data/kratos.ts` — drop `mockKratosReply` (keep `KRATOS_PERSONAS` for the picker).
+- `infra/frontdoor.bicep` — **new** AFD profile/endpoint/origins/routes (`/kratos/.auth/*`, `/kratos/api/*`, `/kratos/*` → Kratos; `/*` → site).
+- `deploy.ps1` (+ optional `staticwebapp.config.json`) — provision/refresh Front Door alongside SWA deploy; document Entra app #2 redirect URI under `/kratos/.auth/login/aad/callback`.
+- `.env`/build — `VITE_KRATOS_BASE` (default `/kratos`), `VITE_KRATOS_STANDALONE_URL` (local-dev fallback).
 
 ---
 
