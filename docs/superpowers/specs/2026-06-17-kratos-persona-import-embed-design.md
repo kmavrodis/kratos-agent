@@ -11,8 +11,10 @@
 ## 1. Problem & Goal
 
 `agentic-loop-site` should let an (authenticated) user **describe an agent in natural
-language** and get a **real, working Kratos persona** generated for them — instead of
-hand-authoring the three persona files. The site should also **host the Kratos UI as if
+language** and get a **real, working Kratos persona** created for them — instead of
+hand-authoring the three persona files. **The site turns the description into a
+threadlight-compatible manifest; Kratos imports that manifest** to create the persona (the
+site owns generation; Kratos owns import). The site should also **host the Kratos UI as if
 it were part of the site** (same origin, same "included" feel), **without copying any
 Kratos files**, so that deploying the site always uses the latest Kratos code (no
 duplication, no drift).
@@ -25,7 +27,7 @@ Two deliverables (two PRs):
    **embedded mount** of Kratos + the **Front Door route** that path-mounts Kratos under
    the site origin.
 
-The generated persona **contract must be compatible with `threadlight-design`** (its
+The persona **manifest the site builds must be compatible with `threadlight-design`** (its
 `manifest.json` + `AGENTS.md` + skills shape) so the two ecosystems interoperate.
 
 ---
@@ -35,13 +37,13 @@ The generated persona **contract must be compatible with `threadlight-design`** 
 | # | Decision | Rationale |
 |---|----------|-----------|
 | D1 | **Two PRs**, Kratos primary (this worktree); site secondary (separate session — `~/Repos/agentic-loop-site` is a plain clone, not a worktree). | User directive. |
-| D2 | **Generate box (UI) lives in the site**; **LLM generation runs in the Kratos backend** (the Import API), reusing Kratos's Foundry credentials. | Site has no backend/LLM; Kratos already has the Foundry wiring. |
+| D2 | **The site builds the manifest.** agentic-loop-site owns NL→manifest generation (its advisor / its own LLM / deterministic builder). Kratos does **not** generate personas from NL — it **imports a ready manifest**. | User directive: "agentic-loop-site creates the manifest and Kratos imports it." Site already has the contract/advisor concept (`advisor.ts`). |
 | D3 | **Embedding = reverse-proxy / path-mount at deploy (Front Door)** under `site.com/kratos/*`. **Not** iframe, **not** module federation. | User picked §2; wants same-origin "included" feel + URL args; called federation "clumsy". |
 | D4 | **No public/anonymous access.** Both the site SWA and Kratos SWA sit behind **Entra EasyAuth**. No demo mode, no ephemeral personas. | User directive. |
 | D5 | **Different Entra app registrations** for site vs Kratos → entering `/kratos/*` triggers a **second EasyAuth round-trip** (silent if the browser already has an Entra IdP session; otherwise interactive). | User directive. Drives the basePath-aware `/.auth` work. |
 | D6 | **Import endpoint is authenticated** (`require_authenticated_user`), consistent with all existing Kratos admin/export routes. | Security parity. |
-| D7 | The site's generate box **hands NL into the embedded Kratos**, which performs the authenticated import — rather than the site calling the Kratos backend cross-origin. | Keeps every Kratos backend call inside Kratos's own auth/CORS/session context; lets EasyAuth do the work; survives D5. |
-| D8 | Import contract is **threadlight-`manifest.json`-compatible** and **hybrid**: accepts a structured contract and/or a raw NL `prompt`; the LLM expands NL → contract → Kratos's 3 files. | User NOTE about threadlight compatibility. |
+| D7 | **Import-first, then redirect.** Sequence: site builds manifest → `POST /api/use-cases/import` (manifest-in) creates the persona → **only on success** the UX deep-links into the embedded Kratos at the new persona (`?embed=1&persona=<name>`). | User directive: "Kratos imports it first (new API) then UX redirects." |
+| D8 | Import contract input is **the threadlight-`manifest.json`-compatible manifest** (structured, primary path). Optional NL `prompt` expansion in Kratos is a **secondary convenience**, off the main flow. | User NOTE about threadlight compatibility; D2 moves generation to the site. |
 
 ---
 
@@ -104,71 +106,72 @@ flowchart TB
     direction LR
     R1["/ , /about, ... → site SWA"]
     R2["/kratos/* → Kratos SWA (basePath=/kratos)"]
-    R3["/kratos/.auth/* → Kratos SWA EasyAuth (rewrite)"]
+    R3["/kratos/.auth/* → Kratos EasyAuth (rewrite)"]
     R4["/kratos/api/* → Kratos backend (Container App)"]
   end
 
   U["Authenticated user"] --> FD
-  R1 --> SITE["agentic-loop-site SWA<br/>EasyAuth app #1<br/>+ 'Describe your agent' box"]
-  R2 --> KFE["Kratos frontend SWA<br/>EasyAuth app #2<br/>embed mode"]
-  R3 --> KAUTH["Kratos EasyAuth"]
-  R4 --> KBE["Kratos backend<br/>POST /api/use-cases/import"]
-  KBE --> LLM["Foundry LLM (_call_llm)"]
-  KBE --> STORE["Blob / local use-cases/<name>/<br/>(SYSTEM_PROMPT.md + .mcp.json + apm.yml)"]
+  R1 --> SITE["agentic-loop-site SWA · EasyAuth app #1<br/>'Describe your agent' box<br/><b>builds threadlight manifest</b>"]
+  SITE -->|"1 · POST manifest (authenticated)"| R4
+  R4 --> KBE["Kratos <b>import API</b><br/>POST /api/use-cases/import (manifest-in)"]
+  KBE --> STORE["use-cases/&lt;name&gt;/<br/>SYSTEM_PROMPT.md + .mcp.json + apm.yml"]
   KBE --> REG["app.state.registries[name]"]
+  KBE -->|"201 {name}"| SITE
+  SITE -->|"2 · redirect /kratos/?embed=1&persona=&lt;name&gt;"| R2
+  R2 --> KFE["Kratos frontend · EasyAuth app #2<br/>embed mode → opens the new persona"]
 ```
 
-**End-to-end flow (generate a persona):**
+**End-to-end flow (import-first, then redirect — per D2/D7):**
 
-1. User is on `site.com` (already authenticated to site EasyAuth app #1).
-2. User types a description into the **generate box** and submits. The site **stashes the
-   NL prompt in `sessionStorage['kratos.generate']`** (see §7.1) and navigates (top-level)
-   to `site.com/kratos/?embed=1&theme=<t>&generate=1`.
-3. Front Door routes `/kratos/*` → Kratos SWA. Kratos EasyAuth (app #2) authenticates —
-   **silent** if the Entra IdP session already exists in the browser, otherwise a prompt.
-   The handoff payload **survives this redirect** because `sessionStorage` is shared across
-   the single `site.com` origin (storage is per-origin, not per-path — both backend SWAs are
-   invisible to the browser).
-4. Embedded Kratos (chromeless) sees `?generate=1`, **reads-and-clears** the handoff payload
-   from `sessionStorage` (so a refresh won't regenerate), then calls
-   `POST /kratos/api/use-cases/import` with the NL — authenticated by the EasyAuth cookie,
-   **same-origin** (no CORS), API base resolved by `config.ts`'s same-origin proxy fallback.
-5. Import API: LLM expands NL → threadlight-compatible **contract** → maps to the three
-   Kratos files → persists (blob/local) → registers `app.state.registries[name]` →
-   `201 {name, displayName}`. On the NL path the slug is **auto-deduped** (`-2`, `-3`, …) so
-   generation never dead-ends on a name clash; an explicit `contract.name` clash returns
-   `409` (unless `overwrite`).
-6. Kratos sets `selectedUseCase = name`, surfaces the persona's `sampleQuestions`, and opens
-   the chat — the user is now talking to their generated agent, visually "inside" the site.
-   On `422`/`409`/network error, embed mode shows an inline "couldn't generate — try again /
-   edit" affordance instead of the chat.
+1. User is on `site.com` (authenticated to site EasyAuth app #1), types a description into the
+   **generate box**.
+2. **The site builds the threadlight-compatible manifest** from the description (its
+   advisor / its own LLM / deterministic builder — Kratos is not involved in generation).
+3. The site **POSTs the manifest** to `site.com/kratos/api/use-cases/import` (the new Kratos
+   import API). *(Auth-context note: this endpoint is gated by Kratos EasyAuth app #2 — see
+   §10.1 for exactly which page issues this authenticated call; that's the one open
+   decision below.)*
+4. Kratos import API: validate manifest → map to the three persona files → persist
+   (blob/local) → register `app.state.registries[name]` → return `201 {name, displayName}`.
+   Slug is **auto-deduped** (`name-2`, `name-3`, …) so a name clash never dead-ends (explicit
+   collisions can opt into `409`/`overwrite`).
+5. **Only on success**, the UX **redirects** into the embedded Kratos at the new persona:
+   `site.com/kratos/?embed=1&theme=<t>&persona=<name>`.
+6. Front Door routes `/kratos/*` → Kratos SWA; EasyAuth (app #2) is satisfied (already
+   established in step 3 / silent via IdP session). Embed mode (chromeless) **preselects the
+   persona**, surfaces its `sampleQuestions`, and opens the chat — the user is now talking to
+   their agent, visually "inside" the site. Import errors are surfaced **on the site** (step 4
+   response) *before* any redirect, so the embedded view only ever opens on success.
 
 ---
 
 ## 5. Workstream A — Persona Import API (Kratos backend, net-new)
+
+**Primary input = a ready manifest (built by the site, D2/D8).** The endpoint validates the
+manifest, maps it to Kratos's three persona files, persists, and registers the persona live —
+**no LLM on the main path**. An optional NL `prompt` expansion is kept only as a secondary
+convenience (§5.3).
 
 ### 5.1 Endpoint
 - `POST /api/use-cases/import` — new router `src/backend/app/routers/import_persona.py`,
   mounted in `main.py` under the `/api/use-cases` prefix (alongside `use_cases` / `export`).
 - **Auth-gated** with the same `require_authenticated_user` dependency used by `export.py`.
 - Returns `201` with `{ name, displayName, files: {...}, created: true }`. Name-collision
-  policy: on the **NL path** (no explicit `contract.name`) the derived slug is
-  **auto-deduped** (`name-2`, `name-3`, …) so generation never dead-ends; with an **explicit
-  `contract.name`** a clash returns `409` unless `?overwrite=true`. `422` on invalid
-  contract or malformed LLM output.
+  policy: when the manifest omits `name` (or on the secondary NL path) the derived slug is
+  **auto-deduped** (`name-2`, `name-3`, …) so import never dead-ends; with an **explicit
+  `manifest.name`** a clash returns `409` unless `options.overwrite` / `?overwrite=true`.
+  `422` on invalid manifest (or malformed LLM output on the NL convenience path).
 
-### 5.2 Request contract (hybrid; threadlight-compatible)
-Accepts **either** a structured contract, **or** a raw `prompt`, **or** both (the contract
-provides hints, the LLM fills the gaps):
+### 5.2 Request body (manifest-in; threadlight-compatible)
+The **primary input is the manifest** (built by the site). The body is the manifest, plus
+import options. An optional `prompt` is accepted only as a **secondary convenience** (off
+the main flow) for callers that want Kratos to expand NL itself.
 
 ```jsonc
 {
-  // --- Option 1: natural language (LLM expands) ---
-  "prompt": "An assistant for retail-bank dispute handling that ...",
-
-  // --- Option 2 / hints: threadlight-manifest-compatible structured contract ---
-  "contract": {
-    "name": "dispute-handler",                 // optional; LLM/slug derives if absent
+  // --- PRIMARY: the threadlight-manifest.json-compatible manifest (built by the site) ---
+  "manifest": {
+    "name": "dispute-handler",                 // ↔ folder + SYSTEM_PROMPT frontmatter.name
     "description": "...",                       // ↔ SYSTEM_PROMPT frontmatter.description
     "sampleQuestions": ["...", "..."],          // ↔ SYSTEM_PROMPT frontmatter.sampleQuestions
     "instructions": "## Role ...",              // ↔ SYSTEM_PROMPT.md markdown body (AGENTS.md-like)
@@ -178,20 +181,28 @@ provides hints, the LLM fills the gaps):
     "traits": ["..."],                          // carried as metadata (round-trip)
     "workflow_model": "agent"                   // Kratos personas are agent-shaped
   },
+
+  // --- SECONDARY (optional): let Kratos expand NL instead of sending a manifest ---
+  "prompt": "An assistant for retail-bank dispute handling that ...",
+
   "options": { "curated": false, "overwrite": false }
 }
 ```
 
-### 5.3 LLM behavior (reuse `admin_analysis._call_llm`)
-- If `prompt` is present, call the Foundry LLM in **JSON mode** with a system prompt that
-  instructs it to emit the **threadlight-compatible contract** above (validated against a
-  Pydantic model). Merge any caller-supplied `contract` hints (caller hints win on
-  conflicts; LLM fills the rest).
-- Deterministic, non-LLM fallback: if no `prompt` and a complete `contract` is supplied,
-  skip the LLM and map directly.
+- **Exactly one of `manifest` / `prompt` is required.** The main flow (D2/D7) always sends
+  `manifest`. If only `prompt` is sent, Kratos expands it (§5.3) — a convenience path, not
+  used by the site's generate box.
 
-### 5.4 Mapping: contract → Kratos's 3 files
-| Contract field | Kratos file |
+### 5.3 Optional NL expansion (secondary path; reuse `admin_analysis._call_llm`)
+- Only when `prompt` is supplied **and** `manifest` is absent: call the Foundry LLM in
+  **JSON mode** to emit a manifest (validated against the same Pydantic model), then proceed
+  as if a manifest had been posted.
+- The **primary path is fully deterministic** — a posted `manifest` is validated and mapped
+  directly with **no LLM call**. (Kratos keeps the LLM capability for the convenience path,
+  but generation ownership lives in the site per D2.)
+
+### 5.4 Mapping: manifest → Kratos's 3 files
+| Manifest field | Kratos file |
 |---|---|
 | `name` | folder name `use-cases/<name>/` (slugified, validated `^[a-z0-9][a-z0-9-]{0,63}$`) |
 | `description`, `sampleQuestions`, `curated` | `SYSTEM_PROMPT.md` **frontmatter** |
@@ -210,8 +221,8 @@ provides hints, the LLM fills the gaps):
   (`GET /api/use-cases`) and selectable without a restart.
 
 ### 5.6 Tests
-- Unit: contract→files mapping (golden), slug/validation, overwrite/409, auth 401.
-- Unit: LLM path mocked (assert `_call_llm` called with JSON mode; malformed JSON → 422).
+- Unit: manifest→files mapping (golden), slug/validation, overwrite/409, auth 401.
+- Unit: secondary NL path mocked (assert `_call_llm` called with JSON mode; malformed JSON → 422).
 - Integration: import → `GET /api/use-cases` includes the new persona → chat selectable.
 
 ---
@@ -260,9 +271,9 @@ URL arguments (read in `page.tsx` via `useSearchParams`):
 |---|---|
 | `embed=1` | **Chromeless** layout: hide the standalone sidebar/header chrome so the site's own chrome wraps Kratos; tighten paddings to blend in. |
 | `theme=light\|dark` | Apply theme to match the host site (Tailwind `dark` class / data-attr). |
-| `persona=<name>` | Preselect `selectedUseCase` (skip if not found). |
-| `prompt=<text>` | Prefill `landingInput`. |
-| `generate=1` (or `generate=<short NL>`) | After auth, read the NL handoff (§7.1), **read-and-clear** it, **auto-invoke** `POST /kratos/api/use-cases/import`, then select + open the created persona. |
+| `persona=<name>` | **Primary handoff (D7).** Preselect `selectedUseCase`, surface its `sampleQuestions`, open the chat. This is the post-import landing target — import already happened on the site, so embed just *opens* the persona. (Skip gracefully if not found yet — show landing.) |
+| `prompt=<text>` | Prefill `landingInput` (optional, e.g. seed the first question). |
+| `import=1` | **Only used by auth-variant B (§10.1).** Read the manifest handoff (§7.1), **read-and-clear** it, **POST it to `/kratos/api/use-cases/import`** from inside Kratos (after its own EasyAuth), then settle on the created persona. Absent in variant A. |
 
 - Add a small `useEmbed()` hook + an `embed`-aware wrapper around the existing layout; no
   changes to standalone behavior when params are absent.
@@ -271,26 +282,35 @@ URL arguments (read in `page.tsx` via `useSearchParams`):
   that would be heavy and brittle; chromeless + theme sync is the pragmatic "included"
   feel the user asked for.)
 
-### 7.1 The `generate=` handoff (same-origin sessionStorage relay)
+### 7.1 The handoff (depends on the §10.1 auth decision)
 
-The NL prompt is **not** stuffed into the query string (URL length limits, prompt leaking
-into browser history/edge logs, fragility across the EasyAuth redirect). Instead:
+**Variant A (default/recommended) — the site imports, then redirects with `persona`.**
+The site posts the manifest to the import API itself and, on `201`, navigates to
+`/kratos/?embed=1&theme=<t>&persona=<name>`. Embed mode does **no importing** — it only
+*opens* the named persona. Nothing is relayed through storage; the persona name is a short,
+safe value to carry in the URL. This is the cleanest expression of D7 ("import first, then
+redirect").
+
+**Variant B (fallback) — Kratos imports on entry via a same-origin manifest relay.**
+Used only if the site cannot make an authenticated cross-app import call (§10.1):
 
 - Under Front Door, `/` and `/kratos/*` are **one browser origin** (`site.com`), so
-  `sessionStorage` is **shared** (web storage is keyed by origin, not path; the two backend
-  SWAs are invisible to the browser). The site writes
-  `sessionStorage.setItem('kratos.generate', JSON.stringify({ nl, theme?, persona?, prompt?, nonce }))`
-  and navigates to `/kratos/?embed=1&generate=1`.
-- The payload **survives the second EasyAuth round-trip** (same origin), so the design no
-  longer depends on EasyAuth preserving the `post_login_redirect_uri` query string.
-- Kratos embed mode **reads the payload once and removes it** (`removeItem`) before invoking
-  import, so a page refresh cannot re-trigger generation.
-- **Fallback for short prompts / no-relay contexts:** `generate=<url-encoded NL>` is still
-  accepted; if `generate` is a non-`1` value, treat it as the literal NL. If `generate=1`
-  but the relay payload is missing (e.g. opened directly), embed mode shows the normal
-  landing input instead of erroring.
+  `sessionStorage` is **shared** (web storage is keyed by origin, not path). The site writes
+  `sessionStorage.setItem('kratos.import', JSON.stringify({ manifest, theme?, nonce }))` and
+  navigates to `/kratos/?embed=1&import=1`.
+- The manifest **survives the second EasyAuth round-trip** (same origin), so the design does
+  not depend on EasyAuth preserving any query string.
+- Kratos embed mode **reads the payload once and removes it** (`removeItem`) before calling
+  import, so a refresh cannot re-import; on `201` it settles on `?persona=<name>` (replacing
+  history so the manifest never re-runs).
+- The manifest itself is **never** placed in the URL (size limits, history/edge-log leakage).
 - This relay lives in the **site PR**; the Kratos PR only **consumes** `sessionStorage`
-  `['kratos.generate']` + the `generate` param. Standalone Kratos ignores both.
+  `['kratos.import']` + the `import` param. Standalone Kratos ignores both.
+
+Both variants converge on the same end state: an embedded, chromeless Kratos opened at the
+newly-created persona. On import/registration error, the user is kept **on the site** with a
+retry affordance (variant A surfaces the error before any redirect; variant B shows an inline
+"couldn't import — try again" panel in embed mode instead of the chat).
 
 ---
 
@@ -300,10 +320,15 @@ Captured here for completeness; **implemented in a separate session/worktree**, 
 
 - Replace the **mock** Kratos integration (`src/pages/Kratos.tsx`,
   `src/components/KratosChatMock.tsx`, `src/data/kratos.ts` `mockKratosReply`) with:
-  - a **"Describe your agent" generate box** (can reuse the `GreenfieldBuilder` /
-    `advisor.ts` "Make it real" pattern, repurposed to persona intent), and
-  - an **embedded mount** that writes the NL to `sessionStorage['kratos.generate']` (§7.1)
-    and navigates to `/kratos/?embed=1&theme=<t>&generate=1`.
+  - a **"Describe your agent" generate box** that **builds the threadlight-compatible
+    manifest** in the site (reusing the `GreenfieldBuilder` / `advisor.ts` "Make it real"
+    pattern, repurposed to persona intent), and
+  - the **import-then-redirect** handoff per the §10.1 auth decision:
+    - **Variant A:** site `POST`s the manifest to `/kratos/api/use-cases/import`, then on
+      `201` navigates to `/kratos/?embed=1&theme=<t>&persona=<name>`.
+    - **Variant B:** site writes the manifest to `sessionStorage['kratos.import']` (§7.1)
+      and navigates to `/kratos/?embed=1&import=1` (Kratos imports on entry after its own
+      EasyAuth).
 - Add the **Front Door** profile + routes that path-mount Kratos under `/kratos/*`
   (per §6.3–6.4), including `/kratos/.auth/*` and `/kratos/api/*`.
 - No Kratos files are copied — the mount serves the live Kratos SWA.
@@ -312,10 +337,10 @@ Captured here for completeness; **implemented in a separate session/worktree**, 
 
 ## 9. threadlight-design contract compatibility
 
-The Import API's `contract` is a **subset/superset of threadlight's machine-readable
-contract** so personas round-trip between ecosystems:
+The Import API's `manifest` is a **subset/superset of threadlight's machine-readable
+manifest** so personas round-trip between ecosystems:
 
-| threadlight artifact | threadlight field | Kratos Import `contract` | Kratos file |
+| threadlight artifact | threadlight field | Kratos Import `manifest` | Kratos file |
 |---|---|---|---|
 | `specs/manifest.json` | `name`, `description` | `name`, `description` | `SYSTEM_PROMPT.md` frontmatter |
 | `AGENTS.md` | agent identity / behavior body | `instructions` | `SYSTEM_PROMPT.md` body |
@@ -325,11 +350,13 @@ contract** so personas round-trip between ecosystems:
 | SPEC §11e | `workflow_model: agent\|workflow` | `workflow_model` (Kratos supports `agent`) | `apm.yml` metadata |
 | SKILL.md frontmatter | `name`, `description` (USE FOR / DO NOT USE FOR) | per-skill `name`/`description` | (future) Kratos skill files |
 
+- Because the **site builds this manifest** (D2), the field names above are the contract the
+  site must emit — keeping them threadlight-shaped means the same builder can target either
+  ecosystem.
 - Kratos personas map to threadlight's **`agent`** workflow shape; `workflow` is recorded
   as metadata but not executed by Kratos (out of scope).
-- A future enhancement (not this PR) could accept a threadlight `manifest.json` directly
-  and/or have Kratos `export.py` emit a threadlight-compatible `manifest.json` for full
-  round-trip.
+- A future enhancement (not this PR) could have Kratos `export.py` emit a threadlight
+  `manifest.json` for full bidirectional round-trip.
 
 ---
 
@@ -345,6 +372,24 @@ contract** so personas round-trip between ecosystems:
 - The Import API trusts the Kratos SWA EasyAuth principal (existing
   `require_authenticated_user`); no new auth surface is introduced.
 
+### 10.1 OPEN DECISION — which page issues the authenticated import call?
+
+Because the import endpoint is gated by **Kratos** EasyAuth (app #2) but the generate box
+lives on the **site** (app #1), the cross-app `POST` needs a Kratos auth context. Two ways:
+
+| | **Variant A — site calls import directly** | **Variant B — Kratos entry page imports after its own login** |
+|---|---|---|
+| Who POSTs the manifest | The site page (`fetch('/kratos/api/use-cases/import')`) | The embedded Kratos page, on entry |
+| Auth needed | A **Kratos (app #2) session must already exist** in the browser; if not, the cross-app `fetch` hits a `401`→login redirect a `fetch` can't follow | Kratos does its **own** EasyAuth round-trip first (silent if IdP session exists), *then* imports — always has a valid context |
+| Handoff | None — persona name carried in the redirect URL (`?persona=<name>`) | Manifest relayed via same-origin `sessionStorage['kratos.import']` (§7.1), `?import=1` |
+| Pros | Simplest; truest "import-first, then redirect"; no storage relay | Robust to a missing Kratos session; no cross-app `fetch`/CORS/401-follow problem |
+| Cons | Fragile if the user has no Kratos session yet (needs a priming top-level visit to `/kratos/.auth` first) | Import happens *inside* Kratos on entry, so the "redirect only after success" ordering is realized as "enter → import → settle on persona" |
+
+**Recommendation: Variant B** — it survives the two-app EasyAuth split with no reliance on a
+pre-existing Kratos session and no un-followable `fetch` redirect, at the cost of moving the
+import call one hop into Kratos. (Variant A can be offered as a fast path when a Kratos
+session is already present.) **This is the one decision to confirm before implementation.**
+
 ---
 
 ## 11. Risks & open questions
@@ -353,9 +398,9 @@ contract** so personas round-trip between ecosystems:
 |---|---|
 | Front Door `/kratos/.auth/*` rewrite correctness (EasyAuth redirect URIs must resolve under the mount) | Validate during site-PR infra work; the Entra app #2 redirect URIs must include the Front Door origin under `/kratos/.auth/login/aad/callback`. |
 | Next.js `basePath` + `trailingSlash` + static export edge cases for `_next/*` and `config.json` placement | Verify `out/` layout after `next build`; add a smoke check. |
-| Second login could drop the `generate` payload if it relied on EasyAuth query preservation | **Mitigated** by the same-origin `sessionStorage` relay (§7.1) — the payload is independent of the redirect URL; read-and-cleared after use. |
-| CORS: under the mount, frontend calls `/kratos/api/*` **same-origin** (no CORS); direct cross-origin calls avoided by D7. | Keep Kratos `_cors_origins` unchanged for standalone use. |
-| `GreenfieldBuilder`/`advisor.ts` is app-scaffolding-shaped, not persona-shaped | Site PR repurposes the box to persona intent; deterministic contract optional, NL is primary. |
+| Second login could drop the handoff if it relied on EasyAuth query preservation | **Mitigated** in variant B by the same-origin `sessionStorage['kratos.import']` relay (§7.1) — the manifest is independent of the redirect URL, read-and-cleared after use. Variant A carries only a short `persona=<name>` in the URL. |
+| CORS / cross-app `fetch` for the import call (two EasyAuth apps) | Resolved by the §10.1 decision: variant B keeps the import call **inside Kratos** (same-origin, own EasyAuth); variant A relies on a pre-existing Kratos session. **Confirm before build.** |
+| `GreenfieldBuilder`/`advisor.ts` is app-scaffolding-shaped, not persona-shaped | Site PR repurposes the box to build a **persona manifest**; the manifest shape (§9) is the site's output contract. |
 | Cost/complexity of Front Door | Accepted (D3); the lower-effort iframe alt was rejected as "clumsy". |
 
 ---
@@ -370,13 +415,15 @@ contract** so personas round-trip between ecosystems:
 - `src/frontend/next.config.js` — `NEXT_PUBLIC_BASE_PATH` → `basePath`/`assetPrefix`.
 - `src/frontend/src/lib/config.ts` — basePath-aware `/config.json` fetch.
 - `src/frontend/staticwebapp.config.json` — basePath-aware `401` redirect.
-- `src/frontend/src/app/page.tsx` (+ small `useEmbed`/`useSearchParams` hook + chromeless wrapper) — embed/theme/persona/prompt/generate URL args.
+- `src/frontend/src/app/page.tsx` (+ small `useEmbed`/`useSearchParams` hook + chromeless wrapper) — embed/theme/persona/prompt URL args (+ `import=1` for §10.1 variant B).
 - `azure.yaml` — confirm `config.json` injection path under basePath.
 - Tests for the import mapping + endpoint.
 - This spec; session `plan.md`.
 
 **agentic-loop-site PR (separate session):**
-- Replace mock Kratos with generate box + embedded mount (`?embed=1&generate=…`).
+- Replace mock Kratos with a generate box that **builds the manifest**, imports it, then
+  opens the embedded persona (`?embed=1&persona=<name>` for variant A, or
+  `?embed=1&import=1` + `sessionStorage['kratos.import']` for variant B).
 - Front Door profile + routes (`/kratos/*`, `/kratos/.auth/*`, `/kratos/api/*`, default → site).
 
 ---
