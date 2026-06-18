@@ -614,6 +614,25 @@ def test_postdeploy_surfaces_real_grant_failures(exporter: ProjectExporter, tmp_
         assert "FAILED" in content
 
 
+def test_postdeploy_ps1_does_not_throw_on_nonzero_az_exit(exporter: ProjectExporter, tmp_path: Path):
+    """The ps1 hook must inspect ``$LASTEXITCODE`` itself, not throw.
+
+    The hook sets ``$ErrorActionPreference = 'Stop'``. In PowerShell 7.4+,
+    ``$PSNativeCommandUseErrorActionPreference`` defaults to ``$true``, so a
+    native command (``az``) returning a non-zero exit code raises a
+    *terminating* error under ``Stop`` — which would abort the hook before our
+    ``if ($LASTEXITCODE -eq 0)`` check runs. Because an already-exists / Conflict
+    grant returns non-zero (the case fix #3 handles by design), the hook must
+    disable that behaviour so re-runs stay idempotent.
+    """
+    out = tmp_path / "out"
+    out.mkdir()
+    exporter.assemble("finance-close", out)
+
+    ps = (out / "hooks" / "postdeploy.ps1").read_text()
+    assert "$PSNativeCommandUseErrorActionPreference = $false" in ps
+
+
 def test_readme_warns_about_hosted_agent_regions(exporter: ProjectExporter, tmp_path: Path):
     """README must warn that hosted agents aren't available in every region.
 

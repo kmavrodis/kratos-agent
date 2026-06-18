@@ -18,6 +18,13 @@
 # The hook is idempotent — re-running it is safe.
 
 $$ErrorActionPreference = "Stop"
+# `az` is a native command that manages its own exit codes; we inspect
+# $$LASTEXITCODE ourselves after each call. In PowerShell 7.4+,
+# $$PSNativeCommandUseErrorActionPreference defaults to $$true, which would turn
+# a non-zero az exit (e.g. an already-exists / Conflict grant) into a
+# *terminating* error under `Stop` and abort the hook before our check runs.
+# Disable it so the grant functions stay idempotent. (No-op on older pwsh.)
+$$PSNativeCommandUseErrorActionPreference = $$false
 
 Write-Host ""
 Write-Host "=============================================================="
