@@ -223,9 +223,9 @@ def test_assemble_writes_trimmed_infra(exporter: ProjectExporter, tmp_path: Path
     assert (out / "infra" / "main.parameters.json").is_file()
     assert (out / "infra" / "abbreviations.json").is_file()
 
-    # The 10 expected modules are present.
+    # The 9 expected modules are present. ``network.bicep`` is dropped because
+    # the demo export no longer provisions a VNet / private endpoints.
     expected_modules = {
-        "network.bicep",
         "log-analytics.bicep",
         "app-insights.bicep",
         "key-vault.bicep",
@@ -239,7 +239,8 @@ def test_assemble_writes_trimmed_infra(exporter: ProjectExporter, tmp_path: Path
     actual_modules = {p.name for p in (out / "infra" / "modules").iterdir() if p.suffix == ".bicep"}
     assert actual_modules == expected_modules
 
-    # Trimmed main.bicep does NOT reference the 5 dropped modules.
+    # Trimmed main.bicep does NOT reference the 6 dropped modules (network is
+    # now dropped too — no VNet in the demo export).
     main_bicep = (out / "infra" / "main.bicep").read_text()
     for dropped in (
         "agent-service.bicep",
@@ -247,6 +248,7 @@ def test_assemble_writes_trimmed_infra(exporter: ProjectExporter, tmp_path: Path
         "ai-gateway.bicep",
         "static-web-app.bicep",
         "bing-search.bicep",
+        "network.bicep",
     ):
         assert dropped not in main_bicep, f"main.bicep still references dropped module {dropped}"
 
@@ -346,6 +348,51 @@ def test_assemble_writes_windows_postdeploy_hook(exporter: ProjectExporter, tmp_
     # Persona name substituted; no leftover azure.yaml ``$$`` escapes.
     assert "Finance Close Controller" in content
     assert "$$" not in content, "ps1 should be plain PowerShell (no $$ azure.yaml escapes)"
+
+
+def test_assemble_infra_has_no_private_networking(exporter: ProjectExporter, tmp_path: Path):
+    """The demo export must NOT provision a VNet / private endpoints.
+
+    Regression test for the over-isolated export: Cosmos, Key Vault, and AI
+    Search used to ship with ``publicNetworkAccess: Disabled`` + private
+    endpoints + private DNS zones, behind a VNet. That is (a) excessive for a
+    demo and (b) a correctness bug — a Foundry *hosted* agent isn't injected
+    into the VNet, so it could not reach its own data plane after ``azd up``.
+    The demo export now keeps every service publicly reachable (RBAC still
+    governs access) and drops the VNet entirely.
+    """
+    out = tmp_path / "out"
+    out.mkdir()
+    exporter.assemble("finance-close", out)
+
+    modules_dir = out / "infra" / "modules"
+    main_bicep = (out / "infra" / "main.bicep").read_text()
+
+    # main.bicep no longer wires up any networking.
+    assert "module network" not in main_bicep, "main.bicep still instantiates the network module"
+    assert "param vnetName" not in main_bicep, "main.bicep still declares the dead vnetName param"
+    assert "subnetId" not in main_bicep, "main.bicep still passes subnetId to data services"
+    assert "vnetId" not in main_bicep, "main.bicep still passes vnetId to data services"
+
+    # No exported module may create a VNet, private endpoint, or private DNS.
+    for bicep in modules_dir.glob("*.bicep"):
+        text = bicep.read_text()
+        assert "Microsoft.Network/privateEndpoints" not in text, f"{bicep.name} still creates a private endpoint"
+        assert "Microsoft.Network/privateDnsZones" not in text, f"{bicep.name} still creates a private DNS zone"
+        assert "Microsoft.Network/virtualNetworks" not in text, f"{bicep.name} still creates a VNet"
+
+    # The three formerly-isolated data services are publicly reachable.
+    cosmos = (modules_dir / "cosmos-db.bicep").read_text()
+    assert "publicNetworkAccess: 'Enabled'" in cosmos
+    assert "privatelink.documents" not in cosmos
+
+    key_vault = (modules_dir / "key-vault.bicep").read_text()
+    assert "defaultAction: 'Deny'" not in key_vault, "Key Vault firewall must not deny public access in the demo export"
+    assert "privatelink.vaultcore" not in key_vault
+
+    ai_search = (modules_dir / "ai-search.bicep").read_text()
+    assert "publicNetworkAccess: 'enabled'" in ai_search
+    assert "privatelink.search" not in ai_search
 
 
 def test_assemble_unknown_use_case_raises(exporter: ProjectExporter, tmp_path: Path):

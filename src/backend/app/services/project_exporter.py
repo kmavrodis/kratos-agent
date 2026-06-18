@@ -26,17 +26,24 @@ ZIP layout
     ├── use-cases/<chosen>/              ← the chosen use-case ONLY
     ├── mocks/                           ← copied verbatim (package.json + packages/*)
     └── infra/                           (vendored trimmed Bicep + Kratos modules)
-        ├── main.bicep                   ← vendored trimmed copy
+        ├── main.bicep                   ← vendored trimmed copy (no VNet)
         ├── main.parameters.json         ← vendored
         ├── abbreviations.json           ← copied from Kratos infra/
         └── modules/
             ├── role-assignments.bicep   ← vendored trimmed copy
-            └── (9 others)               ← copied from Kratos infra/modules/
+            ├── cosmos-db.bicep          ← vendored public-network copy
+            ├── key-vault.bicep          ← vendored public-network copy
+            ├── ai-search.bicep          ← vendored public-network copy
+            └── (5 others)               ← copied from Kratos infra/modules/
 
 The vendored Bicep lives under ``app/exporter_templates/infra/`` so it ships
-inside the wheel; the other 9 modules + abbreviations.json are read from the
+inside the wheel; the other 5 modules + abbreviations.json are read from the
 checkout via ``self.repo_root`` (defaults to cwd) to stay in sync with any
-Kratos infra changes.
+Kratos infra changes. ``network`` is dropped entirely and ``cosmos-db`` /
+``key-vault`` / ``ai-search`` are vendored (not copied) because the demo
+export keeps those services publicly reachable instead of isolating them in a
+VNet behind private endpoints — a Foundry hosted agent isn't VNet-injected and
+could not otherwise reach its own data plane.
 """
 
 from __future__ import annotations
@@ -126,21 +133,35 @@ _PARAMETERIZED: frozenset[str] = frozenset(
 # Files in ``src/hosted-agent/`` copied verbatim into the export.
 _HOSTED_AGENT_VERBATIM: tuple[str, ...] = ("main.py", "pyproject.toml", "Dockerfile")
 
-# Infra/modules files copied verbatim from the Kratos checkout. Five modules
-# from Kratos's main.bicep are intentionally dropped because the exported
-# agent doesn't need them (no Container App backend, no APIM, no frontend,
-# no Bing): ``agent-service``, ``container-apps-env``, ``ai-gateway``,
-# ``static-web-app``, ``bing-search``.
+# Infra/modules files copied verbatim from the Kratos checkout. Several
+# modules from Kratos's main.bicep are intentionally dropped because the
+# exported agent doesn't need them (no Container App backend, no APIM, no
+# frontend, no Bing): ``agent-service``, ``container-apps-env``,
+# ``ai-gateway``, ``static-web-app``, ``bing-search``. ``network`` is dropped
+# too — the demo export keeps every service publicly reachable (RBAC still
+# governs access) rather than provisioning a VNet + private endpoints, which a
+# Foundry hosted agent (not VNet-injected) can't reach anyway.
+#
+# ``cosmos-db``, ``key-vault``, and ``ai-search`` are NOT copied from Kratos:
+# the repo-root versions hard-code private networking, so the export ships
+# its own public-network variants (see ``_INFRA_MODULES_VENDORED`` below).
 _INFRA_MODULES_FROM_KRATOS: tuple[str, ...] = (
-    "network.bicep",
     "log-analytics.bicep",
     "app-insights.bicep",
-    "key-vault.bicep",
-    "cosmos-db.bicep",
-    "ai-search.bicep",
     "ai-services.bicep",
     "blob-storage.bicep",
     "container-registry.bicep",
+)
+
+# Trimmed/diverged Bicep modules vendored from the templates package (inside
+# the wheel) instead of copied from the Kratos checkout. ``role-assignments``
+# drops the Container App principal; the three data-service modules drop
+# private networking so the demo deploys without a VNet.
+_INFRA_MODULES_VENDORED: tuple[str, ...] = (
+    "role-assignments.bicep",
+    "cosmos-db.bicep",
+    "key-vault.bicep",
+    "ai-search.bicep",
 )
 
 
@@ -327,19 +348,20 @@ class ProjectExporter:
         """Copy the trimmed infra/ subtree.
 
         Sources:
-        * ``main.bicep`` + ``main.parameters.json`` + ``modules/role-assignments.bicep``
-          come from the wheel (``app/exporter_templates/infra/``) — these
-          are the *trimmed* versions that drop the modules the export
-          doesn't need.
-        * ``abbreviations.json`` + 9 other modules come from the Kratos
-          checkout (``infra/`` and ``infra/modules/``) so they stay in sync
-          with any Kratos infra changes.
+        * ``main.bicep`` + ``main.parameters.json`` + the modules in
+          ``_INFRA_MODULES_VENDORED`` come from the wheel
+          (``app/exporter_templates/infra/``) — these are the *trimmed* /
+          *diverged* versions (drop unused modules, drop the Container App
+          principal, drop private networking).
+        * ``abbreviations.json`` + the modules in ``_INFRA_MODULES_FROM_KRATOS``
+          come from the Kratos checkout (``infra/`` and ``infra/modules/``) so
+          they stay in sync with any Kratos infra changes.
         """
         dst_infra = dst_dir / "infra"
         dst_modules = dst_infra / "modules"
         dst_modules.mkdir(parents=True, exist_ok=True)
 
-        # 1. Vendored trimmed Bicep (3 files) from the templates package.
+        # 1. Vendored trimmed Bicep from the templates package.
         vendored = resources.files(_TEMPLATES_PACKAGE).joinpath("infra")
         (dst_infra / "main.bicep").write_text(
             vendored.joinpath("main.bicep").read_text(encoding="utf-8"), encoding="utf-8"
@@ -347,10 +369,11 @@ class ProjectExporter:
         (dst_infra / "main.parameters.json").write_text(
             vendored.joinpath("main.parameters.json").read_text(encoding="utf-8"), encoding="utf-8"
         )
-        (dst_modules / "role-assignments.bicep").write_text(
-            vendored.joinpath("modules/role-assignments.bicep").read_text(encoding="utf-8"),
-            encoding="utf-8",
-        )
+        for module_name in _INFRA_MODULES_VENDORED:
+            (dst_modules / module_name).write_text(
+                vendored.joinpath(f"modules/{module_name}").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
 
         # 2. Verbatim copies from the Kratos checkout.
         kratos_infra = self.infra_dir
