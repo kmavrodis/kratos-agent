@@ -7,6 +7,10 @@
 //   * ai-gateway          — no APIM
 //   * static-web-app      — no frontend
 //   * bing-search         — optional capability, omitted
+//   * network (VNet)      — the demo keeps every service publicly reachable
+//                           (RBAC still governs access); a Foundry hosted
+//                           agent isn't injected into a VNet, so private
+//                           endpoints would break its data-plane access.
 //
 // The Foundry hosted-agent's system-assigned managed identity replaces the
 // Container App MI as the principal for all data-plane RBAC (Cosmos / KV /
@@ -34,7 +38,6 @@ param aiServicesName string = ''
 param keyVaultName string = ''
 param appInsightsName string = ''
 param logAnalyticsName string = ''
-param vnetName string = ''
 param storageAccountName string = ''
 
 // ─── Resource Naming ───
@@ -47,17 +50,6 @@ resource rg 'Microsoft.Resources/resourceGroups@2022-09-01' = {
   name: 'rg-${environmentName}'
   location: location
   tags: tags
-}
-
-// ─── Networking ───
-module network './modules/network.bicep' = {
-  name: 'network'
-  scope: rg
-  params: {
-    name: !empty(vnetName) ? vnetName : '${abbrs.networkVirtualNetworks}${resourceToken}'
-    location: location
-    tags: tags
-  }
 }
 
 // ─── Log Analytics ───
@@ -91,9 +83,6 @@ module keyVault './modules/key-vault.bicep' = {
     name: !empty(keyVaultName) ? keyVaultName : '${abbrs.keyVaultVaults}${resourceToken}'
     location: location
     tags: tags
-    principalId: principalId
-    subnetId: network.outputs.privateEndpointSubnetId
-    vnetId: network.outputs.id
   }
 }
 
@@ -105,9 +94,6 @@ module cosmosDb './modules/cosmos-db.bicep' = {
     name: !empty(cosmosDbAccountName) ? cosmosDbAccountName : '${abbrs.documentDBDatabaseAccounts}${resourceToken}'
     location: location
     tags: tags
-    subnetId: network.outputs.privateEndpointSubnetId
-    vnetId: network.outputs.id
-    keyVaultName: keyVault.outputs.name
   }
 }
 
@@ -119,8 +105,6 @@ module aiSearch './modules/ai-search.bicep' = {
     name: !empty(aiSearchName) ? aiSearchName : '${abbrs.searchSearchServices}${resourceToken}'
     location: location
     tags: tags
-    subnetId: network.outputs.privateEndpointSubnetId
-    vnetId: network.outputs.id
   }
 }
 
