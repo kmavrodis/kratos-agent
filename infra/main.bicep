@@ -273,5 +273,11 @@ output AI_GATEWAY_URL string = aiGateway.outputs.gatewayUrl
 output FOUNDRY_ENDPOINT string = aiFoundry.outputs.endpoint
 output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_AI_PROJECT_ENDPOINT string = aiFoundry.outputs.projectEndpoint
+// Full ARM resource ID of the Foundry project. Surfacing it as an azd output
+// writes AZURE_AI_PROJECT_ID into the environment during `azd provision`, so the
+// `azure.ai.agent` extension can deploy the hosted agent without a manual
+// `azd env set AZURE_AI_PROJECT_ID ...` step. Also consumed by
+// hooks/assign-agent-roles.sh to resolve the agent identity.
+output AZURE_AI_PROJECT_ID string = aiFoundry.outputs.projectId
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name

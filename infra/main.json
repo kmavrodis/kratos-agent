@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.43.8.12551",
-      "templateHash": "12984131636732918112"
+      "version": "0.43.1.21952",
+      "templateHash": "11981705859303314826"
     }
   },
   "parameters": {
@@ -103,7 +103,7 @@
     },
     "staticWebAppLocation": {
       "type": "string",
-      "defaultValue": "westeurope",
+      "defaultValue": "eastus2",
       "allowedValues": [
         "centralus",
         "eastus2",
@@ -174,8 +174,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "15282120546862513117"
+              "version": "0.43.1.21952",
+              "templateHash": "8731751270599815471"
             }
           },
           "parameters": {
@@ -287,8 +287,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "16656169793928770158"
+              "version": "0.43.1.21952",
+              "templateHash": "10758542275791691677"
             }
           },
           "parameters": {
@@ -371,8 +371,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "10651574049460754328"
+              "version": "0.43.1.21952",
+              "templateHash": "16062152118159735047"
             }
           },
           "parameters": {
@@ -475,8 +475,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "13860132387323606432"
+              "version": "0.43.1.21952",
+              "templateHash": "9332907809839374063"
             }
           },
           "parameters": {
@@ -664,8 +664,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "6938681821268502169"
+              "version": "0.43.1.21952",
+              "templateHash": "8618062728059252833"
             }
           },
           "parameters": {
@@ -705,6 +705,17 @@
               "metadata": {
                 "description": "Key Vault name for storing connection info"
               }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "defaultValue": "Enabled",
+              "allowedValues": [
+                "Enabled",
+                "Disabled"
+              ],
+              "metadata": {
+                "description": "Public network access for the Cosmos DB account.\nDefaults to 'Enabled' because Foundry hosted agents run in a Microsoft-managed\nnetwork OUTSIDE the customer VNet and therefore cannot reach the private\nendpoint — with 'Disabled' the agent's conversation-persistence calls fail at\nthe network layer (before RBAC is even evaluated). The data plane stays locked\ndown: local (key) auth is disabled, so only Microsoft Entra ID identities with\nan explicit Cosmos data-plane role can connect. Set to 'Disabled' only if you\nfront the agent with VNet injection / a managed private endpoint."
+              }
             }
           },
           "resources": [
@@ -732,7 +743,7 @@
                 "consistencyPolicy": {
                   "defaultConsistencyLevel": "Session"
                 },
-                "publicNetworkAccess": "Disabled",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
                 "disableLocalAuth": true
               }
             },
@@ -1010,8 +1021,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "1583775518594609852"
+              "version": "0.43.1.21952",
+              "templateHash": "6723143646793939956"
             }
           },
           "parameters": {
@@ -1045,6 +1056,17 @@
               "metadata": {
                 "description": "VNet ID for DNS zone link"
               }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "defaultValue": "enabled",
+              "allowedValues": [
+                "enabled",
+                "disabled"
+              ],
+              "metadata": {
+                "description": "Public network access for the AI Search service.\nDefaults to 'enabled' for the same reason as Cosmos: Foundry hosted agents run\nin a Microsoft-managed network outside the customer VNet and cannot reach the\nprivate endpoint, so the rag-search skill (which connects to the Search data\nplane with DefaultAzureCredential) fails at the network layer when this is\n'disabled'. Access stays gated by Microsoft Entra ID RBAC via the role\nassignments. Set to 'disabled' only with VNet injection / a managed private\nendpoint in front of the agent."
+              }
             }
           },
           "resources": [
@@ -1061,7 +1083,7 @@
                 "replicaCount": 1,
                 "partitionCount": 1,
                 "hostingMode": "default",
-                "publicNetworkAccess": "disabled",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
                 "authOptions": {
                   "aadOrApiKey": {
                     "aadAuthFailureMode": "http401WithBearerChallenge"
@@ -1183,8 +1205,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "7670876345307828086"
+              "version": "0.43.1.21952",
+              "templateHash": "17459754821235033093"
             }
           },
           "parameters": {
@@ -1322,9 +1344,17 @@
               "type": "string",
               "value": "[format('{0}api/projects/{1}', reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2025-06-01').endpoint, parameters('projectName'))]"
             },
+            "projectId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName'))]"
+            },
             "principalId": {
               "type": "string",
               "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('name')), '2025-06-01', 'full').identity.principalId]"
+            },
+            "projectPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('name'), parameters('projectName')), '2025-06-01', 'full').identity.principalId]"
             }
           }
         }
@@ -1358,8 +1388,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "3807904905790651143"
+              "version": "0.43.1.21952",
+              "templateHash": "15881466896965840818"
             }
           },
           "parameters": {
@@ -1453,8 +1483,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "3607413465083305797"
+              "version": "0.43.1.21952",
+              "templateHash": "1778927191232458255"
             }
           },
           "parameters": {
@@ -1573,8 +1603,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "4824718499454323171"
+              "version": "0.43.1.21952",
+              "templateHash": "5131019753874997769"
             }
           },
           "parameters": {
@@ -1664,8 +1694,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "12368784576413182182"
+              "version": "0.43.1.21952",
+              "templateHash": "5324890319623378215"
             }
           },
           "parameters": {
@@ -1813,8 +1843,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "14003821261957030137"
+              "version": "0.43.1.21952",
+              "templateHash": "2122484888554300882"
             }
           },
           "parameters": {
@@ -2172,8 +2202,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "13100327646458865897"
+              "version": "0.43.1.21952",
+              "templateHash": "10683557007499849765"
             }
           },
           "parameters": {
@@ -2324,8 +2354,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "8755442039802663217"
+              "version": "0.43.1.21952",
+              "templateHash": "3582293854033893665"
             }
           },
           "parameters": {
@@ -2412,6 +2442,9 @@
           "aiServicesPrincipalId": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'ai-foundry'), '2025-04-01').outputs.principalId.value]"
           },
+          "aiServicesProjectPrincipalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'ai-foundry'), '2025-04-01').outputs.projectPrincipalId.value]"
+          },
           "keyVaultName": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'key-vault'), '2025-04-01').outputs.name.value]"
           },
@@ -2434,8 +2467,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.43.8.12551",
-              "templateHash": "17740582200090452759"
+              "version": "0.43.1.21952",
+              "templateHash": "4246901981803907543"
             }
           },
           "parameters": {
@@ -2467,6 +2500,13 @@
               "type": "string",
               "metadata": {
                 "description": "Microsoft Foundry system-assigned principal ID (compile-time output from the ai-services module)"
+              }
+            },
+            "aiServicesProjectPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Microsoft Foundry PROJECT system-assigned principal ID. Per foundry-hosted-agents skill, this is the MI that actually pulls the hosted-agent container image from ACR — granting AcrPull only to the account MI is insufficient and causes ImageError at first invoke."
               }
             },
             "keyVaultName": {
@@ -2628,6 +2668,18 @@
               }
             },
             {
+              "condition": "[and(not(empty(parameters('containerRegistryName'))), not(empty(parameters('aiServicesProjectPrincipalId'))))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName'))]",
+              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), parameters('aiServicesProjectPrincipalId'), variables('acrPull'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPull'))]",
+                "principalId": "[parameters('aiServicesProjectPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
               "condition": "[not(empty(parameters('principalId')))]",
               "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
               "apiVersion": "2024-02-15-preview",
@@ -2774,6 +2826,10 @@
     "AZURE_AI_PROJECT_ENDPOINT": {
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'ai-foundry'), '2025-04-01').outputs.projectEndpoint.value]"
+    },
+    "AZURE_AI_PROJECT_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'ai-foundry'), '2025-04-01').outputs.projectId.value]"
     },
     "AZURE_BLOB_STORAGE_ENDPOINT": {
       "type": "string",
