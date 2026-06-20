@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.1.21952",
-      "templateHash": "298964812702987939"
+      "templateHash": "470227924418281638"
     }
   },
   "parameters": {
@@ -665,7 +665,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.1.21952",
-              "templateHash": "13714369000352102807"
+              "templateHash": "8618062728059252833"
             }
           },
           "parameters": {
@@ -705,6 +705,17 @@
               "metadata": {
                 "description": "Key Vault name for storing connection info"
               }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "defaultValue": "Enabled",
+              "allowedValues": [
+                "Enabled",
+                "Disabled"
+              ],
+              "metadata": {
+                "description": "Public network access for the Cosmos DB account.\nDefaults to 'Enabled' because Foundry hosted agents run in a Microsoft-managed\nnetwork OUTSIDE the customer VNet and therefore cannot reach the private\nendpoint — with 'Disabled' the agent's conversation-persistence calls fail at\nthe network layer (before RBAC is even evaluated). The data plane stays locked\ndown: local (key) auth is disabled, so only Microsoft Entra ID identities with\nan explicit Cosmos data-plane role can connect. Set to 'Disabled' only if you\nfront the agent with VNet injection / a managed private endpoint."
+              }
             }
           },
           "resources": [
@@ -732,7 +743,7 @@
                 "consistencyPolicy": {
                   "defaultConsistencyLevel": "Session"
                 },
-                "publicNetworkAccess": "Disabled",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
                 "disableLocalAuth": true
               }
             },
@@ -1011,7 +1022,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.1.21952",
-              "templateHash": "15717572813293785455"
+              "templateHash": "6723143646793939956"
             }
           },
           "parameters": {
@@ -1045,6 +1056,17 @@
               "metadata": {
                 "description": "VNet ID for DNS zone link"
               }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "defaultValue": "enabled",
+              "allowedValues": [
+                "enabled",
+                "disabled"
+              ],
+              "metadata": {
+                "description": "Public network access for the AI Search service.\nDefaults to 'enabled' for the same reason as Cosmos: Foundry hosted agents run\nin a Microsoft-managed network outside the customer VNet and cannot reach the\nprivate endpoint, so the rag-search skill (which connects to the Search data\nplane with DefaultAzureCredential) fails at the network layer when this is\n'disabled'. Access stays gated by Microsoft Entra ID RBAC via the role\nassignments. Set to 'disabled' only with VNet injection / a managed private\nendpoint in front of the agent."
+              }
             }
           },
           "resources": [
@@ -1061,7 +1083,7 @@
                 "replicaCount": 1,
                 "partitionCount": 1,
                 "hostingMode": "default",
-                "publicNetworkAccess": "disabled",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
                 "authOptions": {
                   "aadOrApiKey": {
                     "aadAuthFailureMode": "http401WithBearerChallenge"
@@ -3654,6 +3676,10 @@
     "AZURE_AI_PROJECT_ENDPOINT": {
       "type": "string",
       "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'ai-foundry'), '2025-04-01').outputs.projectEndpoint.value]"
+    },
+    "AZURE_AI_PROJECT_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('rg-{0}', parameters('environmentName'))), 'Microsoft.Resources/deployments', 'ai-foundry'), '2025-04-01').outputs.projectId.value]"
     },
     "AZURE_BLOB_STORAGE_ENDPOINT": {
       "type": "string",
