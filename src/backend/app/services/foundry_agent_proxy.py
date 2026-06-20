@@ -272,6 +272,17 @@ class FoundryAgentProxy:
             preamble_parts.append(f"<use_case>{use_case}</use_case>")
         if system_prompt:
             preamble_parts.append(f"<system_instructions>\n{system_prompt}\n</system_instructions>")
+        # The Invocations gateway may strip custom JSON body fields, so also carry
+        # the per-MCP-server user OBO tokens as an input tag (defense-in-depth with
+        # the body field below). The hosted agent parses and STRIPS this tag before
+        # the model sees the message; the tokens are never logged here or surfaced
+        # to the model.
+        if mcp_access_tokens:
+            preamble_parts.append(
+                "<mcp_access_tokens>"
+                + json.dumps(mcp_access_tokens, separators=(",", ":"))
+                + "</mcp_access_tokens>"
+            )
         input_text = "\n\n".join(preamble_parts) + f"\n\n{message}" if preamble_parts else message
 
         token = await self._get_token()
@@ -364,6 +375,12 @@ class FoundryAgentProxy:
                                     if gateway_session:
                                         yield {"event": "_gateway_session", "data": {"agentSessionId": gateway_session}}
                                     return
+                                # Hosted-agent diagnostic (keys only, no token
+                                # values) — log to backend telemetry and drop it
+                                # so it never reaches the user/model.
+                                if parsed.get("event") == "kratos_diag":
+                                    logger.info("hosted-agent diag: %s", parsed.get("data"))
+                                    continue
                                 yield parsed
 
                     # Fallback: if stream ends without a protocol done event,

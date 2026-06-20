@@ -36,6 +36,15 @@ environment_variables:
   # Cosmos DB database name
   - name: COSMOS_DB_DATABASE
     value: kratos-agent
+  # OBO MCP server (Microsoft Graph /me via On-Behalf-Of). The hosted agent
+  # auto-attaches this remote MCP server per conversation and injects the
+  # signed-in user's bearer token (CopilotAgent._apply_mcp_tokens). The URL
+  # MUST be set here — Foundry injects only the env vars declared in this
+  # file; azure.yaml `config.env` is NOT propagated to the agent runtime.
+  - name: OBO_MCP_SERVER_MCP_URL
+    value: ${OBO_MCP_SERVER_MCP_URL}
+  - name: OBO_MCP_SERVER_NAME
+    value: graph-obo
   # Environment tag
   - name: ENVIRONMENT
     value: production

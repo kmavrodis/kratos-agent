@@ -14,12 +14,6 @@ services:
         docker:
             path: ./Dockerfile
             context: ../..
-    obo-mcp-server:
-        project: ./src/obo-mcp-server
-        host: containerapp
-        language: python
-        docker:
-            path: ./Dockerfile
     kratos-agent:
         project: ./src/hosted-agent
         host: azure.ai.agent
@@ -41,8 +35,14 @@ services:
                 COSMOS_DB_ENDPOINT: ${AZURE_COSMOS_DB_ENDPOINT}
                 KEY_VAULT_URI: ${AZURE_KEY_VAULT_URI}
                 MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_DEPLOYMENT}
-                OBO_MCP_SERVER_NAME: graph-obo
                 OBO_MCP_SERVER_MCP_URL: ${OBO_MCP_SERVER_MCP_URL}
+                OBO_MCP_SERVER_NAME: graph-obo
+    obo-mcp-server:
+        project: ./src/obo-mcp-server
+        host: containerapp
+        language: python
+        docker:
+            path: ./Dockerfile
     web:
         project: ./src/frontend
         host: staticwebapp
@@ -110,6 +110,17 @@ hooks:
         kind: sh
         shell: sh
         run: |
+            # The azure.ai.agents extension requires AZURE_TENANT_ID in the azd
+            # environment to deploy the hosted agent and auto-assign Foundry User
+            # to its identity. azd does not populate this automatically, so set it
+            # from the current Azure CLI session if it isn't already present.
+            if [ -z "${AZURE_TENANT_ID:-}" ]; then
+                TID="$(az account show --query tenantId -o tsv 2>/dev/null || true)"
+                if [ -n "$TID" ]; then
+                    azd env set AZURE_TENANT_ID "$TID"
+                    echo "Set AZURE_TENANT_ID=$TID"
+                fi
+            fi
             echo "Post-provisioning: configuring services..."
             echo "Deployment complete."
     predeploy:

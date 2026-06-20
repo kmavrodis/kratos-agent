@@ -290,6 +290,7 @@ async def _stream_response(
     message: str,
     use_case: str,
     mcp_access_tokens: dict[str, str] | None = None,
+    token_source: dict | None = None,
 ):
     """Run the Copilot SDK agent and stream our SSE event schema."""
     start_time = time.monotonic()
@@ -300,6 +301,12 @@ async def _stream_response(
     # Register the signed-in user's per-MCP-server tokens so the SDK session
     # injects them as Authorization headers on the matching remote MCP servers.
     _copilot_agent.set_conversation_mcp_tokens(conversation_id, mcp_access_tokens or {})
+
+    # Emit a keys-only diagnostic (no token values) so the backend can log which
+    # channel delivered the OBO tokens. The proxy logs and drops this event; it
+    # never reaches the user or the model.
+    if token_source is not None:
+        yield f"data: {json.dumps({'event': 'kratos_diag', 'data': token_source})}\n\n".encode()
 
     try:
         # Persist user message to Cosmos (non-fatal — agent works without persistence)
@@ -464,6 +471,8 @@ async def handle_invoke(request: Request) -> Response:
             if isinstance(raw_tokens, dict)
             else {}
         )
+        body_token_keys = sorted(mcp_access_tokens.keys())
+        tag_token_keys: list[str] = []
 
         # The proxy may embed metadata tags in the input when the Invocations
         # gateway strips custom JSON fields.  Parse them and remove from the
@@ -486,13 +495,41 @@ async def handle_invoke(request: Request) -> Response:
                 flags=re.DOTALL,
             )
 
+            # Parse + STRIP <mcp_access_tokens> tag — fallback delivery for the
+            # per-MCP OBO tokens when the gateway strips the mcpAccessTokens JSON
+            # body field. The body field (if present) wins. The ENTIRE tag block
+            # is always removed so the token can never reach the model, even if
+            # the JSON payload fails to parse. Token values are never logged.
+            def _consume_mcp_tag(m: "re.Match[str]") -> str:
+                payload = m.group(1)
+                try:
+                    parsed = json.loads(payload)
+                except (json.JSONDecodeError, ValueError):
+                    parsed = None
+                    logger.warning("Failed to parse <mcp_access_tokens> input tag")
+                if isinstance(parsed, dict):
+                    for k, v in parsed.items():
+                        if isinstance(v, str) and v:
+                            tag_token_keys.append(str(k))
+                            mcp_access_tokens.setdefault(str(k), v)
+                return ""
+
+            message = re.sub(
+                r"<mcp_access_tokens>\s*(.*?)\s*</mcp_access_tokens>",
+                _consume_mcp_tag,
+                message,
+                flags=re.DOTALL,
+            )
+            tag_token_keys = sorted(set(tag_token_keys))
+
             # Clean up leading/trailing whitespace from tag removal
             message = message.strip()
 
         logger.info(
-            "handle_invoke: useCase=%s conversation=%s registries=%s message_len=%d mcp_tokens=%s",
+            "handle_invoke: useCase=%s conversation=%s registries=%s message_len=%d "
+            "mcp_tokens=%s (body=%s tag=%s)",
             use_case, conversation_id, list(_registries.keys()), len(message),
-            sorted(mcp_access_tokens.keys()),
+            sorted(mcp_access_tokens.keys()), body_token_keys, tag_token_keys,
         )
 
     except (json.JSONDecodeError, ValueError) as e:
@@ -512,7 +549,21 @@ async def handle_invoke(request: Request) -> Response:
 
     return StreamingResponse(
         _stream_response(
-            request.state.invocation_id, conversation_id, message, use_case, mcp_access_tokens
+            request.state.invocation_id,
+            conversation_id,
+            message,
+            use_case,
+            mcp_access_tokens,
+            token_source={
+                "mcp_token_body_keys": body_token_keys,
+                "mcp_token_tag_keys": tag_token_keys,
+                "mcp_token_effective_keys": sorted(mcp_access_tokens.keys()),
+                # Confirms the OBO server URL is present in THIS sandbox's runtime
+                # env (Foundry injects only env declared in agent.yaml). Without it
+                # _apply_mcp_tokens cannot auto-attach the graph-obo MCP tool.
+                "obo_env_url_present": bool(os.environ.get("OBO_MCP_SERVER_MCP_URL")),
+                "obo_env_name": os.environ.get("OBO_MCP_SERVER_NAME", "graph-obo"),
+            },
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},

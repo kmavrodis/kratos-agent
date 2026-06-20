@@ -35,6 +35,13 @@ template:
       value: skills
     - name: COSMOS_DB_DATABASE
       value: kratos-agent
+    # OBO MCP server (Microsoft Graph /me via On-Behalf-Of). Required at runtime
+    # so the hosted agent can auto-attach the per-user OBO MCP tool. Foundry
+    # injects only the env vars declared here — not azure.yaml `config.env`.
+    - name: OBO_MCP_SERVER_MCP_URL
+      value: ${OBO_MCP_SERVER_MCP_URL}
+    - name: OBO_MCP_SERVER_NAME
+      value: graph-obo
 parameters:
   properties: []
 resources: []

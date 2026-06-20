@@ -21,8 +21,17 @@ export function OboSignIn() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    setConfigured(isAuthConfigured());
-    setName(getSignedInName());
+    // Runtime config (config.json) loads asynchronously after first paint, so
+    // re-evaluate both on mount AND when loadRuntimeConfig signals it is ready.
+    // Without the listener this control stays hidden whenever it mounts before
+    // the `auth` block has loaded (the common case in production).
+    const sync = () => {
+      setConfigured(isAuthConfigured());
+      setName(getSignedInName());
+    };
+    sync();
+    window.addEventListener("kratos:config-loaded", sync);
+    return () => window.removeEventListener("kratos:config-loaded", sync);
   }, []);
 
   if (!configured) return null;

@@ -7,6 +7,7 @@ Uses DefaultAzureCredential for keyless auth to Microsoft Foundry.
 
 import asyncio
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -166,6 +167,13 @@ class CopilotAgent:
         # conv_id -> {mcp_server_name: user_access_token} for On-Behalf-Of header
         # injection. Tokens are secrets — never logged in clear text.
         self._conversation_mcp_tokens: dict[str, dict[str, str]] = {}
+        # conv_id -> fingerprint of the injected MCP Authorization header(s) the
+        # current SDK session was built with. A mismatch forces session recreation
+        # so the live OBO bearer is applied — resume_session cannot refresh an MCP
+        # server's frozen auth headers.
+        self._session_mcp_fingerprints: dict[str, str] = {}
+        # conv_id -> lock serialising SDK session acquisition / eviction.
+        self._session_locks: dict[str, asyncio.Lock] = {}
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
         # Futures for resolving user input requests from the SDK
         self._user_input_futures: dict[str, asyncio.Future] = {}
@@ -190,6 +198,7 @@ class CopilotAgent:
         # Sessions are not explicitly disconnected here (async not possible in a property setter);
         # use update_system_prompt() in async contexts for a full disconnect + Cosmos cleanup.
         self._sessions.clear()
+        self._session_mcp_fingerprints.clear()
         # Must also clear registered handlers — without this, new sessions created after the
         # reset would skip session.on(on_event) registration (the handler guard checks this set),
         # causing the event queue to never receive events and every request to time out.
@@ -284,6 +293,46 @@ class CopilotAgent:
         )
         return servers
 
+    @staticmethod
+    def _mcp_has_auth(mcp_servers: dict | None) -> bool:
+        """True if any MCP server carries an ``Authorization`` header (identity-bearing)."""
+        return any(
+            (entry.get("headers") or {}).get("Authorization") for entry in (mcp_servers or {}).values()
+        )
+
+    @staticmethod
+    def _mcp_fingerprint(mcp_servers: dict | None) -> str:
+        """Non-reversible fingerprint of the injected MCP ``Authorization`` header(s).
+
+        Used only as an in-memory cache key to detect when the signed-in user's OBO
+        bearer changed, so the SDK session can be recreated (``resume_session`` cannot
+        refresh an MCP server's frozen auth headers). Returns ``""`` when no identity
+        headers are present. The raw token is never logged or persisted.
+        """
+        parts = []
+        for name in sorted(mcp_servers or {}):
+            auth = (mcp_servers[name].get("headers") or {}).get("Authorization") or ""
+            if auth:
+                parts.append(f"{name}\x00{auth}")
+        if not parts:
+            return ""
+        return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]
+
+    async def _discard_session(self, conversation_id: str) -> None:
+        """Evict and disconnect the cached SDK session for a conversation.
+
+        Clears the one-shot event-handler registration so the replacement session
+        re-binds its ``session.on(...)`` handler (otherwise the new session's events
+        never reach the queue). Per-turn state (queues, counters) is owned by
+        ``run()`` and is intentionally left untouched here.
+        """
+        session = self._sessions.pop(conversation_id, None)
+        if session is not None:
+            with contextlib.suppress(Exception):
+                await session.disconnect()
+        self._registered_handlers.discard(conversation_id)
+        self._session_mcp_fingerprints.pop(conversation_id, None)
+
     def _get_registry(self, conversation_id: str) -> object | None:
         """Get the SkillRegistry for a conversation's use-case."""
         use_case = self._conversation_use_cases.get(conversation_id, DEFAULT_USE_CASE)
@@ -339,6 +388,7 @@ class CopilotAgent:
                 await session.disconnect()
         self._system_prompt = value
         self._sessions.clear()
+        self._session_mcp_fingerprints.clear()
         self._registered_handlers.clear()
         self._queues.clear()
         if self._cosmos_service:
@@ -357,6 +407,7 @@ class CopilotAgent:
                 with contextlib.suppress(Exception):
                     await session.disconnect()
             self._registered_handlers.discard(cid)
+            self._session_mcp_fingerprints.pop(cid, None)
             self._queues.pop(cid, None)
             if self._cosmos_service:
                 await self._cosmos_service.delete_session_mapping(cid)
@@ -578,84 +629,114 @@ class CopilotAgent:
         return getattr(session, "session_id", None) if session else None
 
     async def _get_or_create_session(self, conversation_id: str, sdk_session_id: str | None = None) -> object:
-        """Return an existing session or create/resume one for this conversation."""
-        if conversation_id in self._sessions:
-            logger.info("Reusing SDK session for conversation=%s", conversation_id)
-            return self._sessions[conversation_id]
+        """Return an existing session or create/resume one for this conversation.
 
-        # Resolve enabled tools and skill directories from the use-case registry
-        registry = self._get_registry(conversation_id)
-        enabled_tools = ALL_TOOLS
-        skill_dirs = []
-        mcp_servers: dict = {}
-        if registry is not None:
-            enabled_names = registry.get_enabled_tool_names()
-            enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
-            skill_dirs = registry.get_skill_directories()
-            mcp_servers = getattr(registry, "mcp_servers", {})
+        Identity-bearing (OBO) sessions — those carrying a per-user ``Authorization``
+        header on an MCP server — are NEVER resumed and NEVER persisted to Cosmos:
+        the Copilot CLI freezes an MCP server's auth headers at create time, so
+        resuming would replay a stale (possibly expired or wrong-user) bearer. A
+        change in the injected token evicts the cached session so the next
+        ``create_session`` applies the live header. Non-identity conversations keep
+        the resume-or-create behaviour (preserving SDK history continuity).
+        """
+        lock = self._session_locks.setdefault(conversation_id, asyncio.Lock())
+        async with lock:
+            # Resolve enabled tools and skill directories from the use-case registry
+            registry = self._get_registry(conversation_id)
+            enabled_tools = ALL_TOOLS
+            skill_dirs = []
+            mcp_servers: dict = {}
+            if registry is not None:
+                enabled_names = registry.get_enabled_tool_names()
+                enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
+                skill_dirs = registry.get_skill_directories()
+                mcp_servers = getattr(registry, "mcp_servers", {})
 
-        # Inject the signed-in user's OBO tokens as Authorization headers on the
-        # matching remote MCP servers (and auto-add the env-configured OBO server
-        # when a token is present for it). No-op when no tokens are registered.
-        mcp_servers = self._apply_mcp_tokens(conversation_id, mcp_servers)
+            # Inject the signed-in user's OBO tokens as Authorization headers on the
+            # matching remote MCP servers (and auto-add the env-configured OBO server
+            # when a token is present for it). No-op when no tokens are registered.
+            mcp_servers = self._apply_mcp_tokens(conversation_id, mcp_servers)
+            has_identity = self._mcp_has_auth(mcp_servers)
+            fingerprint = self._mcp_fingerprint(mcp_servers)
 
-        logger.info(
-            "Session config for conversation=%s: mcp_servers=%s skill_dirs=%d tools=%d",
-            conversation_id,
-            list(mcp_servers.keys()) if mcp_servers else "none",
-            len(skill_dirs),
-            len(enabled_tools),
-        )
-
-        system_prompt = self._get_system_prompt(conversation_id)
-        config = self._build_session_config(enabled_tools, skill_dirs, system_prompt, mcp_servers)
-
-        # Try to resume an existing SDK session — prefer explicitly passed ID,
-        # then fall back to Cosmos DB lookup.
-        if sdk_session_id is None and self._cosmos_service:
-            sdk_session_id = await self._cosmos_service.get_session_mapping(conversation_id)
-
-        t0 = time.monotonic()
-        session = None
-
-        if sdk_session_id:
-            try:
-                session = await self._client.resume_session(sdk_session_id, **config)
-                elapsed_ms = (time.monotonic() - t0) * 1000
+            # In-memory reuse — only when the injected identity is unchanged. A changed,
+            # newly added, or removed token evicts the cached session so the next create
+            # applies the live header (resume cannot refresh MCP auth headers).
+            cached = self._sessions.get(conversation_id)
+            if cached is not None:
+                if self._session_mcp_fingerprints.get(conversation_id) == fingerprint:
+                    logger.info("Reusing SDK session for conversation=%s", conversation_id)
+                    return cached
                 logger.info(
-                    "Resumed SDK session=%s for conversation=%s elapsed=%.0fms",
-                    sdk_session_id,
-                    conversation_id,
-                    elapsed_ms,
+                    "MCP identity changed for conversation=%s — rebuilding SDK session", conversation_id
                 )
-            except Exception:
-                logger.warning(
-                    "Failed to resume SDK session=%s for conversation=%s — creating new",
-                    sdk_session_id,
-                    conversation_id,
-                    exc_info=True,
-                )
-                session = None
-
-        if session is None:
-            t0 = time.monotonic()
-            session = await self._client.create_session(**config)
-            elapsed_ms = (time.monotonic() - t0) * 1000
-
-            # Persist the new SDK session ID to Cosmos DB
-            if self._cosmos_service and hasattr(session, "session_id"):
-                await self._cosmos_service.upsert_session_mapping(conversation_id, session.session_id)
+                await self._discard_session(conversation_id)
 
             logger.info(
-                "Created SDK session=%s for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
-                getattr(session, "session_id", "?"),
+                "Session config for conversation=%s: mcp_servers=%s identity=%s skill_dirs=%d tools=%d",
                 conversation_id,
-                self.settings.foundry_model_deployment,
-                ",".join(tool.name for tool in enabled_tools),
-                elapsed_ms,
+                list(mcp_servers.keys()) if mcp_servers else "none",
+                has_identity,
+                len(skill_dirs),
+                len(enabled_tools),
             )
-        self._sessions[conversation_id] = session
-        return session
+
+            system_prompt = self._get_system_prompt(conversation_id)
+            config = self._build_session_config(enabled_tools, skill_dirs, system_prompt, mcp_servers)
+
+            # Identity-bearing sessions must never resume a persisted session id (Cosmos
+            # or caller-supplied) — the CLI would replay the create-time bearer. Force a
+            # fresh create. Otherwise prefer an explicitly passed ID, then Cosmos lookup.
+            if has_identity:
+                sdk_session_id = None
+            elif sdk_session_id is None and self._cosmos_service:
+                sdk_session_id = await self._cosmos_service.get_session_mapping(conversation_id)
+
+            t0 = time.monotonic()
+            session = None
+
+            if sdk_session_id:
+                try:
+                    session = await self._client.resume_session(sdk_session_id, **config)
+                    elapsed_ms = (time.monotonic() - t0) * 1000
+                    logger.info(
+                        "Resumed SDK session=%s for conversation=%s elapsed=%.0fms",
+                        sdk_session_id,
+                        conversation_id,
+                        elapsed_ms,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to resume SDK session=%s for conversation=%s — creating new",
+                        sdk_session_id,
+                        conversation_id,
+                        exc_info=True,
+                    )
+                    session = None
+
+            if session is None:
+                t0 = time.monotonic()
+                session = await self._client.create_session(**config)
+                elapsed_ms = (time.monotonic() - t0) * 1000
+
+                # Persist the new SDK session ID to Cosmos DB — but ONLY for non-identity
+                # sessions. Identity (OBO) sessions are never resumed, so persisting one
+                # would risk a later token-less turn resuming a token-bearing session.
+                if not has_identity and self._cosmos_service and hasattr(session, "session_id"):
+                    await self._cosmos_service.upsert_session_mapping(conversation_id, session.session_id)
+
+                logger.info(
+                    "Created SDK session=%s for conversation=%s model=%s identity=%s custom_tools=%s elapsed=%.0fms",
+                    getattr(session, "session_id", "?"),
+                    conversation_id,
+                    self.settings.foundry_model_deployment,
+                    has_identity,
+                    ",".join(tool.name for tool in enabled_tools),
+                    elapsed_ms,
+                )
+            self._sessions[conversation_id] = session
+            self._session_mcp_fingerprints[conversation_id] = fingerprint
+            return session
 
     async def run(
         self,

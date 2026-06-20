@@ -111,3 +111,141 @@ def test_tokens_isolated_per_conversation(agent):
     other = agent._apply_mcp_tokens("conv2", registry)
 
     assert "headers" not in other["graph-obo"]
+
+
+# ---------------------------------------------------------------------------
+# Identity fingerprint helpers
+# ---------------------------------------------------------------------------
+
+
+def test_mcp_has_auth_detects_authorization(agent):
+    assert agent._mcp_has_auth({"s": {"headers": {"Authorization": "Bearer x"}}}) is True
+    assert agent._mcp_has_auth({"s": {"headers": {}}}) is False
+    assert agent._mcp_has_auth({"s": {}}) is False
+    assert agent._mcp_has_auth({}) is False
+    assert agent._mcp_has_auth(None) is False
+
+
+def test_mcp_fingerprint_changes_with_token(agent):
+    a = agent._mcp_fingerprint({"s": {"headers": {"Authorization": "Bearer one"}}})
+    b = agent._mcp_fingerprint({"s": {"headers": {"Authorization": "Bearer two"}}})
+    assert a and b and a != b
+    # No identity header => empty fingerprint
+    assert agent._mcp_fingerprint({"s": {"url": "x"}}) == ""
+    # Same input is stable and never leaks the raw token
+    fp = agent._mcp_fingerprint({"s": {"headers": {"Authorization": "Bearer secret-123"}}})
+    assert fp == agent._mcp_fingerprint({"s": {"headers": {"Authorization": "Bearer secret-123"}}})
+    assert "secret-123" not in fp
+
+
+# ---------------------------------------------------------------------------
+# Session lifecycle: OBO sessions must force-create (never resume / never persist)
+# ---------------------------------------------------------------------------
+
+
+class _FakeSession:
+    def __init__(self, session_id):
+        self.session_id = session_id
+        self.disconnected = False
+
+    async def disconnect(self):
+        self.disconnected = True
+
+
+class _FakeClient:
+    def __init__(self):
+        self.created = []
+        self.resumed = []
+        self._n = 0
+
+    async def create_session(self, **config):
+        self._n += 1
+        s = _FakeSession(f"sdk-{self._n}")
+        self.created.append(config)
+        return s
+
+    async def resume_session(self, sdk_session_id, **config):
+        self.resumed.append(sdk_session_id)
+        return _FakeSession(sdk_session_id)
+
+
+class _FakeCosmos:
+    def __init__(self, mapping=None):
+        self._mapping = mapping
+        self.upserts = []
+
+    async def get_session_mapping(self, conversation_id):
+        return self._mapping
+
+    async def upsert_session_mapping(self, conversation_id, session_id):
+        self.upserts.append((conversation_id, session_id))
+
+
+@pytest.fixture
+def wired_agent(agent, monkeypatch):
+    monkeypatch.setenv("OBO_MCP_SERVER_NAME", "graph-obo")
+    monkeypatch.setenv("OBO_MCP_SERVER_MCP_URL", "https://obo.example/mcp")
+    agent._client = _FakeClient()
+    return agent
+
+
+async def test_identity_session_forces_create_never_resumes(wired_agent):
+    """An OBO token must produce a fresh create_session and ignore any Cosmos mapping."""
+    cosmos = _FakeCosmos(mapping="stale-sdk-id")
+    wired_agent._cosmos_service = cosmos
+    wired_agent.set_conversation_mcp_tokens("conv1", {"graph-obo": "tok-abc"})
+
+    session = await wired_agent._get_or_create_session("conv1")
+
+    assert wired_agent._client.resumed == []  # never resumed
+    assert len(wired_agent._client.created) == 1
+    assert session.session_id == "sdk-1"
+    # Identity sessions are never persisted to Cosmos
+    assert cosmos.upserts == []
+
+
+async def test_identity_token_change_recreates_session(wired_agent):
+    """A changed user token evicts and disconnects the old session, then creates a new one."""
+    wired_agent.set_conversation_mcp_tokens("conv1", {"graph-obo": "tok-1"})
+    first = await wired_agent._get_or_create_session("conv1")
+
+    wired_agent.set_conversation_mcp_tokens("conv1", {"graph-obo": "tok-2"})
+    second = await wired_agent._get_or_create_session("conv1")
+
+    assert first.disconnected is True
+    assert first.session_id != second.session_id
+    assert len(wired_agent._client.created) == 2
+
+
+async def test_identity_same_token_reuses_cached_session(wired_agent):
+    """An unchanged token reuses the in-memory session (single create)."""
+    wired_agent.set_conversation_mcp_tokens("conv1", {"graph-obo": "tok-1"})
+    first = await wired_agent._get_or_create_session("conv1")
+    second = await wired_agent._get_or_create_session("conv1")
+
+    assert first is second
+    assert len(wired_agent._client.created) == 1
+
+
+async def test_non_identity_resumes_from_cosmos(wired_agent):
+    """Without an OBO token, a Cosmos-persisted session id is resumed (history continuity)."""
+    cosmos = _FakeCosmos(mapping="persisted-sdk-id")
+    wired_agent._cosmos_service = cosmos
+
+    session = await wired_agent._get_or_create_session("conv-plain")
+
+    assert wired_agent._client.resumed == ["persisted-sdk-id"]
+    assert session.session_id == "persisted-sdk-id"
+    assert wired_agent._client.created == []
+
+
+async def test_non_identity_creates_and_persists(wired_agent):
+    """Without an OBO token and no mapping, a new session is created and persisted."""
+    cosmos = _FakeCosmos(mapping=None)
+    wired_agent._cosmos_service = cosmos
+
+    session = await wired_agent._get_or_create_session("conv-plain")
+
+    assert wired_agent._client.resumed == []
+    assert len(wired_agent._client.created) == 1
+    assert cosmos.upserts == [("conv-plain", session.session_id)]

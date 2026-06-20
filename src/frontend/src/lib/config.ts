@@ -115,6 +115,10 @@ export async function loadRuntimeConfig(): Promise<void> {
       const cfg = await res.json();
       (window as unknown as Record<string, unknown>).__KRATOS_CONFIG__ = cfg;
       _cachedApiUrl = null; // reset so getApiUrl() re-evaluates
+      // Notify components that read config at mount time (e.g. the OBO sign-in
+      // control) that runtime config — including the `auth` block — is now
+      // available, so they can re-evaluate instead of staying disabled.
+      window.dispatchEvent(new Event("kratos:config-loaded"));
     }
   } catch {
     // No config.json — that's fine, use fallbacks
