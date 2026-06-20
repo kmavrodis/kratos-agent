@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 
@@ -50,7 +51,15 @@ UAMI_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID", "")
 OBO_CLIENT_SECRET = os.environ.get("OBO_CLIENT_SECRET", "")
 # Downstream Graph delegated scope(s) to request via OBO.
 GRAPH_SCOPES = os.environ.get("GRAPH_SCOPES", "https://graph.microsoft.com/User.Read").split()
-GRAPH_ME_URL = "https://graph.microsoft.com/v1.0/me"
+# Fields fetched from Graph /me. Several of these (department, preferredLanguage,
+# mobilePhone, businessPhones, givenName, surname, officeLocation, jobTitle) do
+# NOT appear in the inbound access token, so a correct answer proves the data was
+# fetched live from Graph via OBO — it cannot have been decoded from the JWT.
+GRAPH_ME_SELECT = (
+    "id,displayName,userPrincipalName,mail,jobTitle,officeLocation,"
+    "department,preferredLanguage,mobilePhone,businessPhones,givenName,surname"
+)
+GRAPH_ME_URL = f"https://graph.microsoft.com/v1.0/me?$select={GRAPH_ME_SELECT}"
 
 # The audience Entra expects when the MI mints its token-exchange assertion.
 TOKEN_EXCHANGE_SCOPE = "api://AzureADTokenExchange/.default"
@@ -220,6 +229,17 @@ def get_my_profile(user_token: str) -> dict[str, Any]:
     """Call Microsoft Graph ``/me`` on behalf of the signed-in user.
 
     ``user_token`` must already have passed ``validate_user_token``.
+
+    The returned dict deliberately includes signals that are **not present in the
+    inbound access token** — so a correct answer proves the call hit Graph live
+    on the user's behalf and was not decoded from the JWT:
+
+    * ``graphRequestId`` — the ``request-id`` correlation GUID that the Graph
+      service generates for this exact HTTP response. It exists nowhere in the
+      token and can be cross-referenced in Graph's own sign-in/audit telemetry.
+    * ``fetchedAtUtc`` — server timestamp of the live call.
+    * profile fields such as ``department`` / ``preferredLanguage`` /
+      ``mobilePhone`` that the token never carries.
     """
     graph_token = _graph_token_for_user(user_token)
     resp = httpx.get(
@@ -229,6 +249,9 @@ def get_my_profile(user_token: str) -> dict[str, Any]:
     )
     resp.raise_for_status()
     data = resp.json()
+    # Graph echoes a per-response correlation id; this is dispositive proof of a
+    # live round-trip (the model cannot fabricate a Graph-issued request-id).
+    graph_request_id = resp.headers.get("request-id") or resp.headers.get("client-request-id")
     # Return a compact, non-sensitive projection of the profile.
     return {
         "displayName": data.get("displayName"),
@@ -236,5 +259,15 @@ def get_my_profile(user_token: str) -> dict[str, Any]:
         "mail": data.get("mail"),
         "jobTitle": data.get("jobTitle"),
         "officeLocation": data.get("officeLocation"),
+        "department": data.get("department"),
+        "preferredLanguage": data.get("preferredLanguage"),
+        "mobilePhone": data.get("mobilePhone"),
+        "businessPhones": data.get("businessPhones"),
+        "givenName": data.get("givenName"),
+        "surname": data.get("surname"),
         "id": data.get("id"),
+        # ── Graph-only proof signals (NOT derivable from the access token) ──
+        "graphRequestId": graph_request_id,
+        "fetchedAtUtc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": "microsoft-graph:/v1.0/me (delegated, on-behalf-of)",
     }

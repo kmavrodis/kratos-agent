@@ -29,12 +29,42 @@ services:
       APM_USE_CASES_ROOT: /app/use-cases
       ENVIRONMENT: development
       APM_ENABLED: "true"
+      # OBO: point the in-sandbox agent at the local OBO MCP server so the
+      # graph-obo tool auto-attaches exactly as it does in the cloud. This is the
+      # local equivalent of the OBO_MCP_SERVER_MCP_URL env declared in agent.yaml.
+      OBO_MCP_SERVER_MCP_URL: "http://obo-mcp-server:8000/mcp"
+      OBO_MCP_SERVER_NAME: graph-obo
     volumes:
       - ./.local/hosted-agent:/data
       - ./use-cases:/app/use-cases
     depends_on:
       azurite:
         condition: service_healthy
+      obo-mcp-server:
+        condition: service_started
+
+  # Entra-protected OBO MCP server. Locally it authenticates ITSELF with a client
+  # secret (OBO_CLIENT_SECRET) instead of the cloud's secret-less managed-identity
+  # federated credential — same app registration, same real Entra OBO -> Graph
+  # exchange. Inbound user-token validation (audience/scope/tenant/client) is
+  # identical to production. Provide OBO_CLIENT_SECRET via your local .env.
+  obo-mcp-server:
+    build:
+      context: src/obo-mcp-server
+      dockerfile: Dockerfile
+    ports:
+      - "8800:8000"
+    environment:
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-f7d09a0b-c429-41ac-b105-9ce32d6e5358}
+      OBO_API_CLIENT_ID: ${OBO_API_CLIENT_ID:-bec3169c-c01e-4acc-9974-bd9271f9bfae}
+      # LOCAL DEV ONLY — confidential-client secret for the OBO exchange.
+      OBO_CLIENT_SECRET: ${OBO_CLIENT_SECRET}
+      GRAPH_SCOPES: ${GRAPH_SCOPES:-https://graph.microsoft.com/User.Read}
+      # Only the SPA client may act as the user (confused-deputy guard). Add the
+      # VS Code client id here too if you drive it from VS Code.
+      ALLOWED_CLIENT_APP_IDS: ${ALLOWED_CLIENT_APP_IDS:-f31799cd-b0a5-4055-b7f9-574c25ea0238}
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
 
   backend:
     build:

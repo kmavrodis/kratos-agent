@@ -12,6 +12,7 @@ connects with ``{"type": "http", "url": "https://<fqdn>/mcp"}``.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 
@@ -57,6 +58,10 @@ def get_my_profile(ctx: Context) -> dict:
         validate_user_token(token)  # rejects wrong audience / scope / tenant / expiry
         profile = fetch_my_profile(token)
         logger.info("get_my_profile: returned profile for upn=%s", profile.get("userPrincipalName"))
+        # Full (non-sensitive) projection at INFO so demos/observability can show
+        # exactly what Graph returned — including graph-only proof fields like
+        # graphRequestId that are absent from the access token.
+        logger.info("get_my_profile result: %s", json.dumps(profile, default=str))
         return profile
     except TokenValidationError as exc:
         # Do not leak the token; surface a clean, actionable error.
