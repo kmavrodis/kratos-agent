@@ -6,6 +6,7 @@ Uses DefaultAzureCredential for keyless auth to Microsoft Foundry.
 """
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -162,6 +163,9 @@ class CopilotAgent:
         self._cosmos_service: CosmosService | None = None
         self._sessions: dict[str, object] = {}
         self._conversation_use_cases: dict[str, str] = {}  # conv_id -> use_case
+        # conv_id -> {mcp_server_name: user_access_token} for On-Behalf-Of header
+        # injection. Tokens are secrets — never logged in clear text.
+        self._conversation_mcp_tokens: dict[str, dict[str, str]] = {}
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
         # Futures for resolving user input requests from the SDK
         self._user_input_futures: dict[str, asyncio.Future] = {}
@@ -220,6 +224,65 @@ class CopilotAgent:
     def set_conversation_use_case(self, conversation_id: str, use_case: str) -> None:
         """Associate a conversation with a use-case."""
         self._conversation_use_cases[conversation_id] = use_case
+
+    def set_conversation_mcp_tokens(self, conversation_id: str, tokens: dict[str, str]) -> None:
+        """Register the signed-in user's per-MCP-server access tokens.
+
+        Keyed by MCP server name (e.g. ``{"graph-obo": "<token>"}``). The tokens
+        are injected as ``Authorization: Bearer`` headers on the matching remote
+        MCP servers when the SDK session config is built, so those tools run
+        On-Behalf-Of the user. Passing an empty dict clears any prior tokens.
+        """
+        if tokens:
+            self._conversation_mcp_tokens[conversation_id] = dict(tokens)
+        else:
+            self._conversation_mcp_tokens.pop(conversation_id, None)
+
+    def _apply_mcp_tokens(self, conversation_id: str, mcp_servers: dict | None) -> dict:
+        """Return a copy of ``mcp_servers`` with user OBO tokens injected as headers.
+
+        For each ``{server_name: token}`` registered for this conversation:
+          * if the server is already configured (from the use-case ``.mcp.json``),
+            its ``headers.Authorization`` is set to the user's bearer token;
+          * otherwise, if it matches the env-configured OBO server
+            (``OBO_MCP_SERVER_NAME`` / ``OBO_MCP_SERVER_MCP_URL``), a remote HTTP
+            MCP server entry is created on the fly. This lets the OBO tool light
+            up across every use-case without editing each ``.mcp.json``.
+
+        The original registry dict is never mutated (deep-copied first).
+        """
+        servers: dict = copy.deepcopy(mcp_servers) if mcp_servers else {}
+        tokens = self._conversation_mcp_tokens.get(conversation_id) or {}
+        if not tokens:
+            return servers
+
+        obo_name = os.environ.get("OBO_MCP_SERVER_NAME", "graph-obo")
+        obo_url = os.environ.get("OBO_MCP_SERVER_MCP_URL", "")
+
+        for server_name, token in tokens.items():
+            if not token:
+                continue
+            entry = servers.get(server_name)
+            if entry is None:
+                # Only auto-create the known OBO server, and only if we have a URL.
+                if server_name == obo_name and obo_url:
+                    entry = {"type": "http", "url": obo_url, "tools": ["*"]}
+                    servers[server_name] = entry
+                else:
+                    logger.warning(
+                        "OBO token provided for unknown MCP server '%s' — ignoring", server_name
+                    )
+                    continue
+            headers = dict(entry.get("headers") or {})
+            headers["Authorization"] = f"Bearer {token}"
+            entry["headers"] = headers
+
+        logger.info(
+            "Applied OBO tokens for conversation=%s to MCP servers=%s",
+            conversation_id,
+            sorted(tokens.keys()),
+        )
+        return servers
 
     def _get_registry(self, conversation_id: str) -> object | None:
         """Get the SkillRegistry for a conversation's use-case."""
@@ -530,6 +593,11 @@ class CopilotAgent:
             enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
             skill_dirs = registry.get_skill_directories()
             mcp_servers = getattr(registry, "mcp_servers", {})
+
+        # Inject the signed-in user's OBO tokens as Authorization headers on the
+        # matching remote MCP servers (and auto-add the env-configured OBO server
+        # when a token is present for it). No-op when no tokens are registered.
+        mcp_servers = self._apply_mcp_tokens(conversation_id, mcp_servers)
 
         logger.info(
             "Session config for conversation=%s: mcp_servers=%s skill_dirs=%d tools=%d",

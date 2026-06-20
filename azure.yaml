@@ -14,6 +14,12 @@ services:
         docker:
             path: ./Dockerfile
             context: ../..
+    obo-mcp-server:
+        project: ./src/obo-mcp-server
+        host: containerapp
+        language: python
+        docker:
+            path: ./Dockerfile
     kratos-agent:
         project: ./src/hosted-agent
         host: azure.ai.agent
@@ -35,6 +41,8 @@ services:
                 COSMOS_DB_ENDPOINT: ${AZURE_COSMOS_DB_ENDPOINT}
                 KEY_VAULT_URI: ${AZURE_KEY_VAULT_URI}
                 MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_DEPLOYMENT}
+                OBO_MCP_SERVER_NAME: graph-obo
+                OBO_MCP_SERVER_MCP_URL: ${OBO_MCP_SERVER_MCP_URL}
     web:
         project: ./src/frontend
         host: staticwebapp
@@ -60,6 +68,16 @@ services:
                     elif [ -n "${AGENT_SERVICE_URL}" ]; then
                       echo "{\"apiUrl\":\"${AGENT_SERVICE_URL}\"}" > out/config.json
                       echo "Injected config.json with apiUrl=${AGENT_SERVICE_URL}"
+                    fi
+                    # Merge the OBO sign-in config (Entra app + MCP scope) into
+                    # config.json so MSAL.js can sign the user in and acquire a
+                    # token for the OBO MCP server. Skipped if outputs are unset.
+                    if [ -n "${OBO_CLIENT_APP_CLIENT_ID}" ] && [ -n "${OBO_TENANT_ID}" ] && [ -n "${OBO_SERVER_APP_IDENTIFIER_URI}" ]; then
+                      [ -f out/config.json ] || echo "{}" > out/config.json
+                      SCOPE="${OBO_SERVER_APP_IDENTIFIER_URI}/${OBO_SERVER_APP_SCOPE_VALUE:-access_as_user}"
+                      AUTH_JSON="{\"clientId\":\"${OBO_CLIENT_APP_CLIENT_ID}\",\"tenantId\":\"${OBO_TENANT_ID}\",\"mcpScope\":\"${SCOPE}\",\"mcpServerName\":\"${OBO_MCP_SERVER_NAME:-graph-obo}\"}"
+                      node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('out/config.json','utf8'));c.auth=JSON.parse(process.argv[1]);fs.writeFileSync('out/config.json',JSON.stringify(c));" "$AUTH_JSON"
+                      echo "Merged OBO auth config into config.json (scope=${SCOPE})"
                     fi
                     # Emit a basePath-aware staticwebapp.config.json into out/ so the
                     # SWA EasyAuth 401 redirect + /api/* gating stay inside the mount

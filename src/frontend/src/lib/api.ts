@@ -1,4 +1,5 @@
-import { getApiUrl } from "@/lib/config";
+import { getApiUrl, getAuthConfig } from "@/lib/config";
+import { getMcpAccessToken } from "@/lib/auth";
 import type {
   Attachment,
   EvalScenario,
@@ -27,6 +28,21 @@ export async function streamAgentChat(
     }
     if (useCase) {
       payload.useCase = useCase;
+    }
+
+    // When OBO sign-in is configured, attach the user's MCP-scoped access token
+    // so the hosted agent can call the OBO MCP server On-Behalf-Of the user.
+    // Best-effort: never block the chat if token acquisition fails.
+    const authCfg = getAuthConfig();
+    if (authCfg) {
+      try {
+        const token = await getMcpAccessToken(true);
+        if (token) {
+          payload.mcpAccessTokens = { [authCfg.mcpServerName]: token };
+        }
+      } catch (err) {
+        console.warn("OBO token acquisition failed; continuing without it", err);
+      }
     }
 
     const response = await fetch(`${getApiUrl()}/api/agent/chat`, {

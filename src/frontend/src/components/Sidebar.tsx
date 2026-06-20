@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Conversation, UseCase } from "@/types";
 import { ThemePicker } from "./ThemePicker";
+import { OboSignIn } from "./OboSignIn";
 
 function timeAgo(dateStr: string): string {
   const now = Date.now();
@@ -366,6 +367,7 @@ export function Sidebar({ conversations, activeId, onNew, onSelect, onDelete, on
           </svg>
           How It Works
         </button>
+        <OboSignIn />
         <div className="pt-2 px-3 flex items-center justify-between gap-2">
           <p className="text-[10px] text-muted flex items-center gap-1.5 min-w-0">
             <span className="w-1.5 h-1.5 rounded-full bg-success-500 animate-pulse-slow flex-shrink-0"></span>

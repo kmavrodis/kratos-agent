@@ -284,13 +284,22 @@ def _collect_generated_files(response_text: str) -> list[tuple[str, bytes]]:
     return files
 
 
-async def _stream_response(invocation_id: str, conversation_id: str, message: str, use_case: str):
+async def _stream_response(
+    invocation_id: str,
+    conversation_id: str,
+    message: str,
+    use_case: str,
+    mcp_access_tokens: dict[str, str] | None = None,
+):
     """Run the Copilot SDK agent and stream our SSE event schema."""
     start_time = time.monotonic()
     total_tool_calls = 0
 
     # Associate conversation with use-case
     _copilot_agent.set_conversation_use_case(conversation_id, use_case)
+    # Register the signed-in user's per-MCP-server tokens so the SDK session
+    # injects them as Authorization headers on the matching remote MCP servers.
+    _copilot_agent.set_conversation_mcp_tokens(conversation_id, mcp_access_tokens or {})
 
     try:
         # Persist user message to Cosmos (non-fatal — agent works without persistence)
@@ -446,6 +455,16 @@ async def handle_invoke(request: Request) -> Response:
         conversation_id = data.get("conversationId", str(uuid.uuid4()))
         use_case = data.get("useCase", "generic")
 
+        # Per-MCP-server user tokens for On-Behalf-Of (kept out of the message
+        # text so they are never visible to the model). Coerce to a clean
+        # {str: str} map and ignore anything malformed.
+        raw_tokens = data.get("mcpAccessTokens")
+        mcp_access_tokens: dict[str, str] = (
+            {str(k): v for k, v in raw_tokens.items() if isinstance(v, str) and v}
+            if isinstance(raw_tokens, dict)
+            else {}
+        )
+
         # The proxy may embed metadata tags in the input when the Invocations
         # gateway strips custom JSON fields.  Parse them and remove from the
         # message so the CopilotAgent receives a clean user message.
@@ -471,8 +490,9 @@ async def handle_invoke(request: Request) -> Response:
             message = message.strip()
 
         logger.info(
-            "handle_invoke: useCase=%s conversation=%s registries=%s message_len=%d",
+            "handle_invoke: useCase=%s conversation=%s registries=%s message_len=%d mcp_tokens=%s",
             use_case, conversation_id, list(_registries.keys()), len(message),
+            sorted(mcp_access_tokens.keys()),
         )
 
     except (json.JSONDecodeError, ValueError) as e:
@@ -491,7 +511,9 @@ async def handle_invoke(request: Request) -> Response:
     await _ensure_registry(use_case)
 
     return StreamingResponse(
-        _stream_response(request.state.invocation_id, conversation_id, message, use_case),
+        _stream_response(
+            request.state.invocation_id, conversation_id, message, use_case, mcp_access_tokens
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )

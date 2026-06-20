@@ -251,6 +251,7 @@ class FoundryAgentProxy:
         system_prompt: str | None = None,
         agent_session_id: str | None = None,
         eval_run_id: str | None = None,
+        mcp_access_tokens: dict[str, str] | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Invoke the hosted agent and yield event dicts.
 
@@ -290,6 +291,13 @@ class FoundryAgentProxy:
             "conversationId": conversation_id,
             "useCase": use_case,
         }
+        # Forward per-MCP-server user tokens in the JSON body. The Invocations
+        # gateway preserves body fields (unlike custom HTTP headers), so the
+        # hosted agent reads them from data["mcpAccessTokens"] and injects each
+        # as the Authorization header on the matching remote MCP server. Tokens
+        # are secrets — never logged.
+        if mcp_access_tokens:
+            payload["mcpAccessTokens"] = mcp_access_tokens
 
         # Append agent_session_id as query parameter to reuse the same
         # gateway session (container) across messages in a conversation. For the

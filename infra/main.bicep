@@ -238,6 +238,69 @@ module staticWebApp './modules/static-web-app.bicep' = {
   }
 }
 
+// ─── OBO MCP Server: identity, Entra apps, container app ───
+// One user-assigned managed identity is the ACR-pull identity, the container
+// runtime identity, AND the federated subject the OBO server app trusts.
+module oboIdentity './modules/obo-identity.bicep' = {
+  name: 'obo-identity'
+  scope: rg
+  params: {
+    name: 'id-obo-${resourceToken}'
+    location: location
+    tags: tags
+  }
+}
+
+// SPA client app (MSAL.js signs the user in here). Deployed first so its appId
+// can pre-authorize the server app, avoiding a circular dependency.
+module oboEntraAppClient './modules/obo-entra-app.bicep' = {
+  name: 'obo-entra-app-client'
+  scope: rg
+  params: {
+    entraAppDisplayName: 'kratos-obo-client-${environmentName}'
+    entraAppUniqueName: 'kratos-obo-client-${resourceToken}'
+    isServer: false
+    spaRedirectUris: [
+      staticWebApp.outputs.url
+      'http://localhost:3000'
+      'http://localhost:5173'
+      'http://localhost:4280'
+    ]
+  }
+}
+
+// OBO server app (the MCP server's Entra identity + Graph User.Read + FIC).
+module oboEntraAppServer './modules/obo-entra-app.bicep' = {
+  name: 'obo-entra-app-server'
+  scope: rg
+  params: {
+    entraAppDisplayName: 'kratos-obo-server-${environmentName}'
+    entraAppUniqueName: 'kratos-obo-server-${resourceToken}'
+    isServer: true
+    knownClientAppId: oboEntraAppClient.outputs.entraAppClientId
+    acaManagedIdentityObjectId: oboIdentity.outputs.principalId
+  }
+}
+
+module oboMcpServer './modules/obo-mcp-server.bicep' = {
+  name: 'obo-mcp-server'
+  scope: rg
+  params: {
+    name: '${abbrs.appContainerApps}obo-${resourceToken}'
+    location: location
+    tags: tags
+    containerAppsEnvId: containerAppsEnv.outputs.id
+    containerRegistryName: containerRegistry.outputs.name
+    appInsightsConnectionString: appInsights.outputs.connectionString
+    oboIdentityId: oboIdentity.outputs.id
+    oboIdentityClientId: oboIdentity.outputs.clientId
+    oboIdentityPrincipalId: oboIdentity.outputs.principalId
+    tenantId: tenant().tenantId
+    oboApiClientId: oboEntraAppServer.outputs.entraAppClientId
+    allowedClientAppIds: oboEntraAppClient.outputs.entraAppClientId
+  }
+}
+
 // ─── Role Assignments ───
 module roleAssignments './modules/role-assignments.bicep' = {
   name: 'role-assignments'
@@ -275,3 +338,12 @@ output FOUNDRY_MODEL_DEPLOYMENT string = aiFoundry.outputs.modelDeploymentName
 output AZURE_AI_PROJECT_ENDPOINT string = aiFoundry.outputs.projectEndpoint
 output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name
+
+// ─── OBO MCP server outputs ───
+output OBO_MCP_SERVER_URL string = oboMcpServer.outputs.url
+output OBO_MCP_SERVER_MCP_URL string = oboMcpServer.outputs.mcpUrl
+output OBO_SERVER_APP_CLIENT_ID string = oboEntraAppServer.outputs.entraAppClientId
+output OBO_SERVER_APP_IDENTIFIER_URI string = oboEntraAppServer.outputs.entraAppIdentifierUri
+output OBO_SERVER_APP_SCOPE_VALUE string = oboEntraAppServer.outputs.entraAppScopeValue
+output OBO_CLIENT_APP_CLIENT_ID string = oboEntraAppClient.outputs.entraAppClientId
+output OBO_TENANT_ID string = tenant().tenantId

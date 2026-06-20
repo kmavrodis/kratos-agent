@@ -98,6 +98,12 @@ class AgentRequest(BaseModel):
     message: str
     useCase: str = "generic"
     attachments: list[Attachment] = Field(default_factory=list)
+    # Per-MCP-server user access tokens, keyed by MCP server name
+    # (e.g. {"graph-obo": "<entra access token>"}). Sent by the frontend after
+    # MSAL sign-in; forwarded opaquely to the hosted agent, which injects each
+    # token as the Authorization header on the matching remote MCP server so the
+    # tool runs On-Behalf-Of the signed-in user. Never logged in clear text.
+    mcpAccessTokens: dict[str, str] = Field(default_factory=dict)
 
 
 class ToolCallEvent(BaseModel):
