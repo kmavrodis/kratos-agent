@@ -23,6 +23,9 @@ template:
     # FOUNDRY_PROJECT_ENDPOINT is auto-injected by the platform.
     - name: MODEL_DEPLOYMENT_NAME
       value: ${FOUNDRY_MODEL_DEPLOYMENT}
+    # Route the LLM through the APIM AI gateway (governance + observability).
+    - name: LLM_GATEWAY_BASE_URL
+      value: ${AI_GATEWAY_URL}
     - name: COSMOS_DB_ENDPOINT
       value: ${AZURE_COSMOS_DB_ENDPOINT}
     - name: AZURE_AI_SEARCH_ENDPOINT

@@ -19,6 +19,11 @@ environment_variables:
   # AI Services base URL (fallback if platform doesn't inject FOUNDRY_ENDPOINT)
   - name: AI_SERVICES_ENDPOINT
     value: ${AZURE_AI_PROJECT_ENDPOINT}
+  # Route the LLM (chat completions) through the APIM AI gateway so requests are
+  # governed + observable in App Insights. Empty falls back to calling Foundry
+  # directly. The Copilot SDK provider appends /openai/deployments/<model>.
+  - name: LLM_GATEWAY_BASE_URL
+    value: ${AI_GATEWAY_URL}
   # Azure service endpoints (injected by Bicep / azd env)
   - name: COSMOS_DB_ENDPOINT
     value: ${AZURE_COSMOS_DB_ENDPOINT}

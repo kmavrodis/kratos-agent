@@ -224,6 +224,8 @@ module aiGateway './modules/ai-gateway.bicep' = {
     publisherEmail: apimPublisherEmail
     appInsightsId: appInsights.outputs.id
     appInsightsInstrumentationKey: appInsights.outputs.instrumentationKey
+    aiServicesEndpoint: aiFoundry.outputs.endpoint
+    logAnalyticsWorkspaceId: logAnalytics.outputs.id
   }
 }
 
@@ -317,6 +319,7 @@ module roleAssignments './modules/role-assignments.bicep' = {
     appInsightsName: appInsights.outputs.name
     containerRegistryName: containerRegistry.outputs.name
     principalId: principalId
+    apimPrincipalId: aiGateway.outputs.principalId
   }
 }
 

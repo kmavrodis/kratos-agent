@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     foundry_model_deployment: str = ""
     foundry_project_name: str = ""
 
+    # Optional: route the LLM (chat completions) calls through the APIM AI gateway
+    # instead of straight to the AI Services account. When set, the Copilot SDK
+    # provider base_url uses this host (…/openai/deployments/<model>) so requests
+    # are governed + observable in APIM/App Insights. Empty = call Foundry direct.
+    llm_gateway_base_url: str = ""
+
     # Hosted agent proxy — backend forwards requests to the Foundry hosted agent
     foundry_project_endpoint: str = ""  # e.g. https://host/api/projects/proj
     foundry_agent_name: str = "kratos-agent"

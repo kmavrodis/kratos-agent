@@ -545,9 +545,13 @@ class CopilotAgent:
         """
         if self.settings.is_local_mode:
             return None
+        # Front the LLM through the APIM AI gateway when configured (governance +
+        # observability); otherwise call the AI Services account directly. Both
+        # expose the same /openai/deployments/<model>/chat/completions shape.
+        llm_base = (self.settings.llm_gateway_base_url or self.settings.foundry_endpoint).rstrip("/")
         return {
             "type": "azure",
-            "base_url": f"{self.settings.foundry_endpoint.rstrip('/')}/openai/deployments/{self.settings.foundry_model_deployment}",  # noqa: E501
+            "base_url": f"{llm_base}/openai/deployments/{self.settings.foundry_model_deployment}",
             "token_provider": self._token_provider,
             "wire_api": "completions",
             "azure": {
