@@ -45,6 +45,48 @@ function host(u) {
   }
 }
 
+// ── Mermaid sequence diagram (key APIs/endpoints of the whole flow) ─────────
+function buildMermaid() {
+  const bk = host(eps.backend);
+  const ok = host(eps.oboMcp);
+  const selfAuth = (raw.target || "cloud") === "local"
+    ? "OBO exchange (dev client secret)"
+    : "OBO exchange (FIC → managed identity)";
+  // Keep labels free of characters Mermaid dislikes; <br/> is supported.
+  return [
+    "sequenceDiagram",
+    "    autonumber",
+    "    participant U as 🧑 You · Browser (MSAL)",
+    `    participant B as ⚙️ Backend<br/>${bk}`,
+    "    participant F as ☁️ Foundry Invocations",
+    "    participant A as 🤖 Hosted Agent (Copilot SDK)",
+    "    participant P as 🚪 APIM AI gateway<br/>(logs prompt + completion)",
+    "    participant L as 🧠 LLM (gpt)",
+    `    participant M as 🔐 graph-obo MCP<br/>${ok}`,
+    "    participant E as 🪪 Microsoft Entra",
+    "    participant G as 📇 Microsoft Graph",
+    "    U->>B: POST /api/agent/chat<br/>body.mcpAccessTokens.graph-obo = user JWT",
+    "    B->>F: POST …/agents/kratos-agent/…/invocations<br/>(Foundry Invocations gateway)",
+    "    F->>A: invoke (warm-pool session)",
+    "    A->>P: POST /openai/deployments/{model}/chat/completions<br/>messages + tools",
+    "    P->>L: forward (MI auth) · logs request",
+    "    L-->>P: tool_call graph-obo-get_my_profile {}",
+    "    P-->>A: response · logs completion",
+    "    A->>M: tools/call get_my_profile<br/>Authorization: Bearer user JWT",
+    `    M->>E: ${selfAuth}`,
+    "    E-->>M: Graph token (scope User.Read)",
+    "    M->>G: GET /v1.0/me?$select=jobTitle,department,…<br/>GET /me/photos/48x48/$value",
+    "    G-->>M: 200 profile + photo<br/>(request-id stamped on response)",
+    "    M-->>A: tool result<br/>jobTitle, office, …, graphRequestId, photo",
+    "    A->>P: chat.completions(tool result)",
+    "    P->>L: forward · logs request",
+    "    L-->>P: final answer",
+    "    P-->>A: response · logs completion",
+    "    A-->>U: streamed answer",
+  ].join("\n");
+}
+const mermaid = buildMermaid();
+
 // ── What the LOGIN TOKEN carries (identity only) ────────────────────────────
 const jwtFields = [
   { k: "aud (who it's for)", v: claims.aud },
@@ -82,11 +124,19 @@ const technicalFields = [
 
 const photoDataUri = typeof tr.photoDataUri === "string" ? tr.photoDataUri : raw.photoDataUri || null;
 
-// ── Representative LLM round-trip (assembled from the REAL prompt, tool schema,
-// tool call and result captured this run). Shows what the agent sends the model
-// and what the model sends back when it decides to use the tool. ─────────────
-const llmModel = raw.llmModel || "gpt (Foundry-hosted via Copilot SDK)";
-const llmRequest = {
+// ── LLM round-trip — REAL data captured by APIM (ApiManagementGatewayLlmLog),
+// falling back to a clearly-labelled reconstruction only if the gateway log
+// wasn't available. raw.llmLog.calls is oldest-first: [0]=tool decision, [last]=answer.
+const llmLog = raw.llmLog && Array.isArray(raw.llmLog.calls) && raw.llmLog.calls.length ? raw.llmLog : null;
+const llmReal = !!llmLog;
+const llmModel = raw.llmModel || (llmLog && llmLog.calls[0].deployment) || "gpt (Foundry-hosted via Copilot SDK)";
+
+// Decide-call (model chooses the tool) and answer-call (model writes the reply).
+const decideCall = llmLog ? llmLog.calls[0] : null;
+const answerCall = llmLog ? llmLog.calls[llmLog.calls.length - 1] : null;
+
+// Reconstruction fallbacks (only used when llmLog is absent).
+const fbRequest = {
   model: llmModel,
   messages: [
     { role: "system", content: "You are the kratos agent. Use the available tools to answer about the signed-in user." },
@@ -104,24 +154,29 @@ const llmRequest = {
   ],
   tool_choice: "auto",
 };
-const llmToolCallResponse = {
+const fbToolCall = {
   role: "assistant",
   content: null,
-  tool_calls: [
-    {
-      id: "call_graph_obo_1",
-      type: "function",
-      function: { name: "graph-obo-get_my_profile", arguments: "{}" },
-    },
-  ],
+  tool_calls: [{ id: "call_graph_obo_1", type: "function", function: { name: "graph-obo-get_my_profile", arguments: "{}" } }],
 };
-const toolResultMessage = {
+const fbToolResultMsg = {
   role: "tool",
   tool_call_id: "call_graph_obo_1",
   name: "graph-obo-get_my_profile",
   content: fmt({ ...tr, photoDataUri: photoDataUri ? "<48x48 image data-uri, omitted>" : undefined }),
 };
-const llmFinalResponse = { role: "assistant", content: raw.answer || "" };
+const fbFinal = { role: "assistant", content: raw.answer || "" };
+
+// What each step renders (real if captured, else reconstruction).
+const decideReq = decideCall ? decideCall.request : fbRequest;
+const decideResp = decideCall ? decideCall.response : fbToolCall;
+const answerReq = answerCall ? answerCall.request : fbToolResultMsg;
+const answerResp = answerCall ? answerCall.response : fbFinal;
+const captionReal = (c) =>
+  c
+    ? `<span class="pill ok">captured at APIM</span> CorrelationId <code>${c.correlationId}</code>${c.usage && c.usage.totalTokens != null ? ` · ${c.usage.totalTokens} tokens` : ""}`
+    : `<span class="pill">reconstructed</span> (APIM LLM log not captured this run)`;
+
 
 // ── the 5 hops ──────────────────────────────────────────────────────────────
 const steps = [
@@ -144,7 +199,7 @@ const steps = [
     from: `Backend · ${host(eps.backend)}`,
     to: "Hosted agent (Foundry Invocations)",
     summary:
-      "Straight to the Foundry project Invocations endpoint — no APIM in this path. The mcpAccessTokens body field is preserved and reaches the sandbox.",
+      "Straight to the Foundry project Invocations endpoint. The mcpAccessTokens body field is preserved and reaches the sandbox. (The agent's LLM calls — next step — DO go through the APIM AI gateway.)",
     detailLabel: "POST …/agents/kratos-agent/endpoint/protocols/invocations",
     detail: [
       `${eps.foundryInvocations || "https://<resource>.cognitiveservices.azure.com/api/projects/<proj>/agents/kratos-agent/endpoint/protocols/invocations?api-version=…"}`,
@@ -154,20 +209,22 @@ const steps = [
       "",
       "// Body carries the user's mcpAccessTokens through to the hosted agent.",
     ].join("\n"),
-    note: `The &quot;gateway&quot; here is <b>Foundry's own Invocations gateway</b> (warm-pool / session manager), <b>not</b> APIM. The APIM AI-gateway fronts LLM calls only and is bypassed in this deployment.`,
+    note: `The agent-invocation hop uses <b>Foundry's own Invocations gateway</b> (warm-pool / session manager). Separately, the agent's <b>LLM (chat completions)</b> calls are routed through the <b>APIM AI gateway</b> — see the next step, captured live.`,
   },
   {
-    title: "The agent asks the model — and the model decides to call the tool",
-    from: "Hosted agent ↔ LLM",
+    title: "The agent asks the model — captured at the APIM AI gateway",
+    from: "Hosted agent → APIM → LLM",
     to: "graph-obo tool selected",
     summary:
-      "The agent sends the model your question plus the tools it has. The model replies with a tool call: run graph-obo-get_my_profile. (No arguments — you're identified by the attached token, not by prompt text.)",
-    detailLabel: "The model round-trip",
+      "The agent's chat-completions call goes through APIM (which logs it), then to the model. The model replies with a tool call: run graph-obo-get_my_profile. Both shown are the REAL payloads from the APIM GenAI gateway log.",
+    detailLabel: `The model round-trip · ${llmReal ? "real, captured at APIM" : "reconstructed"}`,
     blocks: [
-      { label: "① Agent → LLM  (request: your message + available tools)", content: fmt(llmRequest) },
-      { label: "② LLM → Agent  (response: “call graph-obo-get_my_profile”)", content: fmt(llmToolCallResponse) },
+      { label: `① Agent → LLM  (request: messages + tools) — ${captionReal(decideCall)}`, content: fmt(decideReq) },
+      { label: `② LLM → Agent  (response: tool call) — ${captionReal(decideCall)}`, content: fmt(decideResp) },
     ],
-    note: `This is the moment the agent decides to act. The model only chooses the tool — it never sees your token; the SDK injects that as the tool's HTTP header in the next step.`,
+    note: llmReal
+      ? `These are the <b>actual wire payloads</b> APIM recorded (<code>ApiManagementGatewayLlmLog</code>) — not reconstructed. The model only chooses the tool; it never sees your token (the SDK injects that as the tool's HTTP header next).`
+      : `APIM's LLM log wasn't captured this run, so this shows a reconstruction. The model only chooses the tool; it never sees your token.`,
   },
   {
     title: "The agent runs the tool as YOU — On-Behalf-Of → Microsoft Graph",
@@ -197,15 +254,15 @@ const steps = [
     note: `Self-auth differs by environment only: <b>cloud</b> = secret-less managed-identity federation; <b>local</b> = a dev client secret on the same app reg. The token validation and the Graph call are identical.`,
   },
   {
-    title: "The model writes the answer — and you see it",
-    from: "Hosted agent ↔ LLM",
+    title: "The model writes the answer — captured at the APIM AI gateway",
+    from: "Hosted agent → APIM → LLM",
     to: "Browser (streamed answer)",
     summary:
-      "The tool result goes back to the model, which turns it into a human answer and streams it to you. The words below could only come from a live Graph call made on your behalf.",
-    detailLabel: "The model round-trip (answer)",
+      "The tool result goes back to the model (through APIM again), which turns it into a human answer and streams it to you. Streamed completions are reassembled by APIM into the gateway log.",
+    detailLabel: `The model round-trip (answer) · ${llmReal ? "real, captured at APIM" : "reconstructed"}`,
     blocks: [
-      { label: "① Agent → LLM  (request: here is the tool result)", content: fmt(toolResultMessage) },
-      { label: "② LLM → Agent → You  (final answer)", content: fmt(llmFinalResponse) },
+      { label: `① Agent → LLM  (request: prior turn + tool result) — ${captionReal(answerCall)}`, content: fmt(answerReq) },
+      { label: `② LLM → Agent → You  (final answer) — ${captionReal(answerCall)}`, content: fmt(answerResp) },
     ],
     note: `Everything in the answer that isn't your name/login came from <b>Microsoft Graph</b>, live, as you — see the proof below.`,
   },
@@ -215,9 +272,9 @@ const steps = [
 const diagram = [
   { n: 1, label: "You", sub: "+ delegated token" },
   { n: 2, label: "Backend", sub: "→ Foundry agent" },
-  { n: 3, label: "LLM", sub: "decides: call tool" },
+  { n: 3, label: "APIM → LLM", sub: "decides: call tool" },
   { n: 4, label: "OBO → Graph", sub: "runs as YOU" },
-  { n: 5, label: "Answer", sub: "streamed back" },
+  { n: 5, label: "APIM → LLM", sub: "writes answer" },
 ];
 
 const walkthrough = {
@@ -225,6 +282,7 @@ const walkthrough = {
   capturedAt: raw.capturedAt || new Date().toISOString().replace("T", " ").slice(0, 16) + " UTC",
   prompt: raw.prompt,
   endpoints: eps,
+  mermaid,
   diagram,
   steps,
   answer: raw.answer || "",
@@ -242,14 +300,14 @@ const walkthrough = {
   },
   notes: {
     apim:
-      "<b>No APIM in the agent path.</b> Agent invocations go directly to the Foundry project endpoint " +
-      "(<code>…cognitiveservices.azure.com/api/projects/…/agents/kratos-agent/…/invocations</code>). The " +
-      "&quot;gateway&quot; in the logs is Foundry's own Invocations gateway (warm-pool/session manager). The APIM " +
-      "AI-gateway is an optional <b>LLM</b> governance layer; in this deployment <code>FOUNDRY_ENDPOINT</code> targets " +
-      "the AI Services resource directly, so APIM is provisioned but bypassed.",
+      "<b>APIM AI gateway is in the LLM path.</b> The hosted agent's chat-completions calls go through APIM " +
+      "(<code>{gateway}/openai/deployments/{model}/chat/completions</code>) → the same AI Services/Foundry account, " +
+      "MI-authenticated. APIM logs the prompt + completion to <code>ApiManagementGatewayLlmLog</code> (streamed " +
+      "responses reassembled by CorrelationId), which is how steps 3 &amp; 5 above show the real model payloads. " +
+      "The separate agent-invocation hop still uses Foundry's own Invocations gateway (not APIM).",
     llm:
-      "The model round-trip (steps 3 &amp; 5) is shown in the OpenAI chat-completions shape, assembled from the " +
-      "<b>real</b> prompt, tool schema, tool call and result captured this run. The model only ever sees the tool's " +
+      "Steps 3 &amp; 5 show the <b>actual</b> model request/response captured by APIM (or a clearly-labelled " +
+      "reconstruction if the gateway log wasn't available for the run). The model only ever sees the tool's " +
       "<i>result</i> — never your access token.",
     repro:
       `<b>Reproduce:</b> <code>cd .copilot/skills/obo-demo-walkthrough &amp;&amp; ` +

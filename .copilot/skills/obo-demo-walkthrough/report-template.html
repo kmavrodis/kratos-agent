@@ -140,6 +140,18 @@ h2.section .num { color: var(--cp-accent); }
 .flow-arrow { flex: 0 0 auto; display: grid; place-items: center; color: var(--cp-accent); font-size: 1.1rem; padding: 0 4px; align-self: center; }
 @media (max-width: 720px) { .flow-node .fn-sub { display: none; } .flow-node { min-width: 84px; } }
 
+/* Architecture (mermaid) expandable */
+.arch { margin: 16px 0 4px; background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 14px; overflow: hidden; }
+.arch > summary { cursor: pointer; padding: 13px 16px; font-weight: 600; font-size: 0.95rem; list-style: none; display: flex; align-items: center; gap: 8px; user-select: none; }
+.arch > summary::-webkit-details-marker { display: none; }
+.arch > summary:hover { color: var(--cp-accent); }
+.arch .arch-ico { color: var(--cp-accent); }
+.arch[open] > summary { border-bottom: 1px solid var(--cp-border); }
+.arch-body { padding: 14px 16px; overflow-x: auto; }
+.arch-body .mermaid { display: flex; justify-content: center; min-height: 40px; }
+.arch-body .mermaid svg { max-width: 100%; height: auto; }
+.arch-fallback { margin-top: 0; }
+
 /* Persona proof */
 .persona-card { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start; }
 @media (max-width: 560px) { .persona-card { grid-template-columns: 1fr; } }
@@ -239,13 +251,24 @@ footer { margin-top: 36px; font-size: 0.78rem; color: var(--cp-text-soft); text-
     </div>
   </header>
 
+  <details class="arch" id="archBox" open>
+    <summary><span class="arch-ico">⛓</span> Architecture &amp; APIs — full sequence (click to collapse)</summary>
+    <div class="arch-body">
+      <div class="mermaid" id="mermaidBox"></div>
+      <pre class="payload arch-fallback" id="mermaidSrc" style="display:none"></pre>
+    </div>
+  </details>
+
   <div class="flow" id="flow"></div>
 
   <h2 class="section"><span class="num">1.</span> The journey of one request</h2>
   <div class="steps" id="steps"></div>
 
   <h2 class="section"><span class="num">2.</span> Proof it ran as you (not the agent), live from Microsoft Graph</h2>
-  <div class="proof-card graph" style="border-top:3px solid var(--cp-success)">
+  <div class="detail-label">Agent's rendered answer</div>
+  <div class="answer" id="answer"></div>
+
+  <div class="proof-card graph" style="border-top:3px solid var(--cp-success); margin-top:14px">
     <h3 style="margin:0 0 4px">This is really you — your live directory profile</h3>
     <p class="hint" style="margin:0 0 14px">A login token proves <i>who you are</i>, but it never carries your job title, department or office — those aren't even available as token claims. They came back from Microsoft Graph, fetched live <b>on your behalf</b> — so they prove the call ran as you.</p>
     <div class="persona-card">
@@ -270,8 +293,6 @@ footer { margin-top: 36px; font-size: 0.78rem; color: var(--cp-text-soft); text-
     </div>
   </div>
   <div class="match-banner" id="matchBanner"></div>
-  <div class="detail-label" style="margin-top:18px">Agent's rendered answer</div>
-  <div class="answer" id="answer"></div>
 
   <h2 class="section"><span class="num">3.</span> Architecture notes &amp; how to reproduce</h2>
   <div class="note" id="apimNote"></div>
@@ -300,6 +321,28 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>]/g, (m) => ({ "&": "
   if (eps.oboMcp) b.appendChild(el("span", "badge", `OBO MCP · ${esc((eps.oboMcp.split("//")[1]||"").split(".")[0])}`));
 })();
 $("#prompt").textContent = DATA.prompt || "";
+
+// Architecture sequence diagram (Mermaid, theme-aware, with text fallback)
+(() => {
+  const src = DATA.mermaid || "";
+  const box = $("#mermaidBox");
+  const fallback = $("#mermaidSrc");
+  if (!src) { $("#archBox").style.display = "none"; return; }
+  fallback.textContent = src;
+  const showFallback = () => { box.style.display = "none"; fallback.style.display = "block"; };
+  const theme = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "neutral";
+  const s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js";
+  s.onload = async () => {
+    try {
+      window.mermaid.initialize({ startOnLoad: false, theme, securityLevel: "loose", sequence: { useMaxWidth: true } });
+      const { svg } = await window.mermaid.render("seqGraph", src);
+      box.innerHTML = svg;
+    } catch (e) { showFallback(); }
+  };
+  s.onerror = showFallback; // offline / blocked CDN → show the readable source
+  document.head.appendChild(s);
+})();
 
 // Flow diagram (1:1 with steps)
 const flowRoot = $("#flow");

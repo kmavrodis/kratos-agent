@@ -563,6 +563,10 @@ async def handle_invoke(request: Request) -> Response:
                 # _apply_mcp_tokens cannot auto-attach the graph-obo MCP tool.
                 "obo_env_url_present": bool(os.environ.get("OBO_MCP_SERVER_MCP_URL")),
                 "obo_env_name": os.environ.get("OBO_MCP_SERVER_NAME", "graph-obo"),
+                # Confirms the agent's LLM calls are routed through the APIM AI
+                # gateway (so prompts/completions are captured). Empty => the
+                # sandbox calls Foundry directly.
+                "llm_gateway_host": (os.environ.get("LLM_GATEWAY_BASE_URL", "").split("//")[-1].split("/")[0]),
             },
         ),
         media_type="text/event-stream",
