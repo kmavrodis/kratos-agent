@@ -74,3 +74,4 @@ use-cases/*/.github/prompts/
 use-cases/*/.github/instructions/
 use-cases/*/.github/agents/
 use-cases/*/.agents/
+docker-compose.apim.yml

@@ -22,7 +22,7 @@ from azure.identity.aio import ManagedIdentityCredential, get_bearer_token_provi
 from copilot import CopilotClient, PermissionHandler
 
 try:
-    from azure.identity.aio import AzureCLICredential, ChainedTokenCredential
+    from azure.identity.aio import AzureCliCredential, ChainedTokenCredential
 
     _HAS_CLI_CREDENTIAL = True
 except ImportError:
@@ -427,27 +427,82 @@ class CopilotAgent:
         """
         local_mode = self.settings.is_local_mode
 
-        if local_mode:
-            if self.settings.copilot_github_token and not os.environ.get("GITHUB_TOKEN"):
-                os.environ["GITHUB_TOKEN"] = self.settings.copilot_github_token
-        else:
-            if _HAS_CLI_CREDENTIAL:
+        if self._use_azure_provider:
+            # Fail fast on misconfiguration: an Azure provider with no endpoint or
+            # no deployment would build a bogus base_url ("/openai/deployments/…")
+            # and fail later inside session creation with a misleading error.
+            llm_base = self.settings.llm_gateway_base_url or self.settings.foundry_endpoint
+            if not llm_base or not self.settings.foundry_model_deployment:
+                raise RuntimeError(
+                    "Azure provider mode requires an endpoint and a model deployment: "
+                    f"llm_gateway_base_url={self.settings.llm_gateway_base_url!r} "
+                    f"foundry_endpoint={self.settings.foundry_endpoint!r} "
+                    f"foundry_model_deployment={self.settings.foundry_model_deployment!r}. "
+                    "Set LLM_GATEWAY_BASE_URL (or FOUNDRY_ENDPOINT) and FOUNDRY_MODEL_DEPLOYMENT."
+                )
+
+            # Cloud, or local opted-in to the APIM gateway: authenticate to the
+            # Azure endpoint. NOTE: the Copilot SDK's backing engine authenticates
+            # to the provider with its OWN ambient Azure credentials
+            # (DefaultAzureCredential): Managed Identity in the Foundry sandbox /
+            # Container App, an EnvironmentCredential service principal, or the az
+            # CLI locally. The token_provider we set here is best-effort and may be
+            # ignored by the engine — so a failure to pre-warm it is NOT fatal.
+            #   * Cloud sandbox   → Managed Identity (with az-CLI fallback for dev).
+            #   * Local + gateway → az CLI credential (operator is `az login`-ed),
+            #     so LLM calls flow through the APIM gateway and are captured in
+            #     ApiManagementGatewayLlmLog. In a local container without the az
+            #     CLI, provide ambient creds instead (AZURE_CLIENT_ID/SECRET/
+            #     TENANT_ID for the engine's EnvironmentCredential).
+            if local_mode and _HAS_CLI_CREDENTIAL:
+                self._credential = AzureCliCredential()
+            elif _HAS_CLI_CREDENTIAL:
                 self._credential = ChainedTokenCredential(
                     ManagedIdentityCredential(),
-                    AzureCLICredential(),
+                    AzureCliCredential(),
                 )
             else:
                 self._credential = ManagedIdentityCredential()
             scope = "https://cognitiveservices.azure.com/.default"
             self._token_provider = get_bearer_token_provider(self._credential, scope)
 
-            # Pre-warm: acquire the first token now so user requests don't pay the cost
+            # Pre-warm the token so a request doesn't pay first-token latency. This
+            # is best-effort: the engine has its own ambient credential, so a
+            # failure here is only a warning (e.g. local container without az CLI —
+            # the engine still authenticates via its ambient managed identity / SP).
             try:
                 t0 = time.monotonic()
                 await self._credential.get_token(scope)
                 logger.info("Token pre-warmed successfully in %.1fms", (time.monotonic() - t0) * 1000)
             except Exception:
-                logger.warning("Token pre-warm failed — first request will be slower", exc_info=True)
+                logger.warning(
+                    "Token pre-warm failed (non-fatal — engine uses its own ambient credential). "
+                    "If LLM calls fail, ensure ambient Azure creds are available (Managed Identity, "
+                    "AZURE_CLIENT_ID/SECRET/TENANT_ID, or `az login`).",
+                    exc_info=True,
+                )
+        else:
+            # Pure local mode → Copilot SDK's default GitHub-hosted model.
+            if self.settings.copilot_github_token and not os.environ.get("GITHUB_TOKEN"):
+                os.environ["GITHUB_TOKEN"] = self.settings.copilot_github_token
+
+        # One explicit resolved-config line so it's obvious which path is active.
+        if not self._use_azure_provider:
+            _mode = "github"
+            _addr = "api.githubcopilot.com"
+        elif self.settings.llm_gateway_base_url:
+            _mode = "azure-apim"
+            _addr = self.settings.llm_gateway_base_url
+        else:
+            _mode = "azure-direct"
+            _addr = self.settings.foundry_endpoint
+        logger.info(
+            "LLM provider resolved: mode=%s endpoint=%s deployment=%s local=%s",
+            _mode,
+            _addr,
+            self.settings.foundry_model_deployment or "(github-default)",
+            local_mode,
+        )
 
         self._client = CopilotClient()
         await self._client.start()
@@ -464,14 +519,14 @@ class CopilotAgent:
             "gen_ai.agents.name": "kratos-agent",
             "gen_ai.agent.version": "0.1.0",
         }
-        if local_mode:
+        if not self._use_azure_provider:
             span_attrs["gen_ai.system"] = "github"
             span_attrs["gen_ai.provider.name"] = "github"
             span_attrs["server.address"] = "api.githubcopilot.com"
         else:
             span_attrs["gen_ai.system"] = "openai"
             span_attrs["gen_ai.provider.name"] = "azure.ai.openai"
-            span_attrs["server.address"] = self.settings.foundry_endpoint
+            span_attrs["server.address"] = self.settings.llm_gateway_base_url or self.settings.foundry_endpoint
         with tracer.start_as_current_span(
             "create_agent kratos-agent",
             kind=trace.SpanKind.CLIENT,
@@ -479,14 +534,21 @@ class CopilotAgent:
         ):
             pass
 
-        if local_mode:
+        if not self._use_azure_provider:
             logger.info(
                 "CopilotClient started (local mode — GitHub token auth, sdk_version=%s)",
                 version("github-copilot-sdk"),
             )
         else:
+            _via = (
+                f"APIM gateway {self.settings.llm_gateway_base_url}"
+                if self.settings.llm_gateway_base_url
+                else "Foundry direct"
+            )
             logger.info(
-                "CopilotClient started (Managed Identity auth, sdk_version=%s)",
+                "CopilotClient started (Azure provider via %s, auth=%s, sdk_version=%s)",
+                _via,
+                "az CLI" if local_mode else "Managed Identity",
                 version("github-copilot-sdk"),
             )
 
@@ -532,22 +594,38 @@ class CopilotAgent:
             await self._cosmos_service.delete_all_session_mappings()
         logger.info("Config updated — all sessions reset")
 
-    def _build_provider_config(self) -> dict | None:
-        """Return the Azure provider dict for cloud mode, or ``None`` in local mode.
+    @property
+    def _use_azure_provider(self) -> bool:
+        """Whether to route LLM calls through the Azure provider (Foundry / APIM).
 
-        In local mode the Copilot SDK falls back to its default GitHub-hosted model
-        and authenticates via the ``GITHUB_TOKEN`` / ``COPILOT_GITHUB_TOKEN`` env var.
+        * Cloud mode → always (the agent talks to Foundry, optionally fronted by
+          the APIM AI gateway when ``llm_gateway_base_url`` is set).
+        * Local mode → opt-in: only when ``llm_gateway_base_url`` is explicitly
+          configured, so an operator can exercise the real Azure path locally
+          (e.g. to capture prompts/completions in the APIM gateway log). Without
+          it, local mode keeps using the Copilot SDK's GitHub-hosted model.
+        """
+        if not self.settings.is_local_mode:
+            return True
+        return bool(self.settings.llm_gateway_base_url)
+
+    def _build_provider_config(self) -> dict | None:
+        """Return the Azure provider dict, or ``None`` for the GitHub-hosted model.
+
+        Returns ``None`` only in pure local mode (no gateway configured), where the
+        Copilot SDK falls back to its default GitHub-hosted model authenticated via
+        the ``GITHUB_TOKEN`` env var. Otherwise returns an Azure provider whose
+        ``base_url`` fronts the LLM through the APIM AI gateway when
+        ``llm_gateway_base_url`` is set (governance + the GenAI gateway log), or the
+        AI Services account directly. Both expose the same
+        ``/openai/deployments/<model>/chat/completions`` shape.
 
         Returns:
-            A provider configuration dict suitable for ``CopilotClient`` sessions
-            when running against Azure OpenAI, or ``None`` when running in local
-            (GitHub-hosted) mode.
+            A provider configuration dict for ``CopilotClient`` sessions when
+            running against Azure OpenAI, or ``None`` for local GitHub-hosted mode.
         """
-        if self.settings.is_local_mode:
+        if not self._use_azure_provider:
             return None
-        # Front the LLM through the APIM AI gateway when configured (governance +
-        # observability); otherwise call the AI Services account directly. Both
-        # expose the same /openai/deployments/<model>/chat/completions shape.
         llm_base = (self.settings.llm_gateway_base_url or self.settings.foundry_endpoint).rstrip("/")
         return {
             "type": "azure",
@@ -765,11 +843,16 @@ class CopilotAgent:
             or os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "").lower() == "true"
         )
 
-        _local_mode = self.settings.is_local_mode
+        _github = not self._use_azure_provider
+        _server_addr = (
+            "api.githubcopilot.com"
+            if _github
+            else (self.settings.llm_gateway_base_url or self.settings.foundry_endpoint)
+        )
         _invoke_span_attrs: dict = {
             "gen_ai.operation.name": "invoke_agent",
-            "gen_ai.system": "github" if _local_mode else "openai",
-            "gen_ai.provider.name": "github" if _local_mode else "azure.ai.openai",
+            "gen_ai.system": "github" if _github else "openai",
+            "gen_ai.provider.name": "github" if _github else "azure.ai.openai",
             "gen_ai.request.model": self.settings.foundry_model_deployment,
             "gen_ai.agent.id": "kratos-agent",
             "gen_ai.agent.name": "kratos-agent",
@@ -778,7 +861,7 @@ class CopilotAgent:
             "gen_ai.agent.version": "0.1.0",
             "gen_ai.conversation.id": conversation_id,
             "kratos.conversation_id": conversation_id,
-            "server.address": "api.githubcopilot.com" if _local_mode else self.settings.foundry_endpoint,
+            "server.address": _server_addr,
         }
         with tracer.start_as_current_span(
             "invoke_agent kratos-agent",
@@ -1178,9 +1261,9 @@ class CopilotAgent:
                 # Record GenAI metrics (token usage + operation duration)
                 _metric_attrs = {
                     "gen_ai.operation.name": "invoke_agent",
-                    "gen_ai.provider.name": "github" if _local_mode else "azure.ai.openai",
+                    "gen_ai.provider.name": "github" if _github else "azure.ai.openai",
                     "gen_ai.request.model": self.settings.foundry_model_deployment,
-                    "server.address": "api.githubcopilot.com" if _local_mode else self.settings.foundry_endpoint,
+                    "server.address": _server_addr,
                 }
                 if usage.get("prompt", 0):
                     token_usage_histogram.record(usage["prompt"], {**_metric_attrs, "gen_ai.token.type": "input"})
