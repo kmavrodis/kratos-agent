@@ -272,17 +272,11 @@ class FoundryAgentProxy:
             preamble_parts.append(f"<use_case>{use_case}</use_case>")
         if system_prompt:
             preamble_parts.append(f"<system_instructions>\n{system_prompt}\n</system_instructions>")
-        # The Invocations gateway may strip custom JSON body fields, so also carry
-        # the per-MCP-server user OBO tokens as an input tag (defense-in-depth with
-        # the body field below). The hosted agent parses and STRIPS this tag before
-        # the model sees the message; the tokens are never logged here or surfaced
-        # to the model.
-        if mcp_access_tokens:
-            preamble_parts.append(
-                "<mcp_access_tokens>"
-                + json.dumps(mcp_access_tokens, separators=(",", ":"))
-                + "</mcp_access_tokens>"
-            )
+        # SECURITY: per-MCP-server user OBO tokens are NEVER embedded in the
+        # prompt/input text. A bearer in input_text would enter the model's
+        # context and be captured by GenAI message-content traces / gateway logs.
+        # They are delivered out-of-band via the mcpAccessTokens JSON body field
+        # below, which the Invocations gateway preserves.
         input_text = "\n\n".join(preamble_parts) + f"\n\n{message}" if preamble_parts else message
 
         token = await self._get_token()
@@ -302,11 +296,12 @@ class FoundryAgentProxy:
             "conversationId": conversation_id,
             "useCase": use_case,
         }
-        # Forward per-MCP-server user tokens in the JSON body. The Invocations
-        # gateway preserves body fields (unlike custom HTTP headers), so the
-        # hosted agent reads them from data["mcpAccessTokens"] and injects each
-        # as the Authorization header on the matching remote MCP server. Tokens
-        # are secrets — never logged.
+        # Forward per-MCP-server user tokens in the JSON body — the ONLY channel
+        # for OBO bearers. The Invocations gateway preserves body fields (unlike
+        # custom HTTP headers or, deliberately, the prompt), so the hosted agent
+        # reads them from data["mcpAccessTokens"] and injects each as the
+        # Authorization header on the matching remote MCP server. Tokens are
+        # secrets — never placed in the prompt and never logged.
         if mcp_access_tokens:
             payload["mcpAccessTokens"] = mcp_access_tokens
 

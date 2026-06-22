@@ -495,11 +495,12 @@ async def handle_invoke(request: Request) -> Response:
                 flags=re.DOTALL,
             )
 
-            # Parse + STRIP <mcp_access_tokens> tag — fallback delivery for the
-            # per-MCP OBO tokens when the gateway strips the mcpAccessTokens JSON
-            # body field. The body field (if present) wins. The ENTIRE tag block
-            # is always removed so the token can never reach the model, even if
-            # the JSON payload fails to parse. Token values are never logged.
+            # STRIP and IGNORE any <mcp_access_tokens> tag. OBO bearers are
+            # delivered ONLY via the mcpAccessTokens JSON body field; a token in
+            # the prompt would reach the model and GenAI message-content traces,
+            # so the proxy never emits one. The ENTIRE tag block is always removed
+            # so nothing reaches the model even if some other caller injects it,
+            # and any keys found are logged (for observability) but never honored.
             def _consume_mcp_tag(m: "re.Match[str]") -> str:
                 payload = m.group(1)
                 try:
@@ -511,7 +512,6 @@ async def handle_invoke(request: Request) -> Response:
                     for k, v in parsed.items():
                         if isinstance(v, str) and v:
                             tag_token_keys.append(str(k))
-                            mcp_access_tokens.setdefault(str(k), v)
                 return ""
 
             message = re.sub(
