@@ -10,6 +10,7 @@ import contextlib
 import json
 import logging
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import aiohttp
 from azure.identity.aio import DefaultAzureCredential
@@ -291,7 +292,7 @@ class FoundryAgentProxy:
             headers["x-kratos-eval-run-id"] = str(eval_run_id)
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        payload = {
+        payload: dict[str, Any] = {
             "input": input_text,
             "conversationId": conversation_id,
             "useCase": use_case,

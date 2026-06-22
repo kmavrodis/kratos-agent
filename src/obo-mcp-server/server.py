@@ -58,10 +58,12 @@ def get_my_profile(ctx: Context) -> dict:
         validate_user_token(token)  # rejects wrong audience / scope / tenant / expiry
         profile = fetch_my_profile(token)
         logger.info("get_my_profile: returned profile for upn=%s", profile.get("userPrincipalName"))
-        # Full (non-sensitive) projection at INFO so demos/observability can show
-        # exactly what Graph returned — including the live profile photo + the
-        # graph-only proof fields (graphRequestId, account/password dates) that
-        # are absent from the access token. The report harness reads this line.
+        # DEMO ONLY: log the full Graph result (incl. profile photo + proof fields
+        # like graphRequestId) so the demo report harness can show exactly what
+        # Graph returned. This payload is PERSONAL DATA.
+        # SECURITY HINT: do NOT log sensitive/personal data (or secrets) in
+        # production — logs are a common leak vector. Prefer correlation ids
+        # (e.g. graphRequestId) over the payload, or drop this line entirely.
         logger.info("get_my_profile result: %s", json.dumps(profile, default=str))
         # The 48x48 photo is a base64 data URI — useful for the report (captured
         # from the log above) but noise for the model, which might echo the blob.

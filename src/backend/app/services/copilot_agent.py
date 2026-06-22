@@ -282,7 +282,8 @@ class CopilotAgent:
             if server_name != obo_name:
                 logger.warning(
                     "Ignoring OBO token for non-OBO MCP server '%s' (only '%s' may carry it)",
-                    server_name, obo_name,
+                    server_name,
+                    obo_name,
                 )
                 continue
             entry = servers.get(server_name)
@@ -302,7 +303,8 @@ class CopilotAgent:
                 # trusted OBO URL must not receive the bearer (tampered registry).
                 logger.warning(
                     "Configured server '%s' url=%r != trusted OBO url — not attaching token",
-                    server_name, entry.get("url"),
+                    server_name,
+                    entry.get("url"),
                 )
                 continue
             headers = dict(entry.get("headers") or {})
@@ -319,9 +321,7 @@ class CopilotAgent:
     @staticmethod
     def _mcp_has_auth(mcp_servers: dict | None) -> bool:
         """True if any MCP server carries an ``Authorization`` header (identity-bearing)."""
-        return any(
-            (entry.get("headers") or {}).get("Authorization") for entry in (mcp_servers or {}).values()
-        )
+        return any((entry.get("headers") or {}).get("Authorization") for entry in (mcp_servers or {}).values())
 
     @staticmethod
     def _mcp_fingerprint(mcp_servers: dict | None) -> str:
@@ -333,8 +333,9 @@ class CopilotAgent:
         headers are present. The raw token is never logged or persisted.
         """
         parts = []
-        for name in sorted(mcp_servers or {}):
-            auth = (mcp_servers[name].get("headers") or {}).get("Authorization") or ""
+        servers = mcp_servers or {}
+        for name in sorted(servers):
+            auth = (servers[name].get("headers") or {}).get("Authorization") or ""
             if auth:
                 parts.append(f"{name}\x00{auth}")
         if not parts:
@@ -772,9 +773,7 @@ class CopilotAgent:
                 if self._session_mcp_fingerprints.get(conversation_id) == fingerprint:
                     logger.info("Reusing SDK session for conversation=%s", conversation_id)
                     return cached
-                logger.info(
-                    "MCP identity changed for conversation=%s — rebuilding SDK session", conversation_id
-                )
+                logger.info("MCP identity changed for conversation=%s — rebuilding SDK session", conversation_id)
                 await self._discard_session(conversation_id)
 
             logger.info(
