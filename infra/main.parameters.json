@@ -10,9 +10,6 @@
     },
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
-    },
-    "resourcePrefix": {
-      "value": "${AZURE_RESOURCE_PREFIX=lux}"
     }
   }
 }
