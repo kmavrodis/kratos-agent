@@ -12,7 +12,6 @@ connects with ``{"type": "http", "url": "https://<fqdn>/mcp"}``.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 
@@ -57,17 +56,11 @@ def get_my_profile(ctx: Context) -> dict:
         token = _bearer_from_context(ctx)
         validate_user_token(token)  # rejects wrong audience / scope / tenant / expiry
         profile = fetch_my_profile(token)
-        logger.info("get_my_profile: returned profile for upn=%s", profile.get("userPrincipalName"))
-        # DEMO ONLY: log the full Graph result (incl. profile photo + proof fields
-        # like graphRequestId) so the demo report harness can show exactly what
-        # Graph returned. This payload is PERSONAL DATA.
-        # SECURITY HINT: do NOT log sensitive/personal data (or secrets) in
-        # production — logs are a common leak vector. Prefer correlation ids
-        # (e.g. graphRequestId) over the payload, or drop this line entirely.
-        logger.info("get_my_profile result: %s", json.dumps(profile, default=str))
-        # The 48x48 photo is a base64 data URI — useful for the report (captured
-        # from the log above) but noise for the model, which might echo the blob.
-        # Hand the model everything EXCEPT the raw image bytes.
+        # Never log the profile payload — it is personal data and logs are a
+        # common leak vector (CodeQL clear-text-logging). Log success only.
+        logger.info("get_my_profile: profile fetched for the signed-in user")
+        # The 48x48 photo is a base64 data URI — noise for the model, which might
+        # echo the blob. Hand the model everything EXCEPT the raw image bytes.
         model_view = {k: v for k, v in profile.items() if k != "photoDataUri"}
         if "photoDataUri" in profile:
             model_view["hasProfilePhoto"] = True
