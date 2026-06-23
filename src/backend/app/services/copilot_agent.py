@@ -6,6 +6,8 @@ Uses DefaultAzureCredential for keyless auth to Microsoft Foundry.
 """
 
 import asyncio
+import copy
+import hashlib
 import json
 import logging
 import os
@@ -20,7 +22,7 @@ from azure.identity.aio import ManagedIdentityCredential, get_bearer_token_provi
 from copilot import CopilotClient, PermissionHandler
 
 try:
-    from azure.identity.aio import AzureCLICredential, ChainedTokenCredential
+    from azure.identity.aio import AzureCliCredential, ChainedTokenCredential
 
     _HAS_CLI_CREDENTIAL = True
 except ImportError:
@@ -162,6 +164,16 @@ class CopilotAgent:
         self._cosmos_service: CosmosService | None = None
         self._sessions: dict[str, object] = {}
         self._conversation_use_cases: dict[str, str] = {}  # conv_id -> use_case
+        # conv_id -> {mcp_server_name: user_access_token} for On-Behalf-Of header
+        # injection. Tokens are secrets — never logged in clear text.
+        self._conversation_mcp_tokens: dict[str, dict[str, str]] = {}
+        # conv_id -> fingerprint of the injected MCP Authorization header(s) the
+        # current SDK session was built with. A mismatch forces session recreation
+        # so the live OBO bearer is applied — resume_session cannot refresh an MCP
+        # server's frozen auth headers.
+        self._session_mcp_fingerprints: dict[str, str] = {}
+        # conv_id -> lock serialising SDK session acquisition / eviction.
+        self._session_locks: dict[str, asyncio.Lock] = {}
         self._system_prompt: str = DEFAULT_SYSTEM_PROMPT
         # Futures for resolving user input requests from the SDK
         self._user_input_futures: dict[str, asyncio.Future] = {}
@@ -186,6 +198,7 @@ class CopilotAgent:
         # Sessions are not explicitly disconnected here (async not possible in a property setter);
         # use update_system_prompt() in async contexts for a full disconnect + Cosmos cleanup.
         self._sessions.clear()
+        self._session_mcp_fingerprints.clear()
         # Must also clear registered handlers — without this, new sessions created after the
         # reset would skip session.on(on_event) registration (the handler guard checks this set),
         # causing the event queue to never receive events and every request to time out.
@@ -220,6 +233,129 @@ class CopilotAgent:
     def set_conversation_use_case(self, conversation_id: str, use_case: str) -> None:
         """Associate a conversation with a use-case."""
         self._conversation_use_cases[conversation_id] = use_case
+
+    def set_conversation_mcp_tokens(self, conversation_id: str, tokens: dict[str, str]) -> None:
+        """Register the signed-in user's per-MCP-server access tokens.
+
+        Keyed by MCP server name (e.g. ``{"graph-obo": "<token>"}``). The tokens
+        are injected as ``Authorization: Bearer`` headers on the matching remote
+        MCP servers when the SDK session config is built, so those tools run
+        On-Behalf-Of the user. Passing an empty dict clears any prior tokens.
+        """
+        if tokens:
+            self._conversation_mcp_tokens[conversation_id] = dict(tokens)
+        else:
+            self._conversation_mcp_tokens.pop(conversation_id, None)
+
+    def _apply_mcp_tokens(self, conversation_id: str, mcp_servers: dict | None) -> dict:
+        """Return a copy of ``mcp_servers`` with user OBO tokens injected as headers.
+
+        Only the configured OBO server (``OBO_MCP_SERVER_NAME``) ever receives a
+        user bearer — never any other MCP server the client may name (confused
+        deputy). For that server:
+          * if it is already configured (from the use-case ``.mcp.json``) its
+            ``headers.Authorization`` is set to the user's bearer token (provided
+            its URL matches the trusted ``OBO_MCP_SERVER_MCP_URL`` when that env
+            is set);
+          * otherwise a remote HTTP MCP server entry is created on the fly from
+            ``OBO_MCP_SERVER_MCP_URL``, so the OBO tool lights up across every
+            use-case without editing each ``.mcp.json``.
+
+        The original registry dict is never mutated (deep-copied first).
+        """
+        servers: dict = copy.deepcopy(mcp_servers) if mcp_servers else {}
+        tokens = self._conversation_mcp_tokens.get(conversation_id) or {}
+        if not tokens:
+            return servers
+
+        obo_name = os.environ.get("OBO_MCP_SERVER_NAME", "graph-obo")
+        obo_url = os.environ.get("OBO_MCP_SERVER_MCP_URL", "")
+
+        for server_name, token in tokens.items():
+            if not token:
+                continue
+            # Confused-deputy guard: a user OBO bearer is only ever attached to the
+            # known OBO server (OBO_MCP_SERVER_NAME). Never to any other MCP server
+            # the client may name — even one pre-configured from a use-case
+            # .mcp.json — since that would transmit the user's token to an
+            # unintended endpoint.
+            if server_name != obo_name:
+                logger.warning(
+                    "Ignoring OBO token for non-OBO MCP server '%s' (only '%s' may carry it)",
+                    server_name,
+                    obo_name,
+                )
+                continue
+            entry = servers.get(server_name)
+            if entry is None:
+                # Auto-create the known OBO server, but only with a configured URL.
+                if obo_url:
+                    entry = {"type": "http", "url": obo_url, "tools": ["*"]}
+                    servers[server_name] = entry
+                else:
+                    logger.warning(
+                        "OBO token provided for '%s' but OBO_MCP_SERVER_MCP_URL is unset — ignoring",
+                        server_name,
+                    )
+                    continue
+            elif obo_url and entry.get("url") and entry["url"] != obo_url:
+                # A pre-configured OBO-named server whose URL does not match the
+                # trusted OBO URL must not receive the bearer (tampered registry).
+                logger.warning(
+                    "Configured server '%s' url=%r != trusted OBO url — not attaching token",
+                    server_name,
+                    entry.get("url"),
+                )
+                continue
+            headers = dict(entry.get("headers") or {})
+            headers["Authorization"] = f"Bearer {token}"
+            entry["headers"] = headers
+
+        logger.info(
+            "Applied OBO tokens for conversation=%s to MCP servers=%s",
+            conversation_id,
+            sorted(tokens.keys()),
+        )
+        return servers
+
+    @staticmethod
+    def _mcp_has_auth(mcp_servers: dict | None) -> bool:
+        """True if any MCP server carries an ``Authorization`` header (identity-bearing)."""
+        return any((entry.get("headers") or {}).get("Authorization") for entry in (mcp_servers or {}).values())
+
+    @staticmethod
+    def _mcp_fingerprint(mcp_servers: dict | None) -> str:
+        """Non-reversible fingerprint of the injected MCP ``Authorization`` header(s).
+
+        Used only as an in-memory cache key to detect when the signed-in user's OBO
+        bearer changed, so the SDK session can be recreated (``resume_session`` cannot
+        refresh an MCP server's frozen auth headers). Returns ``""`` when no identity
+        headers are present. The raw token is never logged or persisted.
+        """
+        parts = []
+        servers = mcp_servers or {}
+        for name in sorted(servers):
+            auth = (servers[name].get("headers") or {}).get("Authorization") or ""
+            if auth:
+                parts.append(f"{name}\x00{auth}")
+        if not parts:
+            return ""
+        return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]
+
+    async def _discard_session(self, conversation_id: str) -> None:
+        """Evict and disconnect the cached SDK session for a conversation.
+
+        Clears the one-shot event-handler registration so the replacement session
+        re-binds its ``session.on(...)`` handler (otherwise the new session's events
+        never reach the queue). Per-turn state (queues, counters) is owned by
+        ``run()`` and is intentionally left untouched here.
+        """
+        session = self._sessions.pop(conversation_id, None)
+        if session is not None:
+            with contextlib.suppress(Exception):
+                await session.disconnect()
+        self._registered_handlers.discard(conversation_id)
+        self._session_mcp_fingerprints.pop(conversation_id, None)
 
     def _get_registry(self, conversation_id: str) -> object | None:
         """Get the SkillRegistry for a conversation's use-case."""
@@ -276,6 +412,7 @@ class CopilotAgent:
                 await session.disconnect()
         self._system_prompt = value
         self._sessions.clear()
+        self._session_mcp_fingerprints.clear()
         self._registered_handlers.clear()
         self._queues.clear()
         if self._cosmos_service:
@@ -294,6 +431,7 @@ class CopilotAgent:
                 with contextlib.suppress(Exception):
                     await session.disconnect()
             self._registered_handlers.discard(cid)
+            self._session_mcp_fingerprints.pop(cid, None)
             self._queues.pop(cid, None)
             if self._cosmos_service:
                 await self._cosmos_service.delete_session_mapping(cid)
@@ -313,27 +451,82 @@ class CopilotAgent:
         """
         local_mode = self.settings.is_local_mode
 
-        if local_mode:
-            if self.settings.copilot_github_token and not os.environ.get("GITHUB_TOKEN"):
-                os.environ["GITHUB_TOKEN"] = self.settings.copilot_github_token
-        else:
-            if _HAS_CLI_CREDENTIAL:
+        if self._use_azure_provider:
+            # Fail fast on misconfiguration: an Azure provider with no endpoint or
+            # no deployment would build a bogus base_url ("/openai/deployments/…")
+            # and fail later inside session creation with a misleading error.
+            llm_base = self.settings.llm_gateway_base_url or self.settings.foundry_endpoint
+            if not llm_base or not self.settings.foundry_model_deployment:
+                raise RuntimeError(
+                    "Azure provider mode requires an endpoint and a model deployment: "
+                    f"llm_gateway_base_url={self.settings.llm_gateway_base_url!r} "
+                    f"foundry_endpoint={self.settings.foundry_endpoint!r} "
+                    f"foundry_model_deployment={self.settings.foundry_model_deployment!r}. "
+                    "Set LLM_GATEWAY_BASE_URL (or FOUNDRY_ENDPOINT) and FOUNDRY_MODEL_DEPLOYMENT."
+                )
+
+            # Cloud, or local opted-in to the APIM gateway: authenticate to the
+            # Azure endpoint. NOTE: the Copilot SDK's backing engine authenticates
+            # to the provider with its OWN ambient Azure credentials
+            # (DefaultAzureCredential): Managed Identity in the Foundry sandbox /
+            # Container App, an EnvironmentCredential service principal, or the az
+            # CLI locally. The token_provider we set here is best-effort and may be
+            # ignored by the engine — so a failure to pre-warm it is NOT fatal.
+            #   * Cloud sandbox   → Managed Identity (with az-CLI fallback for dev).
+            #   * Local + gateway → az CLI credential (operator is `az login`-ed),
+            #     so LLM calls flow through the APIM gateway and are captured in
+            #     ApiManagementGatewayLlmLog. In a local container without the az
+            #     CLI, provide ambient creds instead (AZURE_CLIENT_ID/SECRET/
+            #     TENANT_ID for the engine's EnvironmentCredential).
+            if local_mode and _HAS_CLI_CREDENTIAL:
+                self._credential = AzureCliCredential()
+            elif _HAS_CLI_CREDENTIAL:
                 self._credential = ChainedTokenCredential(
                     ManagedIdentityCredential(),
-                    AzureCLICredential(),
+                    AzureCliCredential(),
                 )
             else:
                 self._credential = ManagedIdentityCredential()
             scope = "https://cognitiveservices.azure.com/.default"
             self._token_provider = get_bearer_token_provider(self._credential, scope)
 
-            # Pre-warm: acquire the first token now so user requests don't pay the cost
+            # Pre-warm the token so a request doesn't pay first-token latency. This
+            # is best-effort: the engine has its own ambient credential, so a
+            # failure here is only a warning (e.g. local container without az CLI —
+            # the engine still authenticates via its ambient managed identity / SP).
             try:
                 t0 = time.monotonic()
                 await self._credential.get_token(scope)
                 logger.info("Token pre-warmed successfully in %.1fms", (time.monotonic() - t0) * 1000)
             except Exception:
-                logger.warning("Token pre-warm failed — first request will be slower", exc_info=True)
+                logger.warning(
+                    "Token pre-warm failed (non-fatal — engine uses its own ambient credential). "
+                    "If LLM calls fail, ensure ambient Azure creds are available (Managed Identity, "
+                    "AZURE_CLIENT_ID/SECRET/TENANT_ID, or `az login`).",
+                    exc_info=True,
+                )
+        else:
+            # Pure local mode → Copilot SDK's default GitHub-hosted model.
+            if self.settings.copilot_github_token and not os.environ.get("GITHUB_TOKEN"):
+                os.environ["GITHUB_TOKEN"] = self.settings.copilot_github_token
+
+        # One explicit resolved-config line so it's obvious which path is active.
+        if not self._use_azure_provider:
+            _mode = "github"
+            _addr = "api.githubcopilot.com"
+        elif self.settings.llm_gateway_base_url:
+            _mode = "azure-apim"
+            _addr = self.settings.llm_gateway_base_url
+        else:
+            _mode = "azure-direct"
+            _addr = self.settings.foundry_endpoint
+        logger.info(
+            "LLM provider resolved: mode=%s endpoint=%s deployment=%s local=%s",
+            _mode,
+            _addr,
+            self.settings.foundry_model_deployment or "(github-default)",
+            local_mode,
+        )
 
         self._client = CopilotClient()
         await self._client.start()
@@ -350,14 +543,14 @@ class CopilotAgent:
             "gen_ai.agents.name": "kratos-agent",
             "gen_ai.agent.version": "0.1.0",
         }
-        if local_mode:
+        if not self._use_azure_provider:
             span_attrs["gen_ai.system"] = "github"
             span_attrs["gen_ai.provider.name"] = "github"
             span_attrs["server.address"] = "api.githubcopilot.com"
         else:
             span_attrs["gen_ai.system"] = "openai"
             span_attrs["gen_ai.provider.name"] = "azure.ai.openai"
-            span_attrs["server.address"] = self.settings.foundry_endpoint
+            span_attrs["server.address"] = self.settings.llm_gateway_base_url or self.settings.foundry_endpoint
         with tracer.start_as_current_span(
             "create_agent kratos-agent",
             kind=trace.SpanKind.CLIENT,
@@ -365,14 +558,21 @@ class CopilotAgent:
         ):
             pass
 
-        if local_mode:
+        if not self._use_azure_provider:
             logger.info(
                 "CopilotClient started (local mode — GitHub token auth, sdk_version=%s)",
                 version("github-copilot-sdk"),
             )
         else:
+            _via = (
+                f"APIM gateway {self.settings.llm_gateway_base_url}"
+                if self.settings.llm_gateway_base_url
+                else "Foundry direct"
+            )
             logger.info(
-                "CopilotClient started (Managed Identity auth, sdk_version=%s)",
+                "CopilotClient started (Azure provider via %s, auth=%s, sdk_version=%s)",
+                _via,
+                "az CLI" if local_mode else "Managed Identity",
                 version("github-copilot-sdk"),
             )
 
@@ -418,22 +618,42 @@ class CopilotAgent:
             await self._cosmos_service.delete_all_session_mappings()
         logger.info("Config updated — all sessions reset")
 
-    def _build_provider_config(self) -> dict | None:
-        """Return the Azure provider dict for cloud mode, or ``None`` in local mode.
+    @property
+    def _use_azure_provider(self) -> bool:
+        """Whether to route LLM calls through the Azure provider (Foundry / APIM).
 
-        In local mode the Copilot SDK falls back to its default GitHub-hosted model
-        and authenticates via the ``GITHUB_TOKEN`` / ``COPILOT_GITHUB_TOKEN`` env var.
+        * Cloud mode → always (the agent talks to Foundry, optionally fronted by
+          the APIM AI gateway when ``llm_gateway_base_url`` is set).
+        * Local mode → opt-in: only when ``llm_gateway_base_url`` is explicitly
+          configured, so an operator can exercise the real Azure path locally
+          (e.g. to capture prompts/completions in the APIM gateway log). Without
+          it, local mode keeps using the Copilot SDK's GitHub-hosted model.
+        """
+        if not self.settings.is_local_mode:
+            return True
+        return bool(self.settings.llm_gateway_base_url)
+
+    def _build_provider_config(self) -> dict | None:
+        """Return the Azure provider dict, or ``None`` for the GitHub-hosted model.
+
+        Returns ``None`` only in pure local mode (no gateway configured), where the
+        Copilot SDK falls back to its default GitHub-hosted model authenticated via
+        the ``GITHUB_TOKEN`` env var. Otherwise returns an Azure provider whose
+        ``base_url`` fronts the LLM through the APIM AI gateway when
+        ``llm_gateway_base_url`` is set (governance + the GenAI gateway log), or the
+        AI Services account directly. Both expose the same
+        ``/openai/deployments/<model>/chat/completions`` shape.
 
         Returns:
-            A provider configuration dict suitable for ``CopilotClient`` sessions
-            when running against Azure OpenAI, or ``None`` when running in local
-            (GitHub-hosted) mode.
+            A provider configuration dict for ``CopilotClient`` sessions when
+            running against Azure OpenAI, or ``None`` for local GitHub-hosted mode.
         """
-        if self.settings.is_local_mode:
+        if not self._use_azure_provider:
             return None
+        llm_base = (self.settings.llm_gateway_base_url or self.settings.foundry_endpoint).rstrip("/")
         return {
             "type": "azure",
-            "base_url": f"{self.settings.foundry_endpoint.rstrip('/')}/openai/deployments/{self.settings.foundry_model_deployment}",  # noqa: E501
+            "base_url": f"{llm_base}/openai/deployments/{self.settings.foundry_model_deployment}",
             "token_provider": self._token_provider,
             "wire_api": "completions",
             "azure": {
@@ -515,79 +735,112 @@ class CopilotAgent:
         return getattr(session, "session_id", None) if session else None
 
     async def _get_or_create_session(self, conversation_id: str, sdk_session_id: str | None = None) -> object:
-        """Return an existing session or create/resume one for this conversation."""
-        if conversation_id in self._sessions:
-            logger.info("Reusing SDK session for conversation=%s", conversation_id)
-            return self._sessions[conversation_id]
+        """Return an existing session or create/resume one for this conversation.
 
-        # Resolve enabled tools and skill directories from the use-case registry
-        registry = self._get_registry(conversation_id)
-        enabled_tools = ALL_TOOLS
-        skill_dirs = []
-        mcp_servers: dict = {}
-        if registry is not None:
-            enabled_names = registry.get_enabled_tool_names()
-            enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
-            skill_dirs = registry.get_skill_directories()
-            mcp_servers = getattr(registry, "mcp_servers", {})
+        Identity-bearing (OBO) sessions — those carrying a per-user ``Authorization``
+        header on an MCP server — are NEVER resumed and NEVER persisted to Cosmos:
+        the Copilot CLI freezes an MCP server's auth headers at create time, so
+        resuming would replay a stale (possibly expired or wrong-user) bearer. A
+        change in the injected token evicts the cached session so the next
+        ``create_session`` applies the live header. Non-identity conversations keep
+        the resume-or-create behaviour (preserving SDK history continuity).
+        """
+        lock = self._session_locks.setdefault(conversation_id, asyncio.Lock())
+        async with lock:
+            # Resolve enabled tools and skill directories from the use-case registry
+            registry = self._get_registry(conversation_id)
+            enabled_tools = ALL_TOOLS
+            skill_dirs = []
+            mcp_servers: dict = {}
+            if registry is not None:
+                enabled_names = registry.get_enabled_tool_names()
+                enabled_tools = [t for t in ALL_TOOLS if t.name in enabled_names]
+                skill_dirs = registry.get_skill_directories()
+                mcp_servers = getattr(registry, "mcp_servers", {})
 
-        logger.info(
-            "Session config for conversation=%s: mcp_servers=%s skill_dirs=%d tools=%d",
-            conversation_id,
-            list(mcp_servers.keys()) if mcp_servers else "none",
-            len(skill_dirs),
-            len(enabled_tools),
-        )
+            # Inject the signed-in user's OBO tokens as Authorization headers on the
+            # matching remote MCP servers (and auto-add the env-configured OBO server
+            # when a token is present for it). No-op when no tokens are registered.
+            mcp_servers = self._apply_mcp_tokens(conversation_id, mcp_servers)
+            has_identity = self._mcp_has_auth(mcp_servers)
+            fingerprint = self._mcp_fingerprint(mcp_servers)
 
-        system_prompt = self._get_system_prompt(conversation_id)
-        config = self._build_session_config(enabled_tools, skill_dirs, system_prompt, mcp_servers)
-
-        # Try to resume an existing SDK session — prefer explicitly passed ID,
-        # then fall back to Cosmos DB lookup.
-        if sdk_session_id is None and self._cosmos_service:
-            sdk_session_id = await self._cosmos_service.get_session_mapping(conversation_id)
-
-        t0 = time.monotonic()
-        session = None
-
-        if sdk_session_id:
-            try:
-                session = await self._client.resume_session(sdk_session_id, **config)
-                elapsed_ms = (time.monotonic() - t0) * 1000
-                logger.info(
-                    "Resumed SDK session=%s for conversation=%s elapsed=%.0fms",
-                    sdk_session_id,
-                    conversation_id,
-                    elapsed_ms,
-                )
-            except Exception:
-                logger.warning(
-                    "Failed to resume SDK session=%s for conversation=%s — creating new",
-                    sdk_session_id,
-                    conversation_id,
-                    exc_info=True,
-                )
-                session = None
-
-        if session is None:
-            t0 = time.monotonic()
-            session = await self._client.create_session(**config)
-            elapsed_ms = (time.monotonic() - t0) * 1000
-
-            # Persist the new SDK session ID to Cosmos DB
-            if self._cosmos_service and hasattr(session, "session_id"):
-                await self._cosmos_service.upsert_session_mapping(conversation_id, session.session_id)
+            # In-memory reuse — only when the injected identity is unchanged. A changed,
+            # newly added, or removed token evicts the cached session so the next create
+            # applies the live header (resume cannot refresh MCP auth headers).
+            cached = self._sessions.get(conversation_id)
+            if cached is not None:
+                if self._session_mcp_fingerprints.get(conversation_id) == fingerprint:
+                    logger.info("Reusing SDK session for conversation=%s", conversation_id)
+                    return cached
+                logger.info("MCP identity changed for conversation=%s — rebuilding SDK session", conversation_id)
+                await self._discard_session(conversation_id)
 
             logger.info(
-                "Created SDK session=%s for conversation=%s model=%s custom_tools=%s elapsed=%.0fms",
-                getattr(session, "session_id", "?"),
+                "Session config for conversation=%s: mcp_servers=%s identity=%s skill_dirs=%d tools=%d",
                 conversation_id,
-                self.settings.foundry_model_deployment,
-                ",".join(tool.name for tool in enabled_tools),
-                elapsed_ms,
+                list(mcp_servers.keys()) if mcp_servers else "none",
+                has_identity,
+                len(skill_dirs),
+                len(enabled_tools),
             )
-        self._sessions[conversation_id] = session
-        return session
+
+            system_prompt = self._get_system_prompt(conversation_id)
+            config = self._build_session_config(enabled_tools, skill_dirs, system_prompt, mcp_servers)
+
+            # Identity-bearing sessions must never resume a persisted session id (Cosmos
+            # or caller-supplied) — the CLI would replay the create-time bearer. Force a
+            # fresh create. Otherwise prefer an explicitly passed ID, then Cosmos lookup.
+            if has_identity:
+                sdk_session_id = None
+            elif sdk_session_id is None and self._cosmos_service:
+                sdk_session_id = await self._cosmos_service.get_session_mapping(conversation_id)
+
+            t0 = time.monotonic()
+            session = None
+
+            if sdk_session_id:
+                try:
+                    session = await self._client.resume_session(sdk_session_id, **config)
+                    elapsed_ms = (time.monotonic() - t0) * 1000
+                    logger.info(
+                        "Resumed SDK session=%s for conversation=%s elapsed=%.0fms",
+                        sdk_session_id,
+                        conversation_id,
+                        elapsed_ms,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to resume SDK session=%s for conversation=%s — creating new",
+                        sdk_session_id,
+                        conversation_id,
+                        exc_info=True,
+                    )
+                    session = None
+
+            if session is None:
+                t0 = time.monotonic()
+                session = await self._client.create_session(**config)
+                elapsed_ms = (time.monotonic() - t0) * 1000
+
+                # Persist the new SDK session ID to Cosmos DB — but ONLY for non-identity
+                # sessions. Identity (OBO) sessions are never resumed, so persisting one
+                # would risk a later token-less turn resuming a token-bearing session.
+                if not has_identity and self._cosmos_service and hasattr(session, "session_id"):
+                    await self._cosmos_service.upsert_session_mapping(conversation_id, session.session_id)
+
+                logger.info(
+                    "Created SDK session=%s for conversation=%s model=%s identity=%s custom_tools=%s elapsed=%.0fms",
+                    getattr(session, "session_id", "?"),
+                    conversation_id,
+                    self.settings.foundry_model_deployment,
+                    has_identity,
+                    ",".join(tool.name for tool in enabled_tools),
+                    elapsed_ms,
+                )
+            self._sessions[conversation_id] = session
+            self._session_mcp_fingerprints[conversation_id] = fingerprint
+            return session
 
     async def run(
         self,
@@ -612,11 +865,16 @@ class CopilotAgent:
             or os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "").lower() == "true"
         )
 
-        _local_mode = self.settings.is_local_mode
+        _github = not self._use_azure_provider
+        _server_addr = (
+            "api.githubcopilot.com"
+            if _github
+            else (self.settings.llm_gateway_base_url or self.settings.foundry_endpoint)
+        )
         _invoke_span_attrs: dict = {
             "gen_ai.operation.name": "invoke_agent",
-            "gen_ai.system": "github" if _local_mode else "openai",
-            "gen_ai.provider.name": "github" if _local_mode else "azure.ai.openai",
+            "gen_ai.system": "github" if _github else "openai",
+            "gen_ai.provider.name": "github" if _github else "azure.ai.openai",
             "gen_ai.request.model": self.settings.foundry_model_deployment,
             "gen_ai.agent.id": "kratos-agent",
             "gen_ai.agent.name": "kratos-agent",
@@ -625,7 +883,7 @@ class CopilotAgent:
             "gen_ai.agent.version": "0.1.0",
             "gen_ai.conversation.id": conversation_id,
             "kratos.conversation_id": conversation_id,
-            "server.address": "api.githubcopilot.com" if _local_mode else self.settings.foundry_endpoint,
+            "server.address": _server_addr,
         }
         with tracer.start_as_current_span(
             "invoke_agent kratos-agent",
@@ -1025,9 +1283,9 @@ class CopilotAgent:
                 # Record GenAI metrics (token usage + operation duration)
                 _metric_attrs = {
                     "gen_ai.operation.name": "invoke_agent",
-                    "gen_ai.provider.name": "github" if _local_mode else "azure.ai.openai",
+                    "gen_ai.provider.name": "github" if _github else "azure.ai.openai",
                     "gen_ai.request.model": self.settings.foundry_model_deployment,
-                    "server.address": "api.githubcopilot.com" if _local_mode else self.settings.foundry_endpoint,
+                    "server.address": _server_addr,
                 }
                 if usage.get("prompt", 0):
                     token_usage_histogram.record(usage["prompt"], {**_metric_attrs, "gen_ai.token.type": "input"})

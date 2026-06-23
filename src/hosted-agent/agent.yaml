@@ -19,6 +19,11 @@ environment_variables:
   # AI Services base URL (fallback if platform doesn't inject FOUNDRY_ENDPOINT)
   - name: AI_SERVICES_ENDPOINT
     value: ${AZURE_AI_PROJECT_ENDPOINT}
+  # Capture prompts + completions (gen_ai.input/output.messages) on the
+  # invoke_agent span so the Foundry Traces tab shows the LLM interaction
+  # details. Off by default in OTel; we opt in here.
+  - name: AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED
+    value: "true"
   # Azure service endpoints (injected by Bicep / azd env)
   - name: COSMOS_DB_ENDPOINT
     value: ${AZURE_COSMOS_DB_ENDPOINT}
@@ -36,6 +41,15 @@ environment_variables:
   # Cosmos DB database name
   - name: COSMOS_DB_DATABASE
     value: kratos-agent
+  # OBO MCP server (Microsoft Graph /me via On-Behalf-Of). The hosted agent
+  # auto-attaches this remote MCP server per conversation and injects the
+  # signed-in user's bearer token (CopilotAgent._apply_mcp_tokens). The URL
+  # MUST be set here — Foundry injects only the env vars declared in this
+  # file; azure.yaml `config.env` is NOT propagated to the agent runtime.
+  - name: OBO_MCP_SERVER_MCP_URL
+    value: ${OBO_MCP_SERVER_MCP_URL}
+  - name: OBO_MCP_SERVER_NAME
+    value: graph-obo
   # Environment tag
   - name: ENVIRONMENT
     value: production

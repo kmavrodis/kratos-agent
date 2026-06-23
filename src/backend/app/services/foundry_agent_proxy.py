@@ -10,6 +10,7 @@ import contextlib
 import json
 import logging
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import aiohttp
 from azure.identity.aio import DefaultAzureCredential
@@ -251,6 +252,7 @@ class FoundryAgentProxy:
         system_prompt: str | None = None,
         agent_session_id: str | None = None,
         eval_run_id: str | None = None,
+        mcp_access_tokens: dict[str, str] | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Invoke the hosted agent and yield event dicts.
 
@@ -271,6 +273,11 @@ class FoundryAgentProxy:
             preamble_parts.append(f"<use_case>{use_case}</use_case>")
         if system_prompt:
             preamble_parts.append(f"<system_instructions>\n{system_prompt}\n</system_instructions>")
+        # SECURITY: per-MCP-server user OBO tokens are NEVER embedded in the
+        # prompt/input text. A bearer in input_text would enter the model's
+        # context and be captured by GenAI message-content traces / gateway logs.
+        # They are delivered out-of-band via the mcpAccessTokens JSON body field
+        # below, which the Invocations gateway preserves.
         input_text = "\n\n".join(preamble_parts) + f"\n\n{message}" if preamble_parts else message
 
         token = await self._get_token()
@@ -285,11 +292,19 @@ class FoundryAgentProxy:
             headers["x-kratos-eval-run-id"] = str(eval_run_id)
         if token:
             headers["Authorization"] = f"Bearer {token}"
-        payload = {
+        payload: dict[str, Any] = {
             "input": input_text,
             "conversationId": conversation_id,
             "useCase": use_case,
         }
+        # Forward per-MCP-server user tokens in the JSON body — the ONLY channel
+        # for OBO bearers. The Invocations gateway preserves body fields (unlike
+        # custom HTTP headers or, deliberately, the prompt), so the hosted agent
+        # reads them from data["mcpAccessTokens"] and injects each as the
+        # Authorization header on the matching remote MCP server. Tokens are
+        # secrets — never placed in the prompt and never logged.
+        if mcp_access_tokens:
+            payload["mcpAccessTokens"] = mcp_access_tokens
 
         # Append agent_session_id as query parameter to reuse the same
         # gateway session (container) across messages in a conversation. For the
@@ -356,6 +371,12 @@ class FoundryAgentProxy:
                                     if gateway_session:
                                         yield {"event": "_gateway_session", "data": {"agentSessionId": gateway_session}}
                                     return
+                                # Hosted-agent diagnostic (keys only, no token
+                                # values) — log to backend telemetry and drop it
+                                # so it never reaches the user/model.
+                                if parsed.get("event") == "kratos_diag":
+                                    logger.info("hosted-agent diag: %s", parsed.get("data"))
+                                    continue
                                 yield parsed
 
                     # Fallback: if stream ends without a protocol done event,
