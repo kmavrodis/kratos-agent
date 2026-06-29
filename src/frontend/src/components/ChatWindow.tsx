@@ -5,6 +5,9 @@ import { Conversation, ChatMessage, ToolCallInfo, RunStats, Attachment } from "@
 import { streamAgentChat, getConversationMessages, updateConversation } from "@/lib/api";
 import { MessageBubble } from "./MessageBubble";
 import { ThoughtChain } from "./ThoughtChain";
+import { VoiceOrb } from "./VoiceOrb";
+import { useRealtime } from "@/lib/voice";
+import { getVoiceEnabled } from "@/lib/config";
 
 interface UserInputPrompt {
   requestId: string;
@@ -317,6 +320,10 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
         }
         setIsStreaming(false);
         setUserInputPrompt(null);
+        // Speak the final answer (not the raw stream) when voice mode is active.
+        if (voiceRef.current.active && assistantContent.trim()) {
+          voiceRef.current.speak(assistantContent);
+        }
       },
       currentAttachments,
       conversation.useCase
@@ -326,6 +333,19 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
   // Auto-send initial message (e.g. from sample question click)
   const handleSendRef = useRef(handleSend);
   handleSendRef.current = handleSend;
+
+  // Voice mode (opt-in): mic speech → transcript → existing send path; final
+  // assistant reply spoken back. Loosely coupled — invisible unless flagged on.
+  // Reactive so the button appears once runtime config.json resolves the flag.
+  const [voiceEnabled, setVoiceEnabled] = useState(getVoiceEnabled());
+  useEffect(() => {
+    const update = () => setVoiceEnabled(getVoiceEnabled());
+    window.addEventListener("kratos:config-loaded", update);
+    return () => window.removeEventListener("kratos:config-loaded", update);
+  }, []);
+  const voice = useRealtime({ onTranscript: (text) => handleSendRef.current(text) });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
   const initialMessageSentRef = useRef<string | null>(null);
   useEffect(() => {
     if (initialMessage && initialMessageSentRef.current !== `${conversation.id}:${initialMessage}` && messages.length === 0) {
@@ -588,6 +608,23 @@ export function ChatWindow({ conversation, onTitleChange, initialMessage, onOpen
                 <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
               </svg>
             </button>
+            {voiceEnabled && (
+              <button
+                onClick={() => (voice.active ? voice.stop() : voice.start())}
+                title={voice.active ? "Stop voice mode" : "Start voice mode"}
+                aria-label={voice.active ? "Stop voice mode" : "Start voice mode"}
+                aria-pressed={voice.active}
+                className={`p-2 rounded-lg hover:bg-hover transition-all duration-200 active:scale-95 ${voice.active ? "text-accent" : "text-muted hover:text-accent"}`}
+              >
+                {voice.active ? (
+                  <VoiceOrb status={voice.status} />
+                ) : (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                  </svg>
+                )}
+              </button>
+            )}
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
