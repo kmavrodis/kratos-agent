@@ -27,6 +27,7 @@ from app.routers import (
     settings,
     traces,
     use_cases,
+    voice,
 )
 from app.services.apm_service import ApmError, ApmService
 from app.services.blob_skill_service import BlobSkillService
@@ -252,3 +253,4 @@ app.include_router(evals.router, prefix="/api/use-cases", tags=["evals"])
 app.include_router(traces.router, prefix="/api/traces", tags=["traces"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(copilot_studio.router, prefix="/api/copilot-studio", tags=["copilot-studio"])
+app.include_router(voice.router, prefix="/api/voice", tags=["voice"])

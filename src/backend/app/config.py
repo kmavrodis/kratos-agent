@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     keep_warm_interval_s: int = 300  # ping cadence; must be shorter than the per-session 15-min idle timeout
     warm_pool_size: int = 2  # number of pre-warmed, unclaimed sandboxes kept ready for new conversations
 
+    # ── Voice (GPT Realtime) — opt-in speech-to-speech for chat ──────────
+    # Generic voice mode: STT + TTS via Azure GPT Realtime; the agent is
+    # unchanged. The Realtime key never ships to the browser — backend mints
+    # an ephemeral session token with Managed Identity (see routers/voice.py).
+    voice_enabled: bool = False
+    voice_endpoint: str = ""  # AIServices endpoint; falls back to foundry_endpoint
+    voice_deployment: str = "gpt-realtime"
+    voice_voice: str = "marin"
+    voice_instructions: str = "You are a helpful voice assistant. Keep replies brief and conversational."
+    voice_token_scope: str = "https://cognitiveservices.azure.com/.default"  # noqa: S105
+
     # Azure Blob Storage for skills
     blob_storage_endpoint: str = ""
     blob_skills_container: str = "skills"

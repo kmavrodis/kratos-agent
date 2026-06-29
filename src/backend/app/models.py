@@ -228,6 +228,7 @@ class AIServiceStatus(BaseModel):
     configured: bool = False
     foundryEndpoint: str = ""
     foundryModelDeployment: str = ""
+    voiceEnabled: bool = False
     code: str = "INTERNAL_ERROR"
 
 

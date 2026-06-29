@@ -20,4 +20,5 @@ async def get_settings_endpoint(request: Request) -> AIServiceStatus:
         configured=bool(settings.foundry_endpoint),
         foundryEndpoint=settings.foundry_endpoint,
         foundryModelDeployment=settings.foundry_model_deployment,
+        voiceEnabled=settings.voice_enabled,
     )
