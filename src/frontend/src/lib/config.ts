@@ -49,6 +49,21 @@ export function getApiUrl(): string {
 }
 
 /**
+ * Whether voice mode is enabled. Reads NEXT_PUBLIC_VOICE_ENABLED at build time
+ * or `voiceEnabled` from runtime config.json. Off by default (opt-in).
+ */
+export function getVoiceEnabled(): boolean {
+  if (process.env.NEXT_PUBLIC_VOICE_ENABLED === "true") return true;
+  if (typeof window !== "undefined") {
+    const cfg = (window as unknown as Record<string, unknown>).__KRATOS_CONFIG__ as
+      | Record<string, unknown>
+      | undefined;
+    if (cfg?.voiceEnabled === true) return true;
+  }
+  return false;
+}
+
+/**
  * MSAL / OBO sign-in config for the agent.
  *
  * The signed-in user's token (scoped to the Entra-protected OBO MCP server) is
