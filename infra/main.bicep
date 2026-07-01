@@ -33,6 +33,9 @@ param resourcePrefix string = ''
 @description('Path prefix for the agent API on the gateway (set during Foundry portal registration)')
 param agentApiPath string = 'kratos-agent'
 
+@description('Deploy the OBO MCP server and its Entra app registrations. Requires directory permission to register Entra applications. Set to false in tenants/subscriptions where the deploying identity cannot create app registrations.')
+param deployObo bool = true
+
 @description('Location for the Static Web App (must be one of: centralus, eastus2, westus2, westeurope, eastasia)')
 @allowed([
   'centralus'
@@ -230,7 +233,7 @@ module staticWebApp './modules/static-web-app.bicep' = {
 // ─── OBO MCP Server: identity, Entra apps, container app ───
 // One user-assigned managed identity is the ACR-pull identity, the container
 // runtime identity, AND the federated subject the OBO server app trusts.
-module oboIdentity './modules/obo-identity.bicep' = {
+module oboIdentity './modules/obo-identity.bicep' = if (deployObo) {
   name: 'obo-identity'
   scope: rg
   params: {
@@ -242,7 +245,7 @@ module oboIdentity './modules/obo-identity.bicep' = {
 
 // SPA client app (MSAL.js signs the user in here). Deployed first so its appId
 // can pre-authorize the server app, avoiding a circular dependency.
-module oboEntraAppClient './modules/obo-entra-app.bicep' = {
+module oboEntraAppClient './modules/obo-entra-app.bicep' = if (deployObo) {
   name: 'obo-entra-app-client'
   scope: rg
   params: {
@@ -259,7 +262,7 @@ module oboEntraAppClient './modules/obo-entra-app.bicep' = {
 }
 
 // OBO server app (the MCP server's Entra identity + Graph User.Read + FIC).
-module oboEntraAppServer './modules/obo-entra-app.bicep' = {
+module oboEntraAppServer './modules/obo-entra-app.bicep' = if (deployObo) {
   name: 'obo-entra-app-server'
   scope: rg
   params: {
@@ -271,7 +274,7 @@ module oboEntraAppServer './modules/obo-entra-app.bicep' = {
   }
 }
 
-module oboMcpServer './modules/obo-mcp-server.bicep' = {
+module oboMcpServer './modules/obo-mcp-server.bicep' = if (deployObo) {
   name: 'obo-mcp-server'
   scope: rg
   params: {
@@ -339,10 +342,10 @@ output AZURE_BLOB_STORAGE_ENDPOINT string = blobStorage.outputs.endpoint
 output AZURE_BLOB_STORAGE_ACCOUNT_NAME string = blobStorage.outputs.name
 
 // ─── OBO MCP server outputs ───
-output OBO_MCP_SERVER_URL string = oboMcpServer.outputs.url
-output OBO_MCP_SERVER_MCP_URL string = oboMcpServer.outputs.mcpUrl
-output OBO_SERVER_APP_CLIENT_ID string = oboEntraAppServer.outputs.entraAppClientId
-output OBO_SERVER_APP_IDENTIFIER_URI string = oboEntraAppServer.outputs.entraAppIdentifierUri
-output OBO_SERVER_APP_SCOPE_VALUE string = oboEntraAppServer.outputs.entraAppScopeValue
-output OBO_CLIENT_APP_CLIENT_ID string = oboEntraAppClient.outputs.entraAppClientId
+output OBO_MCP_SERVER_URL string = deployObo ? oboMcpServer.outputs.url : ''
+output OBO_MCP_SERVER_MCP_URL string = deployObo ? oboMcpServer.outputs.mcpUrl : ''
+output OBO_SERVER_APP_CLIENT_ID string = deployObo ? oboEntraAppServer.outputs.entraAppClientId : ''
+output OBO_SERVER_APP_IDENTIFIER_URI string = deployObo ? oboEntraAppServer.outputs.entraAppIdentifierUri : ''
+output OBO_SERVER_APP_SCOPE_VALUE string = deployObo ? oboEntraAppServer.outputs.entraAppScopeValue : ''
+output OBO_CLIENT_APP_CLIENT_ID string = deployObo ? oboEntraAppClient.outputs.entraAppClientId : ''
 output OBO_TENANT_ID string = tenant().tenantId

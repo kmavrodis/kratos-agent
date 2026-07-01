@@ -13,6 +13,9 @@
     },
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
+    },
+    "deployObo": {
+      "value": "${DEPLOY_OBO=true}"
     }
   }
 }
